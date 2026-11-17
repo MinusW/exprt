@@ -41,9 +41,9 @@
         {
           "id": "th-te1-consignes",
           "block_type": "markdown",
-          "title": "Barème et Consignes de l'épreuve",
+          "title": "Consignes générales",
           "bookmarkable": true,
-          "content": "**Institution :** HEIG-VD — REDS (Institut Reconfigurable and Embedded Digital Systems)  \n**Chargé de cours :** Florian Vaussard | **Date :** 13.11.2024\n\n* Aucune documentation ni appareil électronique n'est permis.\n* Total : **35 points** répartis sur **5 questions**.\n\n| Question | Thème | Points |\n| :--- | :--- | :---: |\n| **1** | Culture générale (QCM a–h + exemples) | 8 |\n| **2** | Exclusion mutuelle (attente active) | 4 |\n| **3** | Thread (`PcoThread` — Cortex & Minus) | 6 |\n| **4** | Mutex (`LinkedList` avec `PcoMutex`) | 7 |\n| **5** | Sémaphore (`PontLevant` avec `PcoSemaphore`) | 10 |\n| **Total** | | **35** |"
+          "content": "**Institution :** HEIG-VD — REDS (Institut Reconfigurable and Embedded Digital Systems)  \n**Chargé de cours :** Florian Vaussard | **Date :** 13.11.2024\n\nCe test contient 22 pages (page de garde et quatre pages de brouillon inclus) pour 5 questions. Le nombre maximum de points possible est 35. Répondre aux questions dans l'espace disponible, au besoin les pages de brouillon peuvent être utilisées.\n\n* Écrire son nom et prénom sur chaque feuille\n* Utiliser de préférence un stylo\n* Si votre réponse se trouve sur une page de brouillon, mentionnez-le sous la question\n* Ne pas utiliser de couleur rouge\n* Aucune documentation ni appareil électronique n'est permis\n\n| Question | Points | Score |\n| :--- | :---: | :---: |\n| **1** | 8 | |\n| **2** | 4 | |\n| **3** | 6 | |\n| **4** | 7 | |\n| **5** | 10 | |\n| **Total :** | **35** | |"
         },
         {
           "id": "th-te1-rappels",
@@ -56,8 +56,8 @@
     },
     {
       "id": "sec-te1-q1",
-      "title": "Question 1 : Culture générale (8 points)",
-      "description": "Répondez aux questions à choix multiple suivantes (1 seul choix possible) et aux sous-questions.",
+      "title": "1. Culture générale (8 points)",
+      "description": "Répondez aux questions à choix multiple suivantes (1 seul choix possible).",
       "blocks": [
         {
           "id": "qz-te1-q1a",
@@ -110,8 +110,8 @@
           "block_type": "kroki",
           "diagram_type": "mermaid",
           "title": "1.(c) Diagramme d'états et de transitions d'un thread",
-          "caption": "Identifiez la transition (?) et l'état inconnu (en rouge sur le diagramme original).",
-          "source": "stateDiagram-v2\n  [*] --> pret : création\n  pret --> elu : exécution\n  elu --> pret : préemption\n  elu --> Etat_Inconnu : ? (en rouge)\n  Etat_Inconnu --> pret : réveil\n  elu --> termine : terminaison\n  elu --> Etat_Vide\n  Etat_Vide --> termine : jointure",
+          "caption": "Soit le diagramme d'états et de transitions d'un thread vu pendant le cours (l'état rouge est à identifier via '?').",
+          "source": "stateDiagram-v2\n  [*] --> pret : création\n  pret --> elu : exécution\n  elu --> pret : préemption\n  elu --> Etat_Inconnu : ? (en rouge)\n  Etat_Inconnu --> pret : réveil\n  elu --> termine : terminaison\n  elu --> Etat_Vide\n  Etat_Vide --> termine : jointure\n  classDef rouge fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#9f1239;\n  class Etat_Inconnu rouge;",
           "bookmarkable": true
         },
         {
@@ -120,28 +120,28 @@
           "question_type": "multiple_choice",
           "difficulty": 2,
           "related_block_id": "diag-te1-q1c",
-          "title": "1.(c) État et transition manquants",
-          "question": "Quelle transition et quel état figurent en rouge sur la figure ci-dessus ?",
+          "title": "1.(c) État et transition figurant en rouge",
+          "question": "Quelle transition et quel état figurent en rouge sur la figure :",
           "options": [
-            "attente → bloqué (waiting)",
+            "attente → bloqué (*waiting*)",
             "attente → zombie",
             "terminaison → zombie",
-            "terminaison → bloqué (waiting)",
+            "terminaison → bloqué (*waiting*)",
             "Aucune de ces réponses"
           ],
-          "correct_answer": "attente → bloqué (waiting)",
+          "correct_answer": "attente → bloqué (*waiting*)",
           "explanation": "Lorsqu'un thread élu attend une ressource ou un événement, il effectue la transition `attente` vers l'état `bloqué (waiting)`, puis revient vers `prêt` lors du `réveil`. L'état vide en bas correspond à `zombie` (atteint par `terminaison`, suivi de `jointure`).",
           "hints": [
-            "Quelle transition mène de `bloqué` vers `prêt` (`réveil`) ?",
-            "Ne confondez pas l'état `bloqué` (qui se réveille vers `prêt`) avec l'état `zombie` (qui mène à `terminé` via `jointure`)."
+            "Quelle transition mène de cet état inconnu vers `prêt` (`réveil`) ?",
+            "Ne confondez pas cet état (qui se réveille vers `prêt`) avec l'état `zombie` (qui mène à `terminé` via `jointure`)."
           ],
           "bookmarkable": true
         },
         {
           "id": "ref-te1-q1c-exemples",
           "block_type": "reflection_rubric",
-          "title": "1.(c) Exemples concrets menant un thread à l'état bloqué",
-          "prompt": "Citez deux exemples concrets de situations menant un thread dans cet état (`bloqué`).",
+          "title": "1.(c) Exemples concrets",
+          "prompt": "Citez deux exemples concrets de situations menant un thread dans cet état :",
           "self_check_criteria": [
             "Cité au moins une opération de synchronisation bloquante (ex: `PcoMutex::lock()`, `PcoSemaphore::acquire()`, `PcoThread::join()`).",
             "Cité une attente d'entrée/sortie (I/O) ou de temporisation (ex: `sleep()`, `usleep()`, lecture fichier/réseau)."
@@ -188,7 +188,7 @@
             "Aucune de ces réponses"
           ],
           "correct_answer": "Aucune utilité, car cela initialisera le sémaphore à une valeur très élevée à cause de l'underflow d'un nombre non-signé",
-          "explanation": "Le constructeur prend un `unsigned int n = 0` ($n \\ge 0$). Passer `-1` provoque une conversion non-signée (underflow) vers `UINT_MAX` ($2^{32}-1$), ce qui rend le sémaphore immédiatement acquérable des milliards de fois.",
+          "explanation": "Le constructeur prend un `unsigned int n = 0` ($n \\ge 0$). Passer `-1` provoque une conversion non-signée vers `UINT_MAX` ($2^{32}-1$), ce qui rend le sémaphore immédiatement acquérable des milliards de fois.",
           "hints": [
             "Quel est le type du paramètre `n` dans `PcoSemaphore(unsigned int n = 0)` ?",
             "Que vaut `-1` converti en `unsigned int` en C++ ?"
@@ -268,8 +268,8 @@
     },
     {
       "id": "sec-te1-q2",
-      "title": "Question 2 : Exclusion mutuelle (4 points)",
-      "description": "Analyse d'un algorithme d'exclusion mutuelle par attente active.",
+      "title": "2. Exclusion mutuelle (4 points)",
+      "description": "Le code suivant fournit une solution au problème de l'exclusion mutuelle par attente active.",
       "blocks": [
         {
           "id": "code-te1-q2",
@@ -278,17 +278,6 @@
           "title": "Algorithme proposé (T0 et T1)",
           "filename": "q2_exclusion.cpp",
           "code": "bool intention[2] = {false, false};\nint tour = 0; // ou 1\n\nvoid T0()\n{\n    while (true) {\n        if (intention[1]) {\n            tour = 1;\n        }\n        intention[0] = true;\n        while (tour == 1 && intention[1])\n            ;\n\n        // -> section critique ici <-\n\n        intention[0] = false;\n        // section non-critique\n    }\n}\n\nvoid T1()\n{\n    while (true) {\n        if (intention[0]) {\n            tour = 0;\n        }\n        intention[1] = true;\n        while (tour == 0 && intention[0])\n            ;\n\n        // -> section critique ici <-\n\n        intention[1] = false;\n        // section non-critique\n    }\n}",
-          "highlight_lines": [7, 10, 24, 27],
-          "annotations": [
-            {
-              "line": 7,
-              "note": "T0 teste intention[1] AVANT d'annoncer intention[0] = true."
-            },
-            {
-              "line": 24,
-              "note": "T1 teste intention[0] AVANT d'annoncer intention[1] = true."
-            }
-          ],
           "bookmarkable": true
         },
         {
@@ -314,8 +303,8 @@
         {
           "id": "ref-te1-q2b",
           "block_type": "reflection_rubric",
-          "title": "2.(b) Justification et scénario détaillé",
-          "prompt": "1. Quelle propriété n'est pas garantie ?\n2. Fournissez un scénario détaillé (incluant les numéros de lignes) pour illustrer le problème.",
+          "title": "2.(b) Justification ou contre-exemple",
+          "prompt": "Si oui, fournissez une justification détaillée. Si non :\n1. Quelle propriété n'est pas garantie ?\n2. Fournissez un scénario détaillé (incluant les numéros de lignes) pour illustrer le problème.",
           "self_check_criteria": [
             "Identifié que l'exclusion mutuelle n'est pas garantie.",
             "Tracé l'état initial (`tour = 0`, `intention = {false, false}`).",
@@ -328,111 +317,113 @@
     },
     {
       "id": "sec-te1-q3",
-      "title": "Question 3 : Thread — Cortex & Minus (6 points)",
-      "description": "Trouvez toutes les erreurs de concurrence et de gestion des threads dans le programme de recherche de nombres premiers.",
+      "title": "3. Thread (6 points)",
+      "description": "Cortex, le savant fou, et Minus son assistant — débogage d'un programme multithreadé de test de primalité.",
       "blocks": [
+        {
+          "id": "th-te1-q3-enonce",
+          "block_type": "markdown",
+          "title": "Énoncé : Cortex & Minus",
+          "bookmarkable": true,
+          "content": "Cortex, le savant fou, veut conquérir le monde ! Pour cela, il a besoin de nombres premiers. Il demande à Minus, son assistant, de concevoir un programme permettant de déterminer si un nombre est premier ou pas. **Si un nombre n'est pas premier, le programme doit s'arrêter le plus rapidement possible.**\n\nMinus tente de réaliser un programme multithreadé afin d'accomplir sa tâche (voir code ci-dessous). Ce programme prend comme arguments le nombre à tester ainsi que le nombre de threads à utiliser. Voici un exemple d'utilisation :\n\n```bash\n$ ./q3 2147483647 12\n2147483647 est premier\n$ ./q3 2147483645 12\n2147483645 n'est pas premier :-/\n```\n\nMalheureusement, Minus n'a pas eu la chance de suivre le cours PCO. Le plan machiavélique de Cortex va-t-il encore échouer ? Aidez-les en trouvant toutes les erreurs dans ce code. Pour chaque erreur, détaillez :\n* à quelle ligne se situe le problème\n* ce qu'il risque d'arriver et pourquoi\n* comment le résoudre (n'hésitez pas à modifier directement le code)\n\n*Note : l'algorithme pour la détermination d'un nombre premier est correct, même s'il est sous-optimal car il suffirait de tester jusqu'à $\\sqrt{\\text{nombre}}$. Ceci n'est pas un problème pour cet exercice.*"
+        },
         {
           "id": "code-te1-q3",
           "block_type": "code",
           "language": "cpp",
-          "title": "Programme multithreadé de Minus (à déboguer)",
+          "title": "Programme multithreadé de Minus",
           "filename": "q3_prime.cpp",
           "code": "#include <iostream>\n#include <vector>\n#include <pcosynchro/pcothread.h>\n\nstatic std::vector<PcoThread*> threads;\nstatic bool prime;\n\nstatic void stop_threads()\n{\n    for (auto t : threads) {\n        t->requestStop();\n    }\n}\n\nstatic void should_stop()\n{\n    if (PcoThread::thisThread()->stopRequested()) {\n        std::cout << \"Arrêt du thread\" << std::endl;\n        return;\n    }\n}\n\nstatic void is_prime(uint64_t number, uint64_t first, uint64_t last)\n{\n    for (uint64_t i = first; i <= last; i++) {\n        if (number % i == 0) {\n            // pas un nombre premier -> stop tous les threads\n            prime = false;\n            stop_threads();\n        }\n\n        if (i % 100 == 0) {\n            // stop si demandé par un autre thread\n            should_stop();\n        }\n    }\n}\n\nint main(int argc, char* argv[])\n{\n    unsigned int num_threads;\n    uint64_t number;\n    uint64_t interval;\n    uint64_t first;\n    uint64_t last;\n\n    if (argc != 3) {\n        return 1;\n    }\n\n    number = std::strtoull(argv[1], NULL, 10);\n    num_threads = std::strtoul(argv[2], NULL, 10);\n    interval = number / num_threads;\n\n    // test tous les diviseurs de 2 à N-1 (simple mais pas optimal...)\n    threads.resize(num_threads);\n    prime = true;\n    first = 2;\n    for (unsigned int i = 0; i < num_threads; i++) {\n        last = first + interval - 1;\n        if (last > number - 1) {\n            last = number - 1;\n        }\n        threads[i] = new PcoThread(is_prime, number, first, last);\n        first += interval;\n    }\n\n    if (prime) {\n        std::cout << number << \" est premier\" << std::endl;\n    } else {\n        std::cout << number << \" n'est pas premier :-/\" << std::endl;\n    }\n\n    for (unsigned int i = 0; i < num_threads; i++) {\n        delete threads[i];\n    }\n\n    return 0;\n}",
-          "highlight_lines": [10, 19, 28, 29, 34, 64, 67, 74],
-          "annotations": [
-            {
-              "line": 19,
-              "note": "return quitte should_stop(), pas is_prime() !"
-            },
-            {
-              "line": 28,
-              "note": "Accès concurrent à `prime` + pas de return après détection de diviseur."
-            },
-            {
-              "line": 64,
-              "note": "threads[i] créé alors que les threads précédents peuvent déjà appeler stop_threads() sur des nullptr !"
-            },
-            {
-              "line": 67,
-              "note": "Aucun join() avant d'afficher `prime` et de delete les threads !"
-            }
-          ],
           "bookmarkable": true
         },
         {
           "id": "ref-te1-q3-rubric",
           "block_type": "reflection_rubric",
-          "title": "Analyse complète des erreurs et correction",
-          "prompt": "Pour chaque erreur dans le code de Minus, détaillez : (1) la ligne concernée, (2) ce qu'il risque d'arriver et pourquoi, et (3) comment la corriger.",
+          "title": "Correction : Analyse des erreurs dans le code de Minus",
+          "prompt": "Listez toutes les erreurs trouvées (ligne, conséquence/cause, correction).",
           "self_check_criteria": [
             "Absence de `join()` dans `main()` avant l'affichage de `prime` et avant `delete threads[i]`.",
             "`should_stop()` est `void` et son `return;` ne termine pas `is_prime()` (le thread continue sa boucle).",
             "`is_prime()` ne fait pas `return;` après avoir trouvé un diviseur (`number % i == 0`).",
             "`stop_threads()` peut déréférencer un pointeur `nullptr` dans `threads` si un thread appelle `stop_threads()` avant que `main()` n'ait fini de créer tous les `PcoThread`.",
-            "Accès concurrent non protégé à `prime` (ou utilisation de `std::atomic<bool>` / `PcoMutex`)."
+            "Accès concurrent non protégé à `prime` (data race en écriture/lecture)."
           ],
-          "model_answer": "Voici les erreurs principales :\n\n1. **Absence de `join()` (lignes 67–75) :** `main()` affiche `prime` et exécute `delete threads[i]` immédiatement sans attendre la fin des threads (`threads[i]->join()`). Conséquence : résultat faux (affiche `est premier` par défaut) et destruction d'objets `PcoThread` encore en cours d'exécution.\n   * *Correction :* Ajouter `for (unsigned int i = 0; i < num_threads; i++) { threads[i]->join(); }` avant le `if (prime)`.\n\n2. **`should_stop()` ne retourne pas de `is_prime()` (lignes 15–21 et 32–35) :** `should_stop()` est `void` : son `return;` quitte uniquement `should_stop()`, le thread continue sa boucle `for`.\n   * *Correction :* Faire retourner `bool` à `should_stop()` (`return PcoThread::thisThread()->stopRequested();`) et écrire `if (should_stop()) return;` dans `is_prime()`.\n\n3. **Le thread qui trouve un diviseur continue sa boucle (lignes 26–30) :** Après `prime = false; stop_threads();`, `is_prime` n'exécute pas `return;`.\n   * *Correction :* Ajouter `return;` juste après `stop_threads();`.\n\n4. **Course sur `threads` dans `stop_threads()` (lignes 10–12 et 59–65) :** `threads.resize(num_threads)` initialise les éléments à `nullptr`. Si le thread 0 trouve un diviseur avant que `main()` ait créé `threads[1..N-1]`, `t->requestStop()` déréférence `nullptr` → **Segmentation Fault** ! De plus, un thread pourrait être `delete` ou en cours de création.\n   * *Correction :* Protéger `threads` (ou vérifier `if (t != nullptr)` sous mutex, ou lancer tous les threads après création / bloquer le démarrage, ou mieux : utiliser un `std::atomic<bool> prime{true}` testé directement dans `is_prime`, ou protéger `threads` par un mutex lors de la création et de `stop_threads()`).\n\n5. **Data race sur `prime` (lignes 6 et 28) :** Plusieurs threads peuvent écrire `prime = false` simultanément sans synchronisation (Undefined Behavior en C++).\n   * *Correction :* Déclarer `static std::atomic<bool> prime;` (ou protéger par un `PcoMutex`).",
+          "model_answer": "Voici les erreurs principales :\n\n1. **Absence de `join()` (lignes 67–75) :** `main()` affiche `prime` et exécute `delete threads[i]` immédiatement sans attendre la fin des threads (`threads[i]->join()`). Conséquence : résultat faux (affiche `est premier` par défaut) et destruction d'objets `PcoThread` encore en cours d'exécution.\n   * *Correction :* Ajouter `for (unsigned int i = 0; i < num_threads; i++) { threads[i]->join(); }` avant le `if (prime)`.\n\n2. **`should_stop()` ne retourne pas de `is_prime()` (lignes 15–21 et 32–35) :** `should_stop()` est `void` : son `return;` quitte uniquement `should_stop()`, le thread continue sa boucle `for`.\n   * *Correction :* Faire retourner `bool` à `should_stop()` (`return PcoThread::thisThread()->stopRequested();`) et écrire `if (should_stop()) return;` dans `is_prime()`.\n\n3. **Le thread qui trouve un diviseur continue sa boucle (lignes 26–30) :** Après `prime = false; stop_threads();`, `is_prime` n'exécute pas `return;`.\n   * *Correction :* Ajouter `return;` juste après `stop_threads();`.\n\n4. **Course sur `threads` dans `stop_threads()` (lignes 10–12 et 59–65) :** `threads.resize(num_threads)` initialise les éléments à `nullptr`. Si le thread 0 trouve un diviseur avant que `main()` ait créé `threads[1..N-1]`, `t->requestStop()` déréférence `nullptr` → **Segmentation Fault** !\n   * *Correction :* Protéger `threads` par un mutex lors de la création et de `stop_threads()`, ou tester `if (t != nullptr)` sous mutex (ou utiliser directement `std::atomic<bool> prime{true}` dans `is_prime()`).\n\n5. **Data race sur `prime` (lignes 6 et 28) :** Plusieurs threads peuvent écrire `prime = false` simultanément sans synchronisation (Undefined Behavior en C++).\n   * *Correction :* Déclarer `static std::atomic<bool> prime;` (ou protéger par un `PcoMutex`).",
           "bookmarkable": true
         }
       ]
     },
     {
       "id": "sec-te1-q4",
-      "title": "Question 4 : Mutex — Liste chaînée thread-safe (7 points)",
-      "description": "Rendez la classe LinkedList sûre du point de vue de la concurrence avec PcoMutex.",
+      "title": "4. Mutex (7 points)",
+      "description": "Rendre thread-safe une implémentation de liste chaînée à l'aide de PcoMutex.",
       "blocks": [
+        {
+          "id": "th-te1-q4-enonce",
+          "block_type": "markdown",
+          "title": "Énoncé : Liste chaînée concurrente",
+          "bookmarkable": true,
+          "content": "Le code ci-dessous fournit l'implémentation fonctionnelle d'une liste chaînée permettant de stocker un entier.\n\nCette implémentation n'est cependant pas sûre du point de vue de la concurrence. Voici par exemple un programme qui utilise une liste partagée entre plusieurs threads où cela pourrait poser problème :"
+        },
+        {
+          "id": "code-te1-q4-exemple",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Programme d'exemple utilisant la liste partagée",
+          "filename": "q4_exemple_main.cpp",
+          "code": "static LinkedList list;\n\nstatic void adder(int tid)\n{\n    list.push_front(tid);\n}\n\nstatic void print_list(LinkedList &list)\n{\n    int data;\n    unsigned int i = 0;\n    while (list.get(i, &data) == 0) {\n        i++;\n        cout << data << \" \";\n    }\n    cout << endl;\n}\n\nint main()\n{\n    PcoThread* threads[2];\n\n    // rempli la liste depuis plusieurs threads\n    for (unsigned int i = 0; i < 2; i++) {\n        threads[i] = new PcoThread(adder, i);\n    }\n\n    for (unsigned int i = 0; i < 2; i++) {\n        threads[i]->join();\n        delete threads[i];\n    }\n\n    // affiche et vide la liste\n    print_list(list); // affiche par exemple \"1 0\"\n    list.pop_front();\n    print_list(list); // affiche par exemple \"0\"\n    list.pop_front();\n    print_list(list); // affiche par exemple \"\"\n\n    return 0;\n}",
+          "bookmarkable": true
+        },
         {
           "id": "code-te1-q4",
           "block_type": "code",
           "language": "cpp",
-          "title": "Implémentation originale de LinkedList (non thread-safe)",
+          "title": "Implémentation de LinkedList à sécuriser avec PcoMutex",
           "filename": "q4_linkedlist.cpp",
-          "code": "class Node {\nprotected:\n    int data;\n    Node* next;\n\npublic:\n    Node(int data) : data(data), next(NULL) {}\n    friend class LinkedList;\n};\n\nclass LinkedList {\nprotected:\n    Node* head;\n\npublic:\n    LinkedList() : head(NULL) {}\n\n    void push_front(int data)\n    {\n        Node *newNode = new Node(data);\n\n        if (head == NULL) {\n            head = newNode;\n            return;\n        }\n\n        newNode->next = this->head;\n        this->head = newNode;\n    }\n\n    void pop_front()\n    {\n        Node* temp = head;\n\n        if (head == NULL) {\n            return;\n        }\n\n        head = temp->next;\n        delete temp;\n    }\n\n    int get(unsigned int index, int* data)\n    {\n        Node* next = head;\n        unsigned int i = 0;\n\n        while (next != NULL) {\n            if (i == index) {\n                *data = next->data;\n                return 0;\n            }\n            next = next->next;\n            i++;\n        }\n        return -1;\n    }\n};",
-          "highlight_lines": [13, 24, 36, 51, 56],
-          "annotations": [
-            {
-              "line": 13,
-              "note": "Ajouter un PcoMutex membre de LinkedList (et non static/local!)."
-            },
-            {
-              "line": 24,
-              "note": "Attention à bien appeler mutex.unlock() avant CHAQUE return anticipé !"
-            }
-          ],
+          "code": "class Node {\nprotected:\n    int data;\n    Node* next;\n\npublic:\n    Node(int data) : data(data), next(NULL)\n    {\n    }\n};\n\nclass LinkedList {\nprotected:\n    Node* head;\n\npublic:\n    LinkedList() : head(NULL)\n    {\n    }\n\n    void push_front(int data)\n    {\n        // crée le nouveau noeud\n        Node *newNode = new Node(data);\n\n        // liste vide, assigne à head\n        if (head == NULL) {\n            head = newNode;\n            return;\n        }\n\n        // insère le nouveau noeud\n        newNode->next = this->head;\n        this->head = newNode;\n    }\n\n    void pop_front()\n    {\n        Node* temp = head;\n\n        if (head == NULL) {\n            // déjà vide\n            return;\n        }\n\n        head = temp->next;\n        delete temp;\n    }\n\n    int get(unsigned int index, int* data)\n    {\n        Node* next = head;\n        unsigned int i = 0;\n\n        // itère sur tous les noeuds\n        while (next != NULL) {\n            if (i == index) {\n                *data = next->data;\n                return 0;\n            }\n            next = next->next;\n            i++;\n        }\n        return -1;\n    }\n};",
           "bookmarkable": true
         },
         {
           "id": "ref-te1-q4-rubric",
           "block_type": "reflection_rubric",
           "title": "Correction : LinkedList thread-safe avec PcoMutex",
-          "prompt": "Modifiez l'implémentation de `LinkedList` en ajoutant le verrouillage nécessaire au moyen de `PcoMutex`.",
+          "prompt": "Modifiez l'implémentation de cette liste chaînée en ajoutant le verrouillage nécessaire à une implémentation sûre au moyen de `PcoMutex`.",
           "self_check_criteria": [
             "Ajouté `PcoMutex mutex;` en attribut de `LinkedList` (un mutex par instance de liste).",
             "Verrouillé et déverrouillé `mutex` dans `push_front`, `pop_front` et `get`.",
             "Pensé à déverrouiller `mutex.unlock()` sur TOUS les chemins de sortie (`return;` lorsque `head == NULL`, `return 0;` et `return -1;` dans `get`)."
           ],
-          "model_answer": "```cpp\nclass LinkedList {\nprotected:\n    Node* head;\n    PcoMutex mutex;\n\npublic:\n    LinkedList() : head(NULL) {}\n\n    void push_front(int data)\n    {\n        Node *newNode = new Node(data); // allocation possible hors SC\n        mutex.lock();\n        if (head == NULL) {\n            head = newNode;\n            mutex.unlock();\n            return;\n        }\n        newNode->next = this->head;\n        this->head = newNode;\n        mutex.unlock();\n    }\n\n    void pop_front()\n    {\n        mutex.lock();\n        Node* temp = head;\n        if (head == NULL) {\n            mutex.unlock();\n            return;\n        }\n        head = temp->next;\n        mutex.unlock();\n        delete temp; // libération possible après unlock\n    }\n\n    int get(unsigned int index, int* data)\n    {\n        mutex.lock();\n        Node* next = head;\n        unsigned int i = 0;\n\n        while (next != NULL) {\n            if (i == index) {\n                *data = next->data;\n                mutex.unlock();\n                return 0;\n            }\n            next = next->next;\n            i++;\n        }\n        mutex.unlock();\n        return -1;\n    }\n};\n```",
+          "model_answer": "```cpp\nclass LinkedList {\nprotected:\n    Node* head;\n    PcoMutex mutex;\n\npublic:\n    LinkedList() : head(NULL)\n    {\n    }\n\n    void push_front(int data)\n    {\n        // crée le nouveau noeud (allocation possible hors SC)\n        Node *newNode = new Node(data);\n\n        mutex.lock();\n        // liste vide, assigne à head\n        if (head == NULL) {\n            head = newNode;\n            mutex.unlock();\n            return;\n        }\n\n        // insère le nouveau noeud\n        newNode->next = this->head;\n        this->head = newNode;\n        mutex.unlock();\n    }\n\n    void pop_front()\n    {\n        mutex.lock();\n        Node* temp = head;\n\n        if (head == NULL) {\n            // déjà vide\n            mutex.unlock();\n            return;\n        }\n\n        head = temp->next;\n        mutex.unlock();\n        delete temp; // libération possible après unlock\n    }\n\n    int get(unsigned int index, int* data)\n    {\n        mutex.lock();\n        Node* next = head;\n        unsigned int i = 0;\n\n        // itère sur tous les noeuds\n        while (next != NULL) {\n            if (i == index) {\n                *data = next->data;\n                mutex.unlock();\n                return 0;\n            }\n            next = next->next;\n            i++;\n        }\n        mutex.unlock();\n        return -1;\n    }\n};\n```",
           "bookmarkable": true
         }
       ]
     },
     {
       "id": "sec-te1-q5",
-      "title": "Question 5 : Sémaphore — Classe PontLevant (10 points)",
-      "description": "Implémentez la synchronisation d'un pont levant avec PcoSemaphore.",
+      "title": "5. Sémaphore (10 points)",
+      "description": "Implémentez la classe PontLevant selon le cahier des charges au moyen de PcoSemaphore.",
       "blocks": [
         {
           "id": "th-te1-q5-enonce",
           "block_type": "markdown",
           "title": "Cahier des charges de `PontLevant`",
           "bookmarkable": true,
-          "content": "Nous souhaitons réaliser une classe `PontLevant` pour modéliser l'accès à un pont levant, dont voici le fonctionnement :\n\n* **`arrive()` :** appelée par les threads qui souhaitent accéder au pont. Si le pont est accessible (donc abaissé), les threads peuvent directement sortir de la méthode. Dans le cas contraire, ils doivent attendre que le pont change d'état.\n* **`abaisse()` :** permet d'activer l'accès au pont. Les threads qui seraient en attente dans `arrive()` doivent également être relâchés. Appeler plusieurs fois cette méthode n'a pas d'autres effets.\n* **`releve()` :** permet de bloquer l'accès au pont. Appeler plusieurs fois cette méthode n'a pas d'autres effets.\n\n> [!TIP]\n> Pensez à bien protéger l'état booléen du pont et le compteur de threads en attente avec un sémaphore `mutex(1)`, et à utiliser un sémaphore `waitPont(0)` pour faire patienter les threads dans `arrive()` !"
+          "content": "Nous souhaitons réaliser une classe `PontLevant` pour modéliser l'accès à un pont levant, dont voici le fonctionnement :\n\n* La méthode `arrive()` est appelée par les threads qui souhaitent accéder au pont. Si le pont est accessible (donc abaissé), les threads peuvent directement sortir de la méthode. Dans le cas contraire, ils doivent attendre que le pont change d'état.\n* La méthode `abaisse()` permet d'activer l'accès au pont. Les threads qui seraient en attente dans `arrive()` doivent également être relâchés. Appeler plusieurs fois cette méthode n'a pas d'autres effets.\n* La méthode `releve()` permet de bloquer l'accès au pont. Appeler plusieurs fois cette méthode n'a pas d'autres effets.\n\nImplémentez la classe `PontLevant` selon ce cahier des charges au moyen de `PcoSemaphore`. Une ébauche de la classe vous est fournie ci-dessous."
+        },
+        {
+          "id": "code-te1-q5",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Ébauche de la classe PontLevant",
+          "filename": "q5_pontlevant.cpp",
+          "code": "class PontLevant\n{\nprivate:\n\npublic:\n    PontLevant()\n    {\n    }\n\n    ~PontLevant()\n    {\n    }\n\n    void arrive()\n    {\n    }\n\n    void abaisse()\n    {\n    }\n\n    void releve()\n    {\n    }\n};",
+          "bookmarkable": true
         },
         {
           "id": "ref-te1-q5-rubric",
           "block_type": "reflection_rubric",
           "title": "Correction : Implémentation complète de `PontLevant`",
-          "prompt": "Implémentez la classe `PontLevant` (constructeur, destructeur, `arrive()`, `abaisse()`, `releve()`) au moyen de `PcoSemaphore`.",
+          "prompt": "Implémentez la classe `PontLevant` (attributs, constructeur, destructeur, `arrive()`, `abaisse()`, `releve()`) au moyen de `PcoSemaphore`.",
           "self_check_criteria": [
             "Utilisé un sémaphore `mutex(1)` pour protéger l'état (`estAbaisse`) et le compteur (`nbWaiting`).",
             "Dans `arrive()`, si `!estAbaisse`, incrémenté `nbWaiting`, relâché `mutex`, puis appelé `waitPont.acquire()`.",
