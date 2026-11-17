@@ -1,0 +1,184 @@
+{
+  "id": "pco-te1-tricks-and-patterns",
+  "title": "PCO TE1 Cheat Sheet: Essential Tricks, Patterns & Exam Traps",
+  "description": "A consolidated playbook of every recurring concurrency trick, semaphore pattern, mutex optimization, and classic TE1 exam trap from Chapters 1–6 and the 2021–2025 PCO exams.",
+  "estimated_minutes": 40,
+  "category": "Concurrent Programming",
+  "track": "PCO - Programmation Concurrente (TE1)",
+  "track_order": 11,
+  "difficulty_level": "intermediate",
+  "tags": [
+    "pco",
+    "te1",
+    "patterns",
+    "tricks",
+    "deadlock",
+    "semaphore",
+    "mutex",
+    "cheat-sheet"
+  ],
+  "prerequisites": [
+    "pco-ch5-locks-and-semaphores",
+    "pco-ch6-producer-consumer"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "PCO Chapter 4: Verrous et sémaphores",
+      "url_or_path": "sources/PCO-TE1/PCO_4_mutex.pdf",
+      "notes": "Starting signal exercise (Slide 44), PrinterManager lock-ordering trap, Rendezvous."
+    },
+    {
+      "title": "PCO 2024-25 — TE 1",
+      "url_or_path": "sources/PCO-TE1/pco_2024_25_te_1_sujet_vierge.md",
+      "notes": "Cortex & Minus stop_threads() race, LinkedList early-return unlock, PontLevant gatekeeper pattern."
+    },
+    {
+      "title": "PCO 2023-24 — Contrôle continu 1",
+      "url_or_path": "sources/PCO-TE1/contr_le_continu_1_pco_2023_2024.md",
+      "notes": "AlmostGreat local-copy optimization, RacletteTic, TheClass two-loop initialization."
+    },
+    {
+      "title": "PCO 2022-23 — TE 1",
+      "url_or_path": "sources/PCO-TE1/pco_2022_23_te_1.md",
+      "notes": "Player id-ordered dual locking, depart() barrier, T0-T6 task graph, rand() data race."
+    },
+    {
+      "title": "PCO 2021-22 — Contrôle continu 1",
+      "url_or_path": "sources/PCO-TE1/pco_contr_le_continu_1_2021_2022.md",
+      "notes": "std::ref() lifetime trap, DepartCourse, Votations weighted resource pool."
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-tricks-thread-startup",
+      "title": "1. Thread Startup, Lifetime & Cancellation Tricks",
+      "description": "Preventing nullptr races at startup, dangling references, and broken stopRequested() loops.",
+      "blocks": [
+        {
+          "id": "th-trick-starting-wall",
+          "block_type": "markdown",
+          "title": "Trick #1: The Starting Wall (*Barrière de démarrage*)",
+          "bookmarkable": true,
+          "content": "**The Problem:** In `main()`, you spawn `N` threads in a loop and store their pointers in `threads[i]`. If Thread 0 starts running immediately and calls `stop_threads()` (iterating over `threads`) before `main()` finishes creating `threads[1..N-1]`, it dereferences `nullptr` → **Segmentation Fault**! *(Seen in 2024–25 Q3, 2022–23 Q3 & Q4, Ch5 Slide 44.)*\n\n**The Fix — `PcoSemaphore startWall(0)`:**\n1. Every worker calls `startWall.acquire();` at the very top of its function.\n2. `main()` finishes the **entire** creation loop first, then calls `startWall.release();` **`N` times** (one token per thread).\n\n> [!NOTE]\n> **Two-Loop Init Alternative:** If workers only read a shared **data** array (like `theVector[i]` in `TheClass`, 2023–24 Q5) and never touch `threads[]`, you don't even need a semaphore—just allocate `theVector[i]` in a first `for` loop **before** spawning `PcoThread`s in a second `for` loop."
+        },
+        {
+          "id": "code-trick-starting-wall",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Starting Wall Pattern vs. Turnstile Alternative",
+          "filename": "starting_wall.cpp",
+          "code": "static PcoSemaphore startWall(0);\n\nvoid worker(int id) {\n    startWall.acquire(); // Wait until main() opens the gate\n    // Safe: all threads[0..N-1] are non-null!\n}\n\nint main() {\n    for (unsigned int i = 0; i < N; i++) {\n        threads[i] = new PcoThread(worker, i);\n    }\n    // All threads created -> open the starting wall:\n    for (unsigned int i = 0; i < N; i++) {\n        startWall.release();\n    }\n    for (unsigned int i = 0; i < N; i++) {\n        threads[i]->join();\n        delete threads[i];\n    }\n}",
+          "highlight_lines": [4, 13, 14, 15],
+          "annotations": [
+            {
+              "line": 4,
+              "note": "Blocks until main() releases N tokens. (Turnstile alternative: main() calls release() once, and each worker does acquire(); release();)."
+            },
+            {
+              "line": 14,
+              "note": "Must release N times (once per waiting thread), NOT once!"
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "th-trick-lifetime-stop",
+          "block_type": "markdown",
+          "title": "Trick #2: Stack Lifetime & Cooperative Stop Traps",
+          "bookmarkable": true,
+          "content": "* **Never let a local variable die before `join()`:** If `function1()` creates `MyClass obj;` on the stack and passes `std::ref(obj)` to a `PcoThread`, `function1()` **must** call `thread.join()` before returning—otherwise `obj` is destroyed while the thread still uses it! *(2021–22 Q3)*\n* **Never `delete` or read results before `join()`:** Always `join()` all worker threads before printing shared results (`prime`) or calling `delete threads[i]`. *(2024–25 Q3)*\n* **The `void should_stop()` Trap:** Putting `return;` inside a `void should_stop()` helper only returns from `should_stop()`, **not** from the worker loop! Make `should_stop()` return `bool` and write `if (should_stop()) return;` inside the worker function. *(2024–25 Q3)*"
+        }
+      ]
+    },
+    {
+      "id": "sec-tricks-mutex",
+      "title": "2. Mutex Patterns & Traps (`PcoMutex`)",
+      "description": "Early returns, performance optimization, dual-object locking, and read-check-write atomicity.",
+      "blocks": [
+        {
+          "id": "th-trick-mutex-rules",
+          "block_type": "markdown",
+          "title": "4 Essential `PcoMutex` Tricks",
+          "bookmarkable": true,
+          "content": "1. **Unlock Before EVERY Early `return`:** In methods like `LinkedList::push_front`, `pop_front`, or `get` *(2024–25 Q4)*, if you `lock()` at the top, you **must** `unlock()` before every `return;` / `return 0;` / `return -1;`—missing even one path causes an immediate permanent deadlock.\n2. **Never Declare a `PcoMutex` as a Local Variable (`PCO_4_mutex.pdf` p. 43):** Declaring `PcoMutex m;` inside a thread function creates a separate mutex on each thread's stack—providing **zero** mutual exclusion. It must be `static`, global, or a shared class member.\n3. **Local-Copy Trick for Heavy Work (`AlmostGreat`, 2023–24 Q1):** Never hold a mutex during slow computations (`someHugeFunction`) or `new`/`delete` if you don't need to:\n   ```cpp\n   m_mutex.lock();\n   double localA = m_a; // snapshot under lock\n   m_mutex.unlock();    // release BEFORE heavy work!\n   return someHugeFunction(localA);\n   ```\n4. **Lock Ordering + Self-Check for Dual Objects (`Player`, 2022–23 Q4):** When a method locks both `this` and `other` (`attack`/`heal`), AND in cross-resource locking (`semA` + `semB`, 2021–22 Q2):\n   * **Self-check first (in both `lockPair` AND `unlockPair`!):** If `a == b`, lock **once** and unlock **once**! (Locking twice = self-deadlock on `PcoMutex`; unlocking twice on a `PcoSemaphore(1)` bumps its counter to `2` and breaks mutual exclusion!)\n   * **Global lock order:** Always lock the lower `id` (or lower pointer address, or `semA` before `semB`) first—eliminates circular-wait deadlocks.\n5. **Keep Read-Check-Write in ONE Critical Section:** Never `unlock()` between reading a shared variable and writing it back (`threadB` in 2022–23 Q2); another thread can modify it in between!"
+        },
+        {
+          "id": "code-trick-dual-lock",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Deadlock-Free Dual-Object Locking Template",
+          "filename": "dual_lock.cpp",
+          "code": "void lockPair(Player* a, Player* b) {\n    if (a == b) {\n        a->mutex.lock(); // or a->sem.acquire()\n        return;\n    }\n    if (a->id < b->id) {\n        a->mutex.lock();\n        b->mutex.lock();\n    } else {\n        b->mutex.lock();\n        a->mutex.lock();\n    }\n}\n\nvoid unlockPair(Player* a, Player* b) {\n    if (a == b) {\n        a->mutex.unlock(); // CRITICAL: only release once!\n        return;\n    }\n    a->mutex.unlock();\n    b->mutex.unlock();\n}",
+          "highlight_lines": [2, 6, 16, 17],
+          "annotations": [
+            {
+              "line": 2,
+              "note": "Prevents self-deadlock if a player targets itself (e.g., heal(this))."
+            },
+            {
+              "line": 6,
+              "note": "Consistent global order (lower id first) makes circular wait impossible."
+            },
+            {
+              "line": 17,
+              "note": "If using PcoSemaphore(1), releasing twice when a == b would bump the semaphore to 2 and break mutual exclusion!"
+            }
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-tricks-semaphores",
+      "title": "3. The 4 Universal `PcoSemaphore` Patterns",
+      "description": "Gatekeeper + state guard, weighted resource pools, task graphs, and avoiding semaphore traps.",
+      "blocks": [
+        {
+          "id": "th-trick-gatekeeper",
+          "block_type": "markdown",
+          "title": "Pattern A: Gatekeeper + State Guard (`PontLevant`, `DepartCourse`, `RacletteTic`)",
+          "bookmarkable": true,
+          "content": "Whenever threads must wait for a **condition** (bridge lowered, starting gun fired, group of 5 ready, 1 PER + 3 students ready), use this exact skeleton:\n\n* `PcoSemaphore mutex(1);` — protects the state booleans/counters (`estAbaisse`, `nbWaiting`).\n* `PcoSemaphore waitSem(0);` — the waiting room.\n\n**The Golden Rule of Gatekeepers:**\n> **ALWAYS call `mutex.release()` BEFORE calling `waitSem.acquire()`!**\n> If you block on `waitSem.acquire()` while still holding `mutex`, no other thread can enter `abaisse()` / `coupDeFeu()` / `racleur()` to wake you up → **guaranteed deadlock**!\n\nAnd when waking threads while holding `mutex`, release **only** `nbWaiting` tokens (resetting `nbWaiting = 0`) so idempotent calls (`abaisse()` called twice) never leave phantom extra tokens in `waitSem`!"
+        },
+        {
+          "id": "th-trick-weighted-pool-and-dag",
+          "block_type": "markdown",
+          "title": "Pattern B: Weighted Pool (`Votations`), Pattern C: Task Graph (`T0`–`T6`) & Common Traps",
+          "bookmarkable": true,
+          "content": "* **Pattern B — Weighted Resource Pool (`Votations`, 2021–22 Q5):**\n  If a thread needs `k` units from `semVoix(N)` via a loop `for (i = 0..k-1) semVoix.acquire();`, two threads acquiring `k` simultaneously can each grab half the tokens and **deadlock**! Fix: wrap the `acquire()` loop in an outer `mutexEntre(1)`, while `sort()` calls `semVoix.release()` **without** touching `mutexEntre`.\n* **Pattern C — Task Dependency Graph (`T0`–`T6`, 2022–23 Q6):**\n  Give each task `Ti` a `PcoSemaphore semTi(0);`. After `Ti` finishes, it calls `semTi.release()` once for **each outgoing arrow**. Before `Tj` starts, it calls `semTi.acquire()` once for **each incoming arrow**.\n* **Trap — `PcoSemaphore(-1)`:** Constructor takes `unsigned int n = 0`. Passing `-1` underflows to `UINT_MAX` and never blocks! *(2024–25 Q1e, 2023–24 Q4.3)*\n* **Trap — Active-Waiting Order & Memory Fences *(2024–25 Q2, Ch4)*:** In Peterson-style algorithms, `intention[self] = true;` must happen **before** testing `intention[other]` or yielding `tour` (otherwise both threads can enter the CS simultaneously!). On multi-core CPUs, a `std::atomic_thread_fence(std::memory_order_acq_rel)` is also required.\n* **Trap — `rand()` is NOT thread-safe:** `rand()` uses hidden global state—protect it with a mutex or use thread-local RNG. *(2022–23 Q3 & Q4)*\n* **Trap — `std::vector<bool>` & `double`:** `std::vector<bool>` packs 8 bits/byte (concurrent `vec[0]` and `vec[1]` race!), and 64-bit `double` writes aren't atomic on 32-bit CPUs."
+        },
+        {
+          "id": "diag-tricks-summary",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Quick Decision Matrix: Which Primitive & Pattern?",
+          "caption": "Choose the right synchronization pattern based on the problem structure.",
+          "source": "graph TD\n  Q{\"What do you need?\"}\n  Q -->|\"Protect shared data\"| M[\"PcoMutex\\n(unlock on ALL returns!)\"]\n  Q -->|\"Lock 2 objects (a, b)\"| D[\"Check a == b, then lock\\nmin(id) before max(id)\"]\n  Q -->|\"Wait for all threads created\"| SW[\"Starting Wall:\\nPcoSemaphore(0) + N releases\"]\n  Q -->|\"Wait for state/group\"| GK[\"Gatekeeper:\\nmutex(1) + waitSem(0)\\nrelease mutex BEFORE acquire!\"]\n  Q -->|\"Acquire k tokens at once\"| WP[\"Wrap acquire loop in\\nouter mutexEntre(1)\"]\n  Q -->|\"Task DAG ordering\"| DAG[\"1 PcoSemaphore(0) per task\\nrelease per out-edge\"]\n  classDef pat fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px;\n  class M,D,SW,GK,WP,DAG pat;",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-trick-mutex-before-wait",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-trick-gatekeeper",
+          "question": "In a gatekeeper class (`PontLevant`, `DepartCourse`, `PrinterManager`), what happens if a thread calls `waitSem.acquire()` BEFORE calling `mutex.release()`?",
+          "options": [
+            "Guaranteed deadlock if the condition is false: the thread sleeps while holding `mutex`, blocking any thread that tries to signal it.",
+            "A spurious wakeup occurs, waking the thread twice.",
+            "Nothing—`waitSem.acquire()` automatically unlocks `mutex` in C++.",
+            "The semaphore value underflows to `UINT_MAX`."
+          ],
+          "correct_answer": "Guaranteed deadlock if the condition is false: the thread sleeps while holding `mutex`, blocking any thread that tries to signal it.",
+          "explanation": "`PcoSemaphore::acquire()` does NOT release other mutexes or semaphores (unlike a monitor/condition variable's `wait()`). If a thread blocks on `waitSem.acquire()` while still holding `mutex`, any thread calling `abaisse()`/`giveBack()`/`coupDeFeu()` will block on `mutex.acquire()` forever.",
+          "hints": [
+            "Does `PcoSemaphore::acquire()` automatically release `mutex` like a condition variable does?",
+            "What happens when the signaling thread calls `mutex.acquire()` to update the state and wake the waiter?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    }
+  ]
+}
