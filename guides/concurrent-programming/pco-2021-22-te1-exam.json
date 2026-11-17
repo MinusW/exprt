@@ -1,0 +1,220 @@
+{
+  "id": "pco-2021-22-te1-exam",
+  "title": "PCO 2021-22 — Contrôle continu 1 (Sujet complet, 42 pts)",
+  "description": "Recréation interactive complète du Contrôle continu 1 de Programmation Concurrente (HEIG-VD, Automne 2021-2022, 22.11.2021, 42 points) : Analyse de code concurrent (PcoMutex, PcoSemaphore, PcoThread), Départ de course (FENEC) et Votations (SEMAPHORE).",
+  "estimated_minutes": 90,
+  "category": "Concurrent Programming",
+  "track": "PCO - Programmation Concurrente (TE1)",
+  "track_order": 10,
+  "difficulty_level": "intermediate",
+  "tags": [
+    "pco",
+    "te1",
+    "exam",
+    "pcothread",
+    "pcomutex",
+    "pcosemaphore",
+    "practice-test"
+  ],
+  "prerequisites": [
+    "pco-ch1-threads-pcothread",
+    "pco-ch2-context-switching",
+    "pco-ch3-critical-sections",
+    "pco-ch4-active-waiting-mutual-exclusion",
+    "pco-ch5-locks-and-semaphores",
+    "pco-ch6-producer-consumer"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "PCO 2021-22 — Contrôle continu 1",
+      "url_or_path": "sources/PCO-TE1/pco_contr_le_continu_1_2021_2022.md",
+      "notes": "Sujet original complet (5 questions, 42 points) + rappel sur les classes Pco."
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-te1-consignes-rappels",
+      "title": "Consignes générales & Rappel sur les classes Pco",
+      "description": "HEIG-VD — Haute École d'Ingénierie et de Gestion du Canton de Vaud | Professeur : Yann Thoma | Date : 22.11.2021 | Total : 42 points.",
+      "blocks": [
+        {
+          "id": "th-te1-consignes",
+          "block_type": "markdown",
+          "title": "Consignes générales",
+          "bookmarkable": true,
+          "content": "# HEIG-VD — Haute École d'Ingénierie et de Gestion du Canton de Vaud\n\n**Cours :** Programmation Concurrente (PCO)  \n**Semestre :** Automne 2021-2022  \n**Évaluation :** Contrôle continu 1  \n**Date :** 22.11.2021  \n**Professeur :** Yann Thoma  \n\n### Consignes\n* Aucune documentation n'est permise, y compris la feuille de vos voisins.\n* La calculatrice n'est pas autorisée.\n* Aucune réclamation ne sera acceptée en cas d'utilisation du crayon.\n* Ne pas utiliser de couleur rouge.\n\n| Question | Points | Score |\n| :--- | :---: | :---: |\n| 1 | 6 | |\n| 2 | 6 | |\n| 3 | 6 | |\n| 4 | 12 | |\n| 5 | 12 | |\n| **Total** | **42** | |"
+        },
+        {
+          "id": "th-te1-rappels",
+          "block_type": "markdown",
+          "title": "Rappel sur les classes Pco",
+          "bookmarkable": true,
+          "content": "* `PcoSemaphore::PcoSemaphore(n)` : correspond à initialiser le sémaphore à $n$ ($n$ doit être $\\ge 0$) ;\n* `PcoSemaphore::acquire()` : correspond à $P(\\text{sémaphore})$ ;\n* `PcoSemaphore::release()` : correspond à $V(\\text{sémaphore})$ ;\n* `PcoMutex::lock()` : verrouille un mutex ;\n* `PcoMutex::unlock()` : déverrouille un mutex ;\n* `PcoThread()` : Constructeur, lance un thread ;\n* `PcoThread::join()` : attend qu'un thread se termine."
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-q1",
+      "title": "Question 1 : 6 points",
+      "description": "Analyse de la sortie d'un programme concurrent manipulant un std::vector avec deux PcoMutex.",
+      "blocks": [
+        {
+          "id": "code-te1-q1",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Code de la Question 1",
+          "filename": "q1_vector.cpp",
+          "code": "#define INDEX1 10\n#define INDEX2 20\n#define SIZE 100\n\nstd::vector<int> myvector(SIZE, 0); // Initialisation du vecteur de taille SIZE avec des 0\nPcoMutex mutex1;\nPcoMutex mutex2;\n\nvoid function1()\n{\n    mutex1.lock();\n    myvector[INDEX1]++;\n    mutex1.unlock();\n}\n\nvoid function2()\n{\n    mutex2.lock();\n    myvector[INDEX2] = myvector[INDEX2] + 3;\n    mutex2.unlock();\n}\n\nvoid main()\n{\n    PcoThread t1(function1);\n    PcoThread t2(function2);\n    t1.join();\n    t2.join();\n    std::cout << myvector[INDEX1] << \",\" << myvector[INDEX2] << std::endl;\n}",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-q1",
+          "block_type": "reflection_rubric",
+          "title": "Réponse : Déterminisme de la sortie",
+          "prompt": "Est-ce que la sortie observée de ce programme sera toujours la même ?  \nSi oui, justifiez, et si non modifiez le code tout en respectant sa sémantique[^1].\n\n[^1]: Non, il n'est pas permis de faire uniquement `std::cout << \"1, 3\" << std::endl;`",
+          "self_check_criteria": [
+            "Identifié que `INDEX1` (10) et `INDEX2` (20) désignent deux cases distinctes de `myvector`.",
+            "Vérifié qu'aucun redimensionnement ni réallocation de `myvector` n'a lieu pendant l'exécution des threads.",
+            "Expliqué que `t1.join()` et `t2.join()` garantissent que les deux threads sont terminés avant l'affichage dans `main()`.",
+            "Conclu que la sortie est toujours identique (`1,3`)."
+          ],
+          "model_answer": "**Oui**, la sortie observée sera **toujours la même** (`1,3`).\n\n**Justification :**\n1. `myvector` est initialisé avec `SIZE` (100) éléments avant la création des threads et sa taille n'est jamais modifiée par la suite (aucune réallocation mémoire).\n2. `t1` accède uniquement à `myvector[INDEX1]` (indice `10`) et `t2` accède uniquement à `myvector[INDEX2]` (indice `20`). En C++, deux éléments distincts d'un `std::vector<int>` occupent des emplacements mémoire indépendants : il n'y a donc aucune course aux données (*data race*) entre `t1` et `t2` (même s'ils utilisent deux mutex différents, ceux-ci ne sont pas en conflit et ne protègent pas la même case).\n3. `main()` appelle `t1.join()` et `t2.join()` avant d'afficher `myvector[INDEX1]` et `myvector[INDEX2]`, ce qui garantit que les deux écritures sont terminées et visibles avant la lecture finale.\n\n*(Note : `mutex1` et `mutex2` sont même superflus ici car chaque indice n'est accédé que par un seul thread, mais leur présence ne cause aucun problème.)*",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-q2",
+      "title": "Question 2 : 6 points",
+      "description": "Analyse de synchronisation avec deux sémaphores.",
+      "blocks": [
+        {
+          "id": "code-te1-q2",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Code de la Question 2",
+          "filename": "q2_semaphores.cpp",
+          "code": "MyClassA objA;\nMyClassB objB;\nPcoSemaphore semA(1);\nPcoSemaphore semB(1);\n\nvoid function1()\n{\n    semA.acquire();\n    objA.method();\n    semA.release();\n}\n\nvoid function2()\n{\n    semB.acquire();\n    objB.method();\n    semB.release();\n}\n\nvoid function3()\n{\n    semA.acquire();\n    objA.method();\n    semB.acquire();\n    objB.method();\n    semB.release();\n    semA.release();\n}\n\nvoid function4()\n{\n    semB.acquire();\n    objB.method();\n    semA.acquire();\n    objA.method();\n    semA.release();\n    semB.release();\n}\n\nvoid main()\n{\n    PcoThread t1(function1);\n    PcoThread t2(function2);\n    PcoThread t3(function3);\n    PcoThread t4(function4);\n    t1.join();\n    t2.join();\n    t3.join();\n    t4.join();\n}",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-q2",
+          "block_type": "reflection_rubric",
+          "title": "Réponse : Analyse et correction",
+          "prompt": "Les fonctions `MyClassA::method()` et `MyClassB::method()` ne sont pas thread-safe (mais ne dépendent pas l'une de l'autre), et donc le développeur a décidé d'utiliser un sémaphore pour protéger chacune d'elle. Le code est-il correct ? Si oui justifiez, et si non expliquez pourquoi et corrigez le code.",
+          "self_check_criteria": [
+            "Identifié que le code n'est pas correct en raison d'un risque d'interblocage (deadlock) entre `function3` (`t3`) et `function4` (`t4`).",
+            "Expliqué le scénario d'interblocage : `t3` prend `semA`, `t4` prend `semB`, puis chacun attend le sémaphore détenu par l'autre.",
+            "Proposé une correction valide : soit relâcher `semA` avant d'acquérir `semB` (et inversement) puisque les méthodes sont indépendantes, soit acquérir `semA` et `semB` dans le même ordre."
+          ],
+          "model_answer": "**Non**, le code n'est **pas correct**.\n\n**Explication du problème (interblocage / deadlock) :**\n* `function3()` acquiert `semA` puis tente d'acquérir `semB` sans avoir relâché `semA`.\n* `function4()` acquiert `semB` puis tente d'acquérir `semA` sans avoir relâché `semB`.\n* Si `t3` exécute `semA.acquire()` et est préempté avant `semB.acquire()`, puis que `t4` exécute `semB.acquire()`, alors `t3` bloquera sur `semB.acquire()` et `t4` bloquera sur `semA.acquire()`. Aucun des deux threads ne pourra progresser : c'est un **interblocage**.\n\n**Correction :**\nComme `MyClassA::method()` et `MyClassB::method()` ne dépendent pas l'une de l'autre, il n'est pas nécessaire de détenir les deux sémaphores simultanément. La meilleure correction consiste à relâcher le premier sémaphore avant d'acquérir le second (ce qui évite tout interblocage et augmente le parallélisme) :\n\n```cpp\nvoid function3()\n{\n    semA.acquire();\n    objA.method();\n    semA.release();\n\n    semB.acquire();\n    objB.method();\n    semB.release();\n}\n\nvoid function4()\n{\n    semB.acquire();\n    objB.method();\n    semB.release();\n\n    semA.acquire();\n    objA.method();\n    semA.release();\n}\n```\n\n*(Alternative également valide si l'on devait garder les deux sémaphores en même temps : imposer un ordre global d'acquisition identique dans `function3` et `function4`, par exemple toujours `semA.acquire()` puis `semB.acquire()`.)*",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-q3",
+      "title": "Question 3 : 6 points",
+      "description": "Analyse de l'exécution d'un programme créant un PcoThread avec std::ref().",
+      "blocks": [
+        {
+          "id": "code-te1-q3",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Code de la Question 3",
+          "filename": "q3_lifetime.cpp",
+          "code": "class MyClass { // Here we only show the part of the class that is useful to us\npublic:\n    void method1();\n    void method2();\n};\n\nPcoThread *thread2;\n\nvoid function2(MyClass &object)\n{\n    object.method1();\n}\n\nvoid function1()\n{\n    MyClass obj;\n    // prepare the object\n    thread2 = new PcoThread(function2, std::ref(obj));\n    obj.method2();\n}\n\nvoid main()\n{\n    PcoThread thread1(function1);\n    thread1.join();\n    thread2->join();\n    delete thread2;\n}",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-q3",
+          "block_type": "reflection_rubric",
+          "title": "Réponse : Analyse et modifications proposées",
+          "prompt": "Les fonctions `MyClass::method1()` et `MyClass::method2()` sont thread-safe et peuvent donc être appelées en parallèle sans problème. Le code est-il correct ? Si oui justifiez, et si non expliquez ce qui n'est pas bon et proposez des modifications (sous forme de texte, pas besoin de modifier du code).\n\n*Pour rappel, `std::ref()` permet de passer une référence d'un objet à la fonction pour la création de threads. Ceci est nécessaire pour que la compilation se passe bien.*",
+          "self_check_criteria": [
+            "Identifié que le code n'est pas correct.",
+            "Expliqué le problème de durée de vie : `obj` est une variable locale de `function1()`, détruite dès que `function1()` se termine, alors que `thread2` peut encore être en train d'exécuter `object.method1()` (référence pendante / comportement indéfini).",
+            "Proposé de faire `thread2.join()` à la fin de `function1()` (après `obj.method2()`, avant la destruction de `obj`) et de déclarer `thread2` localement dans `function1()` plutôt qu'en variable globale jointe dans `main()`."
+          ],
+          "model_answer": "**Non**, le code n'est **pas correct**.\n\n**Ce qui n'est pas bon :**\n* `obj` est une variable locale déclarée sur la pile dans `function1()`. Elle est détruite automatiquement dès que `function1()` se termine.\n* Or, `function1()` lance `thread2` en lui passant une référence vers `obj` (`std::ref(obj)`), puis exécute `obj.method2()` sans attendre la fin de `thread2`.\n* Si `function1()` (exécutée par `thread1`) se termine avant `thread2`, l'objet `obj` est détruit alors que `thread2` continue d'exécuter `object.method1()` sur une référence invalide (*dangling reference*), ce qui provoque un comportement indéfini (crash / corruption mémoire).\n\n**Modifications proposées :**\n* Déclarer `thread2` directement comme variable locale dans `function1()` (plus besoin du pointeur global `PcoThread *thread2;` ni d'allocation dynamique `new`/`delete`).\n* Appeler `thread2.join()` à la fin de `function1()`, **après** `obj.method2()` (pour que `method1()` et `method2()` continuent de s'exécuter en parallèle) mais **avant** la sortie de `function1()` (pour garantir que `obj` reste valide tant que `thread2` l'utilise).\n* Supprimer `thread2->join();` et `delete thread2;` de la fonction `main()`.",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-q4",
+      "title": "Question 4 : 12 points",
+      "description": "Implémentation de la classe DepartCourse (FENEC) à base de sémaphores.",
+      "blocks": [
+        {
+          "id": "th-te1-q4-enonce",
+          "block_type": "markdown",
+          "title": "Énoncé : Départ de course (FENEC)",
+          "bookmarkable": true,
+          "content": "Nous désirons réaliser le contrôle d'un départ d'une course populaire dans un canton voisin. Les threads coureurs devront se bloquer et attendre que le thread commissaire de course lance le coup de feu pour reprendre leur exécution. Il y a un certain nombre de coureurs, et celui-ci n'est pas limité. Les règles de la FENEC (Fédération Neuchâteloise des Enthousiastes de la Course) imposent que le coup de feu parte à une heure précise. Si un coureur n'est pas présent au moment du coup de feu mais arrive plus tard il ne participe pas à la course mais ne reste pas bloqué sur la ligne d'arrivée.\n\nLa modélisation se fait via une classe `DepartCourse` qui offre, outre un constructeur, deux fonctions :\n\n* `bool coureurArrive()`, appelée par les coureurs. Cette fonction est bloquante si le coureur peut participer à la course. Elle retourne `true` si le coureur peut participer à la course, et `false` s'il est arrivé trop tard.\n* `void coupDeFeu()`, appelée par le commissaire de course. Elle relâche tous les coureurs présents sur la ligne de départ.\n\nProposez une implémentation à base de sémaphores."
+        },
+        {
+          "id": "code-te1-q4",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Squelette de la classe DepartCourse",
+          "filename": "q4_depart_course.cpp",
+          "code": "class DepartCourse\n{\npublic:\n    DepartCourse();\n    bool coureurArrive();\n    void coupDeFeu();\n};",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-q4",
+          "block_type": "reflection_rubric",
+          "title": "Correction : Implémentation de DepartCourse",
+          "prompt": "Proposez une implémentation complète de la classe `DepartCourse` à base de sémaphores.",
+          "self_check_criteria": [
+            "Utilisé un sémaphore `mutex(1)` pour protéger l'état partagé (`coupDeFeuTire` et `nbCoureursEnAttente`).",
+            "Dans `coureurArrive()`, si le coup de feu est déjà parti, relâché `mutex` et retourné `false` sans bloquer.",
+            "Dans `coureurArrive()`, si le coup de feu n'est pas encore parti, incrémenté `nbCoureursEnAttente`, relâché `mutex`, bloqué sur `attenteDepart.acquire()`, puis retourné `true`.",
+            "Dans `coupDeFeu()`, sous protection de `mutex`, passé `coupDeFeuTire = true` et libéré exactement `nbCoureursEnAttente` threads via `attenteDepart.release()` (en remettant le compteur à `0`)."
+          ],
+          "model_answer": "```cpp\nclass DepartCourse\n{\nprivate:\n    PcoSemaphore mutex;\n    PcoSemaphore attenteDepart;\n    bool coupDeFeuTire;\n    unsigned int nbCoureursEnAttente;\n\npublic:\n    DepartCourse()\n        : mutex(1), attenteDepart(0), coupDeFeuTire(false), nbCoureursEnAttente(0)\n    {\n    }\n\n    bool coureurArrive()\n    {\n        mutex.acquire();\n        if (coupDeFeuTire) {\n            mutex.release();\n            return false;\n        }\n        nbCoureursEnAttente++;\n        mutex.release();\n\n        attenteDepart.acquire();\n        return true;\n    }\n\n    void coupDeFeu()\n    {\n        mutex.acquire();\n        coupDeFeuTire = true;\n        while (nbCoureursEnAttente > 0) {\n            nbCoureursEnAttente--;\n            attenteDepart.release();\n        }\n        mutex.release();\n    }\n};\n```\n\n**Points clés :**\n* `mutex` protège à la fois `coupDeFeuTire` et `nbCoureursEnAttente`.\n* Un coureur arrivant avant `coupDeFeu()` incrémente `nbCoureursEnAttente` et relâche `mutex` *avant* de bloquer sur `attenteDepart.acquire()`, afin de ne pas bloquer le commissaire.\n* `coupDeFeu()` réveille exactement le nombre de coureurs présents (`nbCoureursEnAttente`), sans laisser de jetons résiduels dans `attenteDepart`.",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-q5",
+      "title": "Question 5 : 12 points",
+      "description": "Implémentation de la classe Votations (SEMAPHORE) à l'aide de sémaphores.",
+      "blocks": [
+        {
+          "id": "th-te1-q5-enonce",
+          "block_type": "markdown",
+          "title": "Énoncé : Votations (SEMAPHORE)",
+          "bookmarkable": true,
+          "content": "Pour l'assemblée générale de la Société pour l'Elimination Minutieuse et Alambiquée des doryPHOREs (la SEMAPHORE), le système de votation est un peu particulier. En effet, la machine gérant les votations n'est capable de gérer qu'un certain nombre maximal de voix. Chaque membre possède un certain nombre de voix, et il faut alors garantir que la somme totale des voix présentes ne dépasse pas ce seuil. A l'entrée de la salle la machine doit donc vérifier l'arrivée des membres, qui devront rester dehors s'il n'y a plus de place pour eux. Dès qu'un membre quitte l'assemblée il libère alors un certain nombre de voix, ce qui peut permettre à une ou plusieurs personnes de rentrer.\n\nNous allons décrire ce comportement dans la classe `Votations`. Le nombre maximum de voix est défini via le paramètre du constructeur. Les méthodes `entre()` et `sort()` prennent en paramètre le nombre de voix de la personne désirant entrer ou sortir de la salle. La fonction `entre()` peut évidemment être bloquante s'il n'y a momentanément plus de place.\n\nA vous d'implémenter cette classe, en vous aidant de sémaphores."
+        },
+        {
+          "id": "code-te1-q5",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Squelette de la classe Votations",
+          "filename": "q5_votations.cpp",
+          "code": "class Votations {\npublic:\n    Votations(unsigned int nbMaxVoix);\n    void entre(unsigned int nbVoix);\n    void sort(unsigned int nbVoix);\n};",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-q5",
+          "block_type": "reflection_rubric",
+          "title": "Correction : Implémentation de Votations",
+          "prompt": "Implémentez la classe `Votations` (`Votations(unsigned int nbMaxVoix)`, `entre(unsigned int nbVoix)`, `sort(unsigned int nbVoix)`), en vous aidant de sémaphores.",
+          "self_check_criteria": [
+            "Garanti que la somme des voix dans la salle ne dépasse jamais `nbMaxVoix`.",
+            "Évité l'interblocage lorsque deux threads appellent `entre()` simultanément (par exemple via un mutex d'entrée protégeant la boucle d'acquisition, ou via un compteur protégé et un sémaphore d'attente).",
+            "Vérifié que `sort()` ne bloque pas sur le verrou d'entrée (sinon un thread bloqué dans `entre()` empêcherait `sort()` de libérer des voix).",
+            "Géré le réveil d'un ou plusieurs membres lorsque `sort()` libère suffisamment de voix."
+          ],
+          "model_answer": "```cpp\nclass Votations {\nprivate:\n    PcoSemaphore semVoix;\n    PcoSemaphore mutexEntre;\n\npublic:\n    Votations(unsigned int nbMaxVoix)\n        : semVoix(nbMaxVoix), mutexEntre(1)\n    {\n    }\n\n    void entre(unsigned int nbVoix)\n    {\n        mutexEntre.acquire();\n        for (unsigned int i = 0; i < nbVoix; i++) {\n            semVoix.acquire();\n        }\n        mutexEntre.release();\n    }\n\n    void sort(unsigned int nbVoix)\n    {\n        for (unsigned int i = 0; i < nbVoix; i++) {\n            semVoix.release();\n        }\n    }\n};\n```\n\n**Explication :**\n* `semVoix` est initialisé à `nbMaxVoix` et représente le nombre de voix disponibles dans la salle.\n* **Pourquoi `mutexEntre` est indispensable :** sans `mutexEntre`, deux membres arrivant en même temps (par exemple chacun avec 5 voix alors qu'il en reste 6) pourraient acquérir 3 voix chacun et rester mutuellement bloqués en interblocage.\n* **Pourquoi `sort()` ne prend pas `mutexEntre` :** si un membre est bloqué dans `entre()` en détenant `mutexEntre`, `sort()` doit pouvoir continuer à exécuter `semVoix.release()` pour libérer des voix et débloquer le membre en attente.\n* Cette solution garantit également l'absence de famine (ordre FIFO à l'entrée).",
+          "bookmarkable": true
+        }
+      ]
+    }
+  ]
+}

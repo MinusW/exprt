@@ -1,0 +1,355 @@
+{
+  "id": "pco-2022-23-te1-exam",
+  "title": "PCO 2022-23 — TE 1 (Sujet complet, 32 pts + 6 bonus)",
+  "description": "Recréation interactive complète du TE 1 de Programmation Concurrente (HEIG-VD, 17.11.2022, 32 points + 6 points bonus) : Général (threads vs processus), Section critique, PcoThread, Sémaphores (Player), Séquentialité (course d'orientation et graphe de tâches) et Attente active (bonus).",
+  "estimated_minutes": 90,
+  "category": "Concurrent Programming",
+  "track": "PCO - Programmation Concurrente (TE1)",
+  "track_order": 9,
+  "difficulty_level": "intermediate",
+  "tags": [
+    "pco",
+    "te1",
+    "exam",
+    "pcothread",
+    "pcosemaphore",
+    "critical-section",
+    "practice-test"
+  ],
+  "prerequisites": [
+    "pco-ch1-threads-pcothread",
+    "pco-ch2-context-switching",
+    "pco-ch3-critical-sections",
+    "pco-ch4-active-waiting-mutual-exclusion",
+    "pco-ch5-locks-and-semaphores",
+    "pco-ch6-producer-consumer"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "PCO 2022-23 — TE 1",
+      "url_or_path": "sources/PCO-TE1/pco_2022_23_te_1.md",
+      "notes": "Sujet original complet (7 questions dont 1 question bonus, 32 points + 6 bonus) + rappel PcoSemaphore."
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-te1-consignes",
+      "title": "Consignes générales",
+      "description": "HEIG-VD — REDS | Chargé de cours : Rick Wertenbroek | Date : 17.11.22 | Total : 32 points (+ 6 points bonus).",
+      "blocks": [
+        {
+          "id": "th-te1-consignes",
+          "block_type": "markdown",
+          "title": "Consignes générales",
+          "bookmarkable": true,
+          "content": "**HEIG-VD — REDS (Institut Reconfigurable and Embedded Digital Systems)**  \n**Chargé de cours :** Rick Wertenbroek  \n**Date :** 17.11.22  \n**Prénom, Nom :** \\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\n\nCe test contient 16 pages (page de garde et cinq pages de brouillon inclus) pour 7 questions. Le nombre maximum de points possible est 32. La dernière question est une question bonus. Répondre aux questions dans l'espace disponible, au besoin les pages de brouillon peuvent être utilisées, si votre réponse se trouve sur une page de brouillon, le mentionner sous la question.\n\n* Aucun matériel n'est autorisé, seul de quoi écrire.\n* Écrire son nom et prénom sur chaque feuille.\n* Merci de ne pas remplir le tableau sur cette page.\n* Merci de ne pas utiliser la couleur rouge pour vos réponses.\n\n| Question | Points | Score |\n| :--- | :---: | :---: |\n| **1** | 4 | |\n| **2** | 4 | |\n| **3** | 4 | |\n| **4** | 6 | |\n| **5** | 8 | |\n| **6** | 6 | |\n| **7** (Bonus) | 0 | |\n| **Total :** | **32** | |"
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-q1",
+      "title": "Question 1 (4 points) — Général",
+      "description": "Comparer les fils d'exécution (threads) et les processus (processes).",
+      "blocks": [
+        {
+          "id": "ref-te1-q1",
+          "block_type": "reflection_rubric",
+          "title": "Question 1 — Threads vs Processus",
+          "prompt": "Donner deux points communs et deux différences entre les fils d'exécution (*threads*) et les processus (*processes*).\n\n**Points communs :**\n1.\n2.\n\n**Différences :**\n1.\n2.",
+          "self_check_criteria": [
+            "Donné 2 points communs exacts (ex. : unité d'exécution ordonnancée par l'OS, possède sa propre pile et son propre contexte d'exécution/registres/PC, suit le même cycle d'états prêt/élu/bloqué).",
+            "Donné 2 différences exactes (ex. : les threads d'un même processus partagent l'espace d'adressage alors que les processus sont isolés ; création et changement de contexte plus légers pour les threads ; communication directe par mémoire partagée vs IPC)."
+          ],
+          "model_answer": "**Points communs :**\n1. Tous deux constituent une unité d'exécution ordonnancée par le système d'exploitation (ils passent par les états *prêt*, *élu*, *bloqué*, etc.).\n2. Tous deux possèdent leur propre contexte d'exécution (compteur ordinal `PC`, registres du processeur) et leur propre pile (*stack*).\n\n**Différences :**\n1. **Espace d'adressage :** Les processus disposent chacun de leur propre espace d'adressage isolé, alors que les threads d'un même processus partagent le même espace d'adressage (segments *Text*, *Data* et *Heap*).\n2. **Coût de création et de changement de contexte :** La création et le changement de contexte sont beaucoup plus légers et rapides pour un thread que pour un processus (pas de changement d'espace d'adressage / de table des pages à effectuer).\n*(Autres différences valables : communication directe via mémoire partagée pour les threads vs IPC pour les processus ; la terminaison anormale d'un thread peut affecter tout le processus alors que les processus sont isolés.)*",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-q2",
+      "title": "Question 2 (4 points) — Section critique",
+      "description": "Remplir les exemples suivants avec des sections critiques lorsqu'il est nécessaire de garantir l'exclusion mutuelle.",
+      "blocks": [
+        {
+          "id": "code-te1-q2-api",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Primitives de section critique",
+          "filename": "q2_sc_api.cpp",
+          "code": "extern void DebutSC(); /* équivalent d'un lock() sur mutex */\nextern void FinSC();   /* équivalent d'un unlock() sur mutex */",
+          "bookmarkable": true
+        },
+        {
+          "id": "code-te1-q2-ex1",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Exemple 1",
+          "filename": "q2_exemple1.cpp",
+          "code": "static int val;\n\nvoid threadA() {\n    int a;\n    a = val;\n}\n\nvoid threadB() {\n    int b;\n    b = val;\n    if (b == 42) {\n        val = 9 * 6;\n    } else {\n        val--;\n    }\n}\n\nvoid threadC() {\n    int c;\n    val++;\n    c++;\n}",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-q2-ex1",
+          "block_type": "reflection_rubric",
+          "title": "Correction — Exemple 1",
+          "prompt": "Placez `DebutSC();` et `FinSC();` dans `threadA()`, `threadB()` et `threadC()` de l'**Exemple 1** uniquement là où c'est nécessaire pour garantir l'exclusion mutuelle.",
+          "self_check_criteria": [
+            "Protégé la lecture `a = val;` dans `threadA()` (`int a;` reste hors SC).",
+            "Protégé l'ensemble du bloc lecture-test-écriture sur `val` dans `threadB()` (`b = val; if (b == 42) ... else ...`) dans une seule section critique.",
+            "Protégé `val++;` dans `threadC()`, tout en laissant la variable locale `c++` hors de la section critique."
+          ],
+          "model_answer": "```cpp\nstatic int val;\n\nvoid threadA() {\n    int a;\n    DebutSC();\n    a = val;\n    FinSC();\n}\n\nvoid threadB() {\n    int b;\n    DebutSC();\n    b = val;\n    if (b == 42) {\n        val = 9 * 6;\n    } else {\n        val--;\n    }\n    FinSC();\n}\n\nvoid threadC() {\n    int c;\n    DebutSC();\n    val++;\n    FinSC();\n    c++;\n}\n```\n\n**Explications :**\n* `val` est une variable globale (`static int`) partagée en lecture et en écriture par les trois threads.\n* Dans `threadA()`, la lecture `a = val` doit être protégée car `threadB()` et `threadC()` modifient `val` concurremment (sinon *data race*).\n* Dans `threadB()`, la lecture de `val` et sa modification conditionnelle doivent appartenir à la **même** section critique pour éviter qu'un autre thread ne modifie `val` entre `b = val;` et `val = ...` / `val--;`.\n* Dans `threadC()`, `val++` est une opération lecture-modification-écriture non atomique qui doit être protégée ; `c` étant une variable locale sur la pile du thread, `c++` n'a pas besoin d'être en section critique.",
+          "bookmarkable": true
+        },
+        {
+          "id": "code-te1-q2-ex2",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Exemple 2",
+          "filename": "q2_exemple2.cpp",
+          "code": "static double val;\n\nvoid threadA() {\n    double a;\n    val = a;\n}\n\nvoid threadB() {\n    double b;\n    val = b;\n}",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-q2-ex2",
+          "block_type": "reflection_rubric",
+          "title": "Correction — Exemple 2",
+          "prompt": "Placez `DebutSC();` et `FinSC();` dans `threadA()` et `threadB()` de l'**Exemple 2** si nécessaire.",
+          "self_check_criteria": [
+            "Identifié que les deux écritures concurrentes sur `val` (`double`, 64 bits) provoquent une *data race* / risque d'écriture déchirée (*torn write*).",
+            "Entouré `val = a;` dans `threadA()` et `val = b;` dans `threadB()` par `DebutSC();` et `FinSC();`."
+          ],
+          "model_answer": "```cpp\nstatic double val;\n\nvoid threadA() {\n    double a;\n    DebutSC();\n    val = a;\n    FinSC();\n}\n\nvoid threadB() {\n    double b;\n    DebutSC();\n    val = b;\n    FinSC();\n}\n```\n\n**Explication :** Même si les deux threads ne font qu'écrire dans `val`, un `double` (64 bits) n'est pas garanti atomique (en particulier sur une architecture 32 bits, l'écriture se fait en deux instructions, ce qui peut produire une valeur corrompue mêlant des octets de `a` et de `b`), et deux écritures concurrentes sans synchronisation constituent une *data race* (comportement indéfini en C++).",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-q3",
+      "title": "Question 3 (4 points) — Threads",
+      "description": "Analyse d'un programme multithreadé utilisant PcoThread et requestStop().",
+      "blocks": [
+        {
+          "id": "th-te1-q3-enonce",
+          "block_type": "markdown",
+          "title": "Énoncé",
+          "bookmarkable": true,
+          "content": "Des threads doivent effectuer un travail en commun, représenté ici par la fonction `doSomeWork()` qui retourne `true` lorsque le travail est fini (un simple jet de dé est utilisé à fin illustrative). Ceci est analogue à ce qui a été réalisé lors du laboratoire 2, où différents threads se partageaient la tâche de détecter la primalité d'un nombre. Lorsqu'un thread réalise que le travail est terminé, il indique aux autres threads qu'il faut s'arrêter et termine.\n\nLe code proposé est-il adéquat ? Si non, justifier votre réponse. *(Note : Le code compile).* "
+        },
+        {
+          "id": "code-te1-q3",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Code proposé",
+          "filename": "q3_threads.cpp",
+          "code": "#include <pcosynchro/pcothread.h>\n#include <vector>\n#include <cstdlib>\n\n#define NUM_THREADS 24\n\nstd::vector<PcoThread*> threads(NUM_THREADS);\n\nbool doSomeWork() {\n    int diceRoll = rand() % 20 + 1;\n    if (diceRoll == 20) {\n        return true;\n    } else {\n        return false;\n    }\n}\n\nvoid threadFunction() {\n    while (true) {\n        bool finished = doSomeWork();\n        if (finished) {\n            for (auto& t : threads) {\n                t->requestStop();\n            }\n        }\n        if (PcoThread::thisThread()->stopRequested()) {\n            return;\n        }\n    }\n}\n\nint main() {\n    for (auto& t : threads) {\n        t = new PcoThread(threadFunction);\n    }\n    for (auto& t : threads) {\n        t->join();\n        delete t;\n    }\n    return 0;\n}",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-q3",
+          "block_type": "reflection_rubric",
+          "title": "Réponse — Analyse du code proposé",
+          "prompt": "Le code proposé est-il adéquat ? Si non, justifier votre réponse.",
+          "self_check_criteria": [
+            "Répondu « Non ».",
+            "Identifié le déréférencement de pointeur nul (`nullptr`) / la *data race* sur `threads` : un thread déjà lancé peut obtenir `finished == true` et appeler `t->requestStop()` avant que `main()` ait fini d'allouer tous les `PcoThread` dans `threads` (provoquant une *Segmentation Fault*).",
+            "Identifié que `rand()` n'est pas *thread-safe* (accès concurrent à son état interne global sans protection)."
+          ],
+          "model_answer": "**Non**, le code proposé n'est **pas adéquat** pour plusieurs raisons :\n\n1. **Déréférencement de pointeur nul (*Segmentation Fault*) et *data race* sur `threads` :**\n   `std::vector<PcoThread*> threads(NUM_THREADS)` initialise les 24 pointeurs à `nullptr`. Dans `main()`, les threads sont créés séquentiellement dans la boucle `for`. Dès que le premier thread démarre, il peut obtenir `diceRoll == 20` (`finished == true`) et exécuter `t->requestStop()` sur tous les éléments de `threads` **avant** que `main()` n'ait créé les threads suivants. Appeler `t->requestStop()` sur un pointeur `nullptr` provoque un plantage immédiat (*Segmentation Fault*). De plus, `main()` écrit dans `threads` pendant que les threads y lisent sans synchronisation (*data race*).\n\n2. **`rand()` n'est pas *thread-safe* :**\n   La fonction standard `rand()` maintient un état interne global partagé. L'appeler concurremment depuis 24 threads sans protection provoque une *data race* (comportement indéfini / résultats corrompus).\n\n3. **Redondance à l'arrêt :**\n   Plusieurs threads peuvent obtenir `finished == true` simultanément et tous parcourir `threads` pour appeler `requestStop()`. (On pourrait aussi vérifier `if (finished) { ... return; }` directement après avoir protégé l'accès à `threads` et synchronisé le démarrage ou l'accès au vecteur).",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-q4",
+      "title": "Question 4 (6 points) — Sémaphores",
+      "description": "Synchroniser la classe Player avec PcoSemaphore en évitant la corruption d'état et les interblocages.",
+      "blocks": [
+        {
+          "id": "code-te1-q4",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Code initial de Player",
+          "filename": "q4_player.cpp",
+          "code": "#include <pcosynchro/pcothread.h>\n#include <pcosynchro/pcosemaphore.h>\n#include <memory> /* Pour std::unique_ptr<> */\n#include <vector>\n#include <cstdlib>\n\nclass Player {\npublic:\n    Player(int id, int health, int mana)\n        : id(id), health(health), mana(mana),\n          thread(std::make_unique<PcoThread>(&Player::run, this)) {}\n\n    enum class Action {attack, heal, leave, nothing};\n\n    void attack(Player* player) {\n        if (health <= 0) return;\n        int damage = rand() % 12 + 1;\n        player->health -= damage;\n    }\n\n    void heal(Player* target) {\n        if (health <= 0) return;\n        int heal = rand() % 6 + 1;\n        target->health += heal;\n        this->mana -= 10;\n    }\n\n    void run() {\n        while (health > 0) {\n            Player* target = get_target(); // Retourne la cible choisie\n            Action action = get_action();  // Retourne l'action choisie\n\n            switch (action) {\n                case Action::attack: attack(target); break;\n                case Action::heal:   heal(target); break;\n                case Action::leave:  return;\n                default: break;\n            }\n            PcoThread::usleep(1000000);\n        }\n    }\n\n    int id;\n    int health;\n    int mana;\n    std::unique_ptr<PcoThread> thread;\n};\n\nstd::vector<std::unique_ptr<Player>> players;\n\nint main() {\n    for (int i = 0; i < 10; ++i) {\n        players.push_back(std::make_unique<Player>(i, rand() % 100 + 50, rand() % 100 + 20));\n    }\n\n    for (auto& player : players) {\n        player->thread->join();\n    }\n\n    return 0;\n}",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-te1-q4-enonce",
+          "block_type": "markdown",
+          "title": "Consignes de la question 4",
+          "bookmarkable": true,
+          "content": "Le programme principal va créer des joueurs (`Players`) qui ont chacun un thread qui simule leur comportement (fonction `run()`). Ce thread est lancé par le constructeur de la classe `Player`. Les joueurs vont choisir une cible (qui peut être eux-mêmes) et une action. Pour des raisons de simplicité seules deux actions sont données et le code pour le choix de la cible et de l'action est omis, on peut imaginer que ce soit fait dans une interface graphique avec un contrôleur. Le programme s'arrête lorsque tous les joueurs sont morts ou ont quitté (`leave`).\n\nCe code ne comporte aucun mécanisme de synchronisation ou d'exclusion mutuelle.\n1. À vous de mettre en place le nécessaire pour garantir le bon fonctionnement du programme, il faut donc que l'état des joueurs ne soit pas corrompu.\n2. On aimerait aussi que la fonction `run()` des joueurs attende que tous les joueurs soient créés par `main()` avant de continuer l'exécution.\n\nMettez ceci en place à l'aide de `PcoSemaphore` (car elles garantissent un ordre FIFO, premier arrivé premier servi). Vous pouvez ajouter du code (de la logique) au besoin. Attention aux interblocages."
+        },
+        {
+          "id": "code-te1-q4-rappel",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Rappel PcoSemaphore",
+          "filename": "rappel_pcosemaphore.cpp",
+          "code": "class PcoSemaphore {\npublic:\n    /* Constructeur */\n    PcoSemaphore(unsigned int n = 0);\n    /* Acquire */\n    void acquire();\n    /* Release */\n    void release();\n};\n\n/* Exemples */\nPcoSemaphore sem(10);\nPcoSemaphore mutex(1);\nsem.acquire();\nmutex.acquire(); /* lock */\nmutex.release(); /* unlock */\nsem.release();",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-q4",
+          "block_type": "reflection_rubric",
+          "title": "Correction — Synchronisation de Player avec PcoSemaphore",
+          "prompt": "Complétez et modifiez le code de `Player` et `main()` à l'aide de `PcoSemaphore` pour satisfaire les points 1 et 2 sans interblocage.",
+          "self_check_criteria": [
+            "Ajouté un sémaphore de démarrage (ex. `startSem(0)`) acquis au début de `run()` et libéré `N` fois (10 fois) dans `main()` après la création de tous les joueurs.",
+            "Protégé tous les accès à `health` et `mana` (dans `attack()`, `heal()`, et la condition de boucle `while (health > 0)` de `run()`).",
+            "Évité l'auto-blocage lorsque `target == this` (un joueur peut se cibler lui-même).",
+            "Évité l'interblocage croisé entre deux joueurs (ex. par verrouillage ordonné selon `id`, ou via un sémaphore mutex global)."
+          ],
+          "model_answer": "Voici une solution complète avec un verrou par joueur **ordonné par `id`** (ce qui évite tout interblocage croisé et tout auto-blocage quand `target == this`) ainsi qu'un sémaphore de barrière au démarrage :\n\n```cpp\nPcoSemaphore startSem(0);\n\nclass Player {\npublic:\n    Player(int id, int health, int mana)\n        : id(id), health(health), mana(mana), mutex(1),\n          thread(std::make_unique<PcoThread>(&Player::run, this)) {}\n\n    enum class Action {attack, heal, leave, nothing};\n\n    void lockPair(Player* other) {\n        if (this == other) {\n            this->mutex.acquire();\n        } else if (this->id < other->id) {\n            this->mutex.acquire();\n            other->mutex.acquire();\n        } else {\n            other->mutex.acquire();\n            this->mutex.acquire();\n        }\n    }\n\n    void unlockPair(Player* other) {\n        if (this == other) {\n            this->mutex.release();\n        } else {\n            this->mutex.release();\n            other->mutex.release();\n        }\n    }\n\n    void attack(Player* player) {\n        lockPair(player);\n        if (health > 0) {\n            int damage = rand() % 12 + 1;\n            player->health -= damage;\n        }\n        unlockPair(player);\n    }\n\n    void heal(Player* target) {\n        lockPair(target);\n        if (health > 0) {\n            int h = rand() % 6 + 1;\n            target->health += h;\n            this->mana -= 10;\n        }\n        unlockPair(target);\n    }\n\n    bool isAlive() {\n        mutex.acquire();\n        bool alive = (health > 0);\n        mutex.release();\n        return alive;\n    }\n\n    void run() {\n        /* 2. Attendre que tous les joueurs soient créés */\n        startSem.acquire();\n\n        while (isAlive()) {\n            Player* target = get_target();\n            Action action = get_action();\n\n            switch (action) {\n                case Action::attack: attack(target); break;\n                case Action::heal:   heal(target); break;\n                case Action::leave:  return;\n                default: break;\n            }\n            PcoThread::usleep(1000000);\n        }\n    }\n\n    int id;\n    int health;\n    int mana;\n    PcoSemaphore mutex;\n    std::unique_ptr<PcoThread> thread;\n};\n\nstd::vector<std::unique_ptr<Player>> players;\n\nint main() {\n    for (int i = 0; i < 10; ++i) {\n        players.push_back(std::make_unique<Player>(i, rand() % 100 + 50, rand() % 100 + 20));\n    }\n\n    /* Débloque les 10 threads une fois tous les joueurs créés */\n    for (size_t i = 0; i < players.size(); ++i) {\n        startSem.release();\n    }\n\n    for (auto& player : players) {\n        player->thread->join();\n    }\n\n    return 0;\n}\n```\n\n*(Note : Utiliser un unique `PcoSemaphore globalMutex(1)` pour protéger `health`/`mana` et `rand()` est également une solution valide sans risque d'interblocage, au prix d'une moindre parallélisation entre actions.)*",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-q5",
+      "title": "Question 5 (8 points) — Séquentialité",
+      "description": "Implémenter la fonction depart() par groupes de 5 participants avec des PcoSemaphore.",
+      "blocks": [
+        {
+          "id": "th-te1-q5-enonce",
+          "block_type": "markdown",
+          "title": "Énoncé — Course d'orientation",
+          "bookmarkable": true,
+          "content": "Dans le cadre de l'organisation d'une course d'orientation on aimerait faire partir les participants par groupes de 5 personnes. Le comportement des participants est simulé par des threads. Les participants vont appeler la méthode `depart()` qui va les faire patienter jusqu'à ce qu'ils puissent partir en groupe de 5 (donc lorsque 5 threads ont appelé `depart()`). La fonction `depart()` retourne le numéro de groupe qui leur est attribué : groupe 1 (les 5 premiers), groupe 2 (les 5 suivants), etc.  \n*Note : Pour des raisons de simplicité on va supposer que le nombre de participants est un multiple de 5.*\n\nImplémentez la fonction `depart()` avec des `PcoSemaphore`."
+        },
+        {
+          "id": "code-te1-q5",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Squelette de depart()",
+          "filename": "q5_depart.cpp",
+          "code": "int depart() {\n\n}",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-q5",
+          "block_type": "reflection_rubric",
+          "title": "Correction — Implémentation de depart()",
+          "prompt": "Implémentez `depart()` et les variables/sémaphores globaux nécessaires avec `PcoSemaphore`.",
+          "self_check_criteria": [
+            "Utilisé un `PcoSemaphore mutex(1)` pour protéger le compteur de participants et le numéro de groupe courant.",
+            "Sauvegardé le numéro de groupe dans une variable locale (`monGroupe = numGroupe`) **avant** de relâcher `mutex`.",
+            "Fait attendre les 4 premiers threads sur un sémaphore `attente(0)` après avoir relâché `mutex`.",
+            "Dans le cas du 5e thread (`nbParticipants == 5`), remis le compteur à `0`, incrémenté `numGroupe`, appelé `attente.release()` 4 fois et relâché `mutex`."
+          ],
+          "model_answer": "```cpp\nPcoSemaphore mutex(1);\nPcoSemaphore attente(0);\nint nbParticipants = 0;\nint numGroupe = 1;\n\nint depart() {\n    mutex.acquire();\n    nbParticipants++;\n    int monGroupe = numGroupe;\n\n    if (nbParticipants < 5) {\n        mutex.release();\n        attente.acquire();\n    } else {\n        nbParticipants = 0;\n        numGroupe++;\n        for (int i = 0; i < 4; ++i) {\n            attente.release();\n        }\n        mutex.release();\n    }\n\n    return monGroupe;\n}\n```\n\n**Points clés :**\n* Chaque thread mémorise `monGroupe` **avant** de libérer `mutex`, afin que l'incrémentation de `numGroupe` pour le groupe suivant ne modifie pas la valeur retournée aux threads du groupe courant.\n* Le 5e thread remet `nbParticipants = 0`, incrémente `numGroupe`, réveille exactement les 4 threads en attente via `attente.release()` puis libère `mutex`.\n* *(Remarque avancée : si un thread des 4 premiers est préempté exactement entre `mutex.release()` et `attente.acquire()`, un thread du groupe suivant pourrait consommer un jeton d'attente ; pour éliminer même ce cas extrême, on peut utiliser une barrière réutilisable à deux phases avec un second sémaphore.)*",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-q6",
+      "title": "Question 6 (6 points) — Séquentialité",
+      "description": "Garantir l'ordre d'exécution d'un graphe de tâches (T0 à T6) avec des PcoSemaphore.",
+      "blocks": [
+        {
+          "id": "diag-te1-q6",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Graphe d'exécution des tâches",
+          "caption": "Soit le graphe d'exécution des tâches suivant :",
+          "source": "graph TD\n    T0((T0)) --> T1((T1))\n    T0 --> T2((T2))\n    T0 --> T3((T3))\n    T1 --> T4((T4))\n    T1 --> T5((T5))\n    T3 --> T4\n    T3 --> T5\n    T4 --> T6((T6))\n    T2 --> T6\n    T5 --> T6",
+          "bookmarkable": true
+        },
+        {
+          "id": "code-te1-q6-rappel",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Rappel PcoSemaphore",
+          "filename": "q6_rappel.cpp",
+          "code": "class PcoSemaphore {\npublic:\n    /* Constructeur */\n    PcoSemaphore(unsigned int n = 0);\n    /* Acquire */\n    void acquire();\n    /* Release */\n    void release();\n};\n\n/* Exemples */\nPcoSemaphore sem(10);\nsem.acquire();\nsem.release();",
+          "bookmarkable": true
+        },
+        {
+          "id": "code-te1-q6-squelette",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Programme à compléter",
+          "filename": "q6_tasks.cpp",
+          "code": "#include <pcosynchro/pcothread.h>\n#include <pcosynchro/pcosemaphore.h>\n#include <vector>\n#include <memory>\n\n/* Prototypes des fonctions à écrire */\nvoid t0();\nvoid t1();\nvoid t2();\nvoid t3();\nvoid t4();\nvoid t5();\nvoid t6();\n\nstd::vector<std::unique_ptr<PcoThread>> threads(7);\n\nint main() {\n    threads[0] = std::make_unique<PcoThread>(t0);\n    threads[1] = std::make_unique<PcoThread>(t1);\n    threads[2] = std::make_unique<PcoThread>(t2);\n    threads[3] = std::make_unique<PcoThread>(t3);\n    threads[4] = std::make_unique<PcoThread>(t4);\n    threads[5] = std::make_unique<PcoThread>(t5);\n    threads[6] = std::make_unique<PcoThread>(t6);\n\n    for (auto& t : threads) {\n        t->join();\n    }\n}",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-q6",
+          "block_type": "reflection_rubric",
+          "title": "Correction — Implémentation des tâches t0() à t6()",
+          "prompt": "Écrire un programme permettant de garantir ce fonctionnement, en utilisant des `PcoSemaphore`.",
+          "self_check_criteria": [
+            "Tous les sémaphores de synchronisation sont initialisés à `0`.",
+            "`T0` libère 3 jetons (pour `T1`, `T2`, `T3`).",
+            "`T1` et `T3` acquièrent chacun 1 jeton de `T0`, puis libèrent chacun 2 jetons (pour `T4` et `T5`).",
+            "`T4` et `T5` attendent tous deux la fin de `T1` **et** de `T3`, puis libèrent chacun 1 jeton pour `T6`.",
+            "`T6` attend la fin de `T2`, `T4` **et** `T5`."
+          ],
+          "model_answer": "```cpp\nPcoSemaphore semT0(0);\nPcoSemaphore semT1(0);\nPcoSemaphore semT2(0);\nPcoSemaphore semT3(0);\nPcoSemaphore semT4(0);\nPcoSemaphore semT5(0);\n\nvoid t0() {\n    // Exécution de T0\n    semT0.release(); // Pour T1\n    semT0.release(); // Pour T2\n    semT0.release(); // Pour T3\n}\n\nvoid t1() {\n    semT0.acquire();\n    // Exécution de T1\n    semT1.release(); // Pour T4\n    semT1.release(); // Pour T5\n}\n\nvoid t2() {\n    semT0.acquire();\n    // Exécution de T2\n    semT2.release(); // Pour T6\n}\n\nvoid t3() {\n    semT0.acquire();\n    // Exécution de T3\n    semT3.release(); // Pour T4\n    semT3.release(); // Pour T5\n}\n\nvoid t4() {\n    semT1.acquire();\n    semT3.acquire();\n    // Exécution de T4\n    semT4.release(); // Pour T6\n}\n\nvoid t5() {\n    semT1.acquire();\n    semT3.acquire();\n    // Exécution de T5\n    semT5.release(); // Pour T6\n}\n\nvoid t6() {\n    semT2.acquire();\n    semT4.acquire();\n    semT5.acquire();\n    // Exécution de T6\n}\n```",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-q7",
+      "title": "Question 7 (6 points (bonus)) — Attente active",
+      "description": "Analyse d'une solution d'exclusion mutuelle par attente active sur processeur mono-cœur.",
+      "blocks": [
+        {
+          "id": "diag-te1-q7",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Schéma d'états de la solution proposée",
+          "caption": "Lors du cours nous avons vu de nombreuses tentatives pour résoudre le problème d'exclusion mutuelle par attente active. En voici une de plus, elle est basée sur le schéma suivant (on considère qu'on a un processeur mono-cœur) :",
+          "source": "stateDiagram-v2\n    direction TB\n    Noncritical_Section: Noncritical Section\n    \n    state Prologue {\n        intention --> Door_in\n        Door_in --> waiting_room\n        waiting_room --> Door_out\n    }\n    \n    Critical_Section: Critical Section\n    Epilogue: Epilogue\n\n    Noncritical_Section --> Prologue\n    Prologue --> Critical_Section\n    Critical_Section --> Epilogue\n    Epilogue --> Noncritical_Section",
+          "bookmarkable": true
+        },
+        {
+          "id": "code-te1-q7",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Implémentation de threadA() et threadB()",
+          "filename": "q7_attente_active.cpp",
+          "code": "enum class states_c {non_critical, intention, door_in, waiting_room, door_out};\nstates_c state[2] = {non_critical, non_critical};\n\nvoid threadA() {\n  while (true) {\n    /* Prologue */\n    state[0] = intention;\n    while (state[1] == door_in\n        || state[1] == door_out);\n    state[0] = door_in;\n    if (state[1] == intention) {\n      state[0] = waiting_room;\n      while (state[1] != door_out);\n    }\n    state[0] = door_out;\n\n\n    /* Section critique */\n\n    /* Epilogue */\n    while (state[1] == waiting_room);\n    state[0] = non_critical;\n  }\n}\n\nvoid threadB() {\n  while (true) {\n    /* Prologue */\n    state[1] = intention;\n    while (state[0] == door_in\n        || state[0] == door_out);\n    state[1] = door_in;\n    if (state[0] == intention) {\n      state[1] = waiting_room;\n      while (state[0] != door_out);\n    }\n    state[1] = door_out;\n    while (state[0] != non_critical\n        && state[0] != intention);\n    /* Section critique */\n\n    /* Epilogue */\n\n    state[1] = non_critical;\n  }\n}",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-te1-q7",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 4,
+          "related_block_id": "code-te1-q7",
+          "title": "Question 7 — Exclusion mutuelle",
+          "question": "La solution proposée garantit-elle l'exclusion mutuelle ?",
+          "options": [
+            "Oui",
+            "Non"
+          ],
+          "correct_answer": "Oui",
+          "explanation": "Oui, l'algorithme (variante asymétrique pour 2 threads de l'algorithme de Szymanski) garantit l'exclusion mutuelle. Lorsque `threadB` passe sa dernière attente (`state[0] == non_critical || state[0] == intention`) avec `state[1] == door_out`, `threadA` ne peut pas franchir `while (state[1] == door_in || state[1] == door_out)` tant que `threadB` n'est pas sorti de sa section critique ; et si `threadA` avait déjà franchi cette boucle en étant à `intention`, `threadB` aurait obligatoirement basculé en `waiting_room` avant d'atteindre `door_out`.",
+          "hints": [
+            "Pour que `threadB` entre en section critique, dans quels états `state[0]` doit-il se trouver ?",
+            "Si `state[1]` vaut `door_out` et `state[0]` vaut `intention`, `threadB` a-t-il pu franchir `if (state[0] == intention)` sans passer par `waiting_room` ?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-q7",
+          "block_type": "reflection_rubric",
+          "title": "Question 7 — Justification",
+          "prompt": "**Justification :**",
+          "self_check_criteria": [
+            "Montré que lorsque `threadA` est en section critique (`state[0] == door_out`), `threadB` reste bloqué sur `while (state[0] != non_critical && state[0] != intention);`.",
+            "Montré que lorsque `threadB` entre en section critique (`state[1] == door_out`), il vient d'observer `state[0] == non_critical` ou `state[0] == intention`, ce qui empêche `threadA` d'entrer en section critique tant que `state[1] == door_out`.",
+            "Traité le cas limite où `threadA` aurait passé `while (state[1] == door_in || state[1] == door_out);` juste avant d'être préempté à `state[0] == intention` (dans ce cas `threadB` détecte `state[0] == intention`, passe en `waiting_room` et attend `state[0] == door_out`)."
+          ],
+          "model_answer": "**Oui**, la solution proposée garantit l'exclusion mutuelle (il s'agit d'une version asymétrique à 2 threads de l'algorithme de Szymanski) :\n\n1. **Si `threadA` entre en premier en section critique (`state[0] == door_out`) :**\n   * Si `threadB` tente d'entrer ensuite, soit il bloque dès `while (state[0] == door_in || state[0] == door_out);`, soit il était déjà en `waiting_room` et passe ensuite à `state[1] = door_out`, mais il reste alors bloqué sur `while (state[0] != non_critical && state[0] != intention);` jusqu'à ce que `threadA` termine sa section critique et exécute `state[0] = non_critical;`.\n\n2. **Si `threadB` entre en section critique (`state[1] == door_out`) :**\n   * Juste avant d'entrer, `threadB` a observé `state[0] == non_critical` ou `state[0] == intention` alors que `state[1]` vaut déjà `door_out`.\n   * Tant que `threadB` reste en section critique (`state[1] == door_out`), `threadA` ne peut pas franchir `while (state[1] == door_in || state[1] == door_out);`.\n   * *Cas limite :* `threadA` aurait-il pu déjà franchir cette boucle avant que `threadB` ne passe à `door_in`/`door_out` et être préempté à `state[0] == intention` ? Non, car si `state[0]` valait déjà `intention` lorsque `threadB` a exécuté `if (state[0] == intention)`, `threadB` aurait obligatoirement basculé en `waiting_room` et attendu `state[0] == door_out` avant de pouvoir atteindre `state[1] = door_out`.",
+          "bookmarkable": true
+        }
+      ]
+    }
+  ]
+}

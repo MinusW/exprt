@@ -1,0 +1,248 @@
+{
+  "id": "pco-2023-24-te1-exam",
+  "title": "PCO 2023-24 — Contrôle continu 1 (Sujet complet reconstitué, 36 pts)",
+  "description": "Recréation interactive complète du Contrôle continu 1 de Programmation Concurrente (HEIG-VD, 13.11.2023, 36 points) : Thread-safety d'une classe (AlmostGreat), Synchronisation par sémaphores (RacletteTic), Contrôle de ressource pondéré (AccesAula), Questions théoriques et Analyse de bugs (TheClass).",
+  "estimated_minutes": 90,
+  "category": "Concurrent Programming",
+  "track": "PCO - Programmation Concurrente (TE1)",
+  "track_order": 8,
+  "difficulty_level": "intermediate",
+  "tags": [
+    "pco",
+    "te1",
+    "exam",
+    "pcothread",
+    "pcomutex",
+    "pcosemaphore",
+    "practice-test"
+  ],
+  "prerequisites": [
+    "pco-ch1-threads-pcothread",
+    "pco-ch2-context-switching",
+    "pco-ch3-critical-sections",
+    "pco-ch4-active-waiting-mutual-exclusion",
+    "pco-ch5-locks-and-semaphores",
+    "pco-ch6-producer-consumer"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "PCO 2023-24 — Contrôle continu 1",
+      "url_or_path": "sources/PCO-TE1/contr_le_continu_1_pco_2023_2024.md",
+      "notes": "Sujet original complet (5 questions, 36 points) + rappel sur les classes Pco."
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-te1-2324-consignes-rappels",
+      "title": "Consignes générales & Rappel sur les classes Pco",
+      "description": "HEIG-VD | Semestre d'automne 2023-2024 | Professeur : Yann Thoma | Date : 13.11.2023 | Total : 36 points.",
+      "blocks": [
+        {
+          "id": "th-te1-2324-consignes",
+          "block_type": "markdown",
+          "title": "Consignes générales",
+          "bookmarkable": true,
+          "content": "**Haute École d'Ingénierie et de Gestion du Canton de Vaud (HEIG-VD)**  \n**Semestre d'automne 2023-2024 — Contrôle continu 1**  \n**Date :** 13.11.2023 | **Professeur :** Yann Thoma\n\n### Consignes\n* Aucune documentation n'est permise, y compris la feuille de vos voisins.\n* La calculatrice n'est pas autorisée.\n* Aucune réclamation ne sera acceptée en cas d'utilisation du crayon.\n* Ne pas utiliser de couleur rouge.\n\n| Question | Points | Score |\n| :--- | :---: | :---: |\n| **1** | 8 | |\n| **2** | 10 | |\n| **3** | 6 | |\n| **4** | 6 | |\n| **5** | 6 | |\n| **Total :** | **36** | |"
+        },
+        {
+          "id": "th-te1-2324-rappels",
+          "block_type": "markdown",
+          "title": "Rappel sur les classes Pco",
+          "bookmarkable": true,
+          "content": "* `PcoSemaphore::PcoSemaphore(n)` : correspond à initialiser le sémaphore à $n$ ($n$ doit être $\\ge 0$) ;\n* `PcoSemaphore::acquire()` : correspond à $P(\\text{sémaphore})$ ;\n* `PcoSemaphore::release()` : correspond à $V(\\text{sémaphore})$ ;\n* `PcoMutex::lock()` : verrouille un mutex ;\n* `PcoMutex::unlock()` : déverrouille un mutex ;\n* `PcoThread()` : Constructeur, lance un thread ;\n* `PcoThread::join()` : attend qu'un thread se termine."
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-2324-q1",
+      "title": "Question 1 : 8 points",
+      "description": "Rendre la classe AlmostGreat sûre vis-à-vis de la concurrence.",
+      "blocks": [
+        {
+          "id": "th-te1-2324-q1-enonce",
+          "block_type": "markdown",
+          "title": "Énoncé : Classe `AlmostGreat`",
+          "bookmarkable": true,
+          "content": "Le code suivant a été écrit par un développeur ne connaissant rien à la concurrence. Votre chef de projet, connaissant votre talent pour la programmation concurrente, vous demande de le rendre sûr, de manière à ce que plusieurs threads interagissent avec un même objet de la classe `AlmostGreat`. Apportez-y donc les modifications nécessaires.\n\nLes fonctions privées ne sont pas détaillées ici, mais les commentaires devraient vous permettre de savoir comment les traiter."
+        },
+        {
+          "id": "code-te1-2324-q1",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Code original de la classe AlmostGreat",
+          "filename": "q1_almost_great.cpp",
+          "code": "class AlmostGreat\n{\npublic:\n    double entry1(double a) {\n        m_a = a;\n        doSomethingWithIt(m_a);\n        return someHugeFunction(m_a);\n    }\n\n    double entry2(double a, double b) {\n        double c = a + b;\n        m_a += 2 * c;\n        return m_a;\n    }\n\n    double entry3(double a, double b) {\n        double c = a + b;\n        m_a = 2 * c;\n        double d = someSimpleFunction(m_a);\n        double e = 2 * d;\n        return e;\n    }\n\nprivate:\n    // This function uses a and modifies it\n    void doSomethingWithIt(double &a);\n\n    // This function do some very simple computation\n    double someSimpleFunction(double a);\n\n    // This function takes a lot of CPU time (yes, a lot)\n    // It is thread-safe\n    double someHugeFunction(double a);\n\n    double m_a{0.0};\n};",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-2324-q1-rubric",
+          "block_type": "reflection_rubric",
+          "title": "Correction : Sécurisation de `AlmostGreat`",
+          "prompt": "Modifiez la classe `AlmostGreat` pour la rendre thread-safe tout en préservant les performances.",
+          "self_check_criteria": [
+            "Ajouté un `PcoMutex` (par exemple `m_mutex`) comme attribut privé de la classe.",
+            "Protégé les accès en lecture et écriture à `m_a` dans `entry1`, `entry2` et `entry3`.",
+            "Copié `m_a` dans une variable locale avant de déverrouiller dans `entry1` et `entry2` (pour ne pas lire `m_a` hors section critique lors du `return` ou de l'appel à `someHugeFunction`).",
+            "Appelé `someHugeFunction` en dehors de la section critique (car elle prend beaucoup de temps CPU et est thread-safe)."
+          ],
+          "model_answer": "```cpp\nclass AlmostGreat\n{\npublic:\n    double entry1(double a) {\n        m_mutex.lock();\n        m_a = a;\n        doSomethingWithIt(m_a);\n        double localA = m_a;\n        m_mutex.unlock();\n        // Hors mutex car très coûteuse et thread-safe\n        return someHugeFunction(localA);\n    }\n\n    double entry2(double a, double b) {\n        double c = a + b;\n        m_mutex.lock();\n        m_a += 2 * c;\n        double res = m_a;\n        m_mutex.unlock();\n        return res;\n    }\n\n    double entry3(double a, double b) {\n        double c = a + b;\n        m_mutex.lock();\n        m_a = 2 * c;\n        // someSimpleFunction n'est pas explicitement thread-safe et est très rapide :\n        // on la garde sous mutex par prudence.\n        double d = someSimpleFunction(m_a);\n        m_mutex.unlock();\n        double e = 2 * d;\n        return e;\n    }\n\nprivate:\n    // This function uses a and modifies it\n    void doSomethingWithIt(double &a);\n\n    // This function do some very simple computation\n    double someSimpleFunction(double a);\n\n    // This function takes a lot of CPU time (yes, a lot)\n    // It is thread-safe\n    double someHugeFunction(double a);\n\n    double m_a{0.0};\n    PcoMutex m_mutex;\n};\n```\n\n**Points clés :**\n* Les calculs purement locaux (`double c = a + b;`, `double e = 2 * d;`) n'ont pas besoin d'être dans la section critique.\n* Dans `entry1` et `entry2`, on copie `m_a` dans une variable locale **avant** `m_mutex.unlock()` pour éviter un data race lors de la lecture de `m_a`.\n* `someHugeFunction(localA)` est exécutée **hors** du mutex : elle est thread-safe et consomme beaucoup de CPU, donc garder le mutex verrouillé bloquerait inutilement les autres threads.",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-2324-q2",
+      "title": "Question 2 : 10 points",
+      "description": "Implémentation de la classe RacletteTic avec des sémaphores.",
+      "blocks": [
+        {
+          "id": "th-te1-2324-q2-enonce",
+          "block_type": "markdown",
+          "title": "Énoncé : `RacletteTic`",
+          "bookmarkable": true,
+          "content": "Les étudiants et le personnel d'enseignement et recherche (PER) du département se retrouvent pour la raclette TIC. Cette année, afin d'éviter les files d'attente interminables, un système de tickets centralisés a été mis en place, les étudiants étant modélisés par des threads. Pour consommer, un étudiant doit appeler la méthode `etudiant()`, qui est bloquante jusqu'à ce qu'un racleur n'appelle `racleur()` et l'embarque sur son stand. Le personnel d'enseignement et recherche, appelle pour sa part, la méthode `per()`, et doit aussi attendre un racleur. Les conditions pour qu'une personne soit relâchée par un racleur sont les suivantes :\n\nUn racleur récupère au maximum 4 personnes. S'il y a un membre PER en attente, alors il embarque un PER et un maximum de trois étudiants. Si aucun membre du PER n'est présent, alors il embarque un maximum de quatre étudiants. La méthode `racleur()` retourne le nombre de personnes qui suivent le racleur.\n\nÉcrivez le code de la classe `RacletteTic`, en exploitant des sémaphores (et des variables classiques si nécessaire) :"
+        },
+        {
+          "id": "code-te1-2324-q2",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Squelette de la classe RacletteTic",
+          "filename": "q2_raclette_tic.cpp",
+          "code": "class RacletteTic\n{\npublic:\n    RacletteTic();\n    void etudiant();\n    void per();\n    int racleur();\n};",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-2324-q2-rubric",
+          "block_type": "reflection_rubric",
+          "title": "Correction : Implémentation complète de `RacletteTic`",
+          "prompt": "Écrivez l'implémentation complète de la classe `RacletteTic` en utilisant `PcoSemaphore`.",
+          "self_check_criteria": [
+            "Utilisé un sémaphore d'exclusion mutuelle `mutex(1)` pour protéger les compteurs d'attente (`nbEtudiants`, `nbPer`).",
+            "Utilisé deux sémaphores d'attente séparés (`waitEtudiant(0)` et `waitPer(0)`) afin de pouvoir réveiller sélectivement un PER ou des étudiants.",
+            "Dans `etudiant()` et `per()`, incrémenté le compteur sous `mutex`, relâché `mutex`, puis appelé `acquire()` sur le sémaphore d'attente correspondant.",
+            "Dans `racleur()`, embarqué au plus 1 PER (s'il y en a) et complété avec des étudiants jusqu'à 4 personnes au total, puis retourné ce nombre."
+          ],
+          "model_answer": "```cpp\nclass RacletteTic\n{\nprivate:\n    PcoSemaphore mutex;\n    PcoSemaphore waitEtudiant;\n    PcoSemaphore waitPer;\n    int nbEtudiants;\n    int nbPer;\n\npublic:\n    RacletteTic() : mutex(1), waitEtudiant(0), waitPer(0), nbEtudiants(0), nbPer(0)\n    {\n    }\n\n    void etudiant()\n    {\n        mutex.acquire();\n        nbEtudiants++;\n        mutex.release();\n        waitEtudiant.acquire();\n    }\n\n    void per()\n    {\n        mutex.acquire();\n        nbPer++;\n        mutex.release();\n        waitPer.acquire();\n    }\n\n    int racleur()\n    {\n        mutex.acquire();\n        int nbPersonnes = 0;\n\n        if (nbPer > 0) {\n            nbPer--;\n            waitPer.release();\n            nbPersonnes++;\n        }\n\n        while (nbEtudiants > 0 && nbPersonnes < 4) {\n            nbEtudiants--;\n            waitEtudiant.release();\n            nbPersonnes++;\n        }\n\n        mutex.release();\n        return nbPersonnes;\n    }\n};\n```\n\n**Points clés :**\n* Pas de réveil perdu : même si un `racleur()` fait `release()` avant que le thread `etudiant()` ou `per()` n'ait exécuté `waitX.acquire()`, le sémaphore stocke le jeton et l'`acquire()` passera immédiatement.\n* `racleur()` retourne directement `0` si personne n'est en attente.",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-2324-q3",
+      "title": "Question 3 : 6 points",
+      "description": "Analyse et correction de la classe AccesAula.",
+      "blocks": [
+        {
+          "id": "th-te1-2324-q3-enonce",
+          "block_type": "markdown",
+          "title": "Énoncé : `AccesAula`",
+          "bookmarkable": true,
+          "content": "Le code suivant vise à garantir la sûreté sonore de l'aula, lors d'une répétition d'un orchestre de chambre. Chaque instrument est capable de générer un certain nombre de décibels, et les organisateurs ne veulent pas que la somme de tous ces décibels dépasse $100$ [^1]. Les musiciens seront représentés par des threads, et appelleront la méthode `accedeAula()` pour pouvoir entrer dans l'aula, et `quitteAula()` lorsqu'ils en sortent, en passant en paramètre le nombre de décibels de leur instrument.\n\nAnalysez ce code, et indiquez ci-dessous s'il est fonctionnel ou non, en justifiant votre réponse. Dans le cas où il ne serait pas fonctionnel, modifiez-le pour qu'il le devienne.\n\n[^1]: Oui, bon, d'accord, on fait abstraction du côté légèrement surréaliste de la situation et de la difficulté de répéter avec un sous-ensemble de l'ensemble."
+        },
+        {
+          "id": "code-te1-2324-q3",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Code proposé pour AccesAula",
+          "filename": "q3_acces_aula.cpp",
+          "code": "class AccesAula\n{\nprivate:\n    PcoSemaphore sem{100};\n\npublic:\n    void accedeAula(unsigned int db) {\n        for (int i = 0; i < db; i++) {\n            sem.acquire();\n        }\n    }\n\n    void quitteAula(unsigned int db) {\n        for (int i = 0; i < db; i++) {\n            sem.release();\n        }\n    }\n};",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-2324-q3-rubric",
+          "block_type": "reflection_rubric",
+          "title": "Correction : Analyse et correction de `AccesAula`",
+          "prompt": "Le code est-il fonctionnel ? Justifiez votre réponse et proposez une version corrigée si nécessaire.",
+          "self_check_criteria": [
+            "Identifié que le code n'est **pas fonctionnel** à cause d'un risque d'**interblocage**.",
+            "Expliqué le scénario d'interblocage : deux threads appelant `accedeAula()` simultanément peuvent acquérir chacun une partie des jetons disponibles et bloquer mutuellement sans pouvoir atteindre leur `db` respectif.",
+            "Proposé une correction garantissant l'atomicité de la réservation (ex. `PcoMutex` sur `accedeAula`, ou gestion explicite avec compteur `currentDb` et sémaphore d'attente)."
+          ],
+          "model_answer": "**Ce code n'est pas fonctionnel.**\n\n### Justification\nIl existe un risque d'**interblocage** lorsque plusieurs musiciens appellent `accedeAula()` simultanément.\n\n**Scénario :** Supposons qu'il reste 50 dB disponibles dans l'aula (`sem` vaut 50). Le musicien A appelle `accedeAula(40)` et le musicien B appelle `accedeAula(40)` en même temps.\n* A exécute 25 itérations de sa boucle (`sem` passe à 25).\n* B exécute 25 itérations (`sem` passe à 0).\n* Désormais, A et B sont tous deux bloqués dans leur boucle `for`, chacun retenant 25 dB sans pouvoir entrer ni libérer ce qu'il a déjà acquis. Si aucun autre musicien ne sort, c'est un interblocage définitif.\n\n*(Note : de plus, si `db > 100`, un musicien ne pourra jamais entrer.)*\n\n### Correction (avec un `PcoMutex` pour rendre la réservation atomique)\n```cpp\nclass AccesAula\n{\nprivate:\n    PcoSemaphore sem{100};\n    PcoMutex mutex;\n\npublic:\n    void accedeAula(unsigned int db) {\n        mutex.lock();\n        for (unsigned int i = 0; i < db; i++) {\n            sem.acquire();\n        }\n        mutex.unlock();\n    }\n\n    void quitteAula(unsigned int db) {\n        for (unsigned int i = 0; i < db; i++) {\n            sem.release();\n        }\n    }\n};\n```\n\n**Remarques :**\n* `quitteAula()` ne doit **surtout pas** verrouiller `mutex`, sinon un musicien sortant ne pourrait pas libérer ses dB pendant qu'un musicien entrant attend dans `accedeAula()` (interblocage).\n* Cette correction résout l'interblocage entre threads entrants (les réservations se font une à une), mais introduit un phénomène de file FIFO (*head-of-line blocking* : un petit instrument attendra derrière un gros instrument bloqué).",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-2324-q4",
+      "title": "Question 4 : 6 points",
+      "description": "Répondez aux questions suivantes en justifiant vos réponses.",
+      "blocks": [
+        {
+          "id": "ref-te1-2324-q4-1",
+          "block_type": "reflection_rubric",
+          "title": "4.1 Mutex vs Sémaphore initialisé à 1",
+          "prompt": "1. Quelles sont les différences entre l'usage d'un mutex et celui d'un sémaphore initialisé à 1 ?",
+          "self_check_criteria": [
+            "Mentionné la notion de propriété (*ownership*) : seul le thread qui a verrouillé un mutex doit le déverrouiller.",
+            "Expliqué que le sémaphore n'a pas de propriétaire : un thread peut faire `acquire()` et un autre `release()` (utile pour la synchronisation/signalisation).",
+            "Mentionné que le mutex est dédié exclusivement à l'exclusion mutuelle (et peut éventuellement supporter la récursivité selon l'API)."
+          ],
+          "model_answer": "* **Propriété (*ownership*) :** Un mutex appartient au thread qui l'a verrouillé (`lock()`). Seul ce même thread est censé le déverrouiller (`unlock()`). Un sémaphore n'a pas de notion de propriétaire : n'importe quel thread peut appeler `release()`, même s'il n'a pas appelé `acquire()`.\n* **Sémantique d'usage :** Un mutex sert uniquement à l'**exclusion mutuelle** (protéger une section critique). Un sémaphore initialisé à 1 peut aussi servir à l'exclusion mutuelle, mais les sémaphores sont plus généralement utilisés pour la **synchronisation** entre threads (signalisation, rendez-vous, etc.).\n* **Fonctionnalités :** Un `PcoMutex` peut offrir des mécanismes supplémentaires comme le mode récursif, ce qui n'existe pas pour un sémaphore.",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-2324-q4-2",
+          "block_type": "reflection_rubric",
+          "title": "4.2 Comportement bloquant de `PcoThread::join()`",
+          "prompt": "2. La fonction `PcoThread::join()` est potentiellement bloquante. Quand l'est-elle et quand ne l'est-elle pas ?",
+          "self_check_criteria": [
+            "Indiqué que `join()` est bloquante lorsque le thread cible n'a pas encore terminé son exécution.",
+            "Indiqué que `join()` est non bloquante lorsque le thread cible est déjà terminé au moment de l'appel."
+          ],
+          "model_answer": "* **Elle est bloquante** lorsque le thread sur lequel on appelle `join()` est encore en cours d'exécution (il n'a pas encore terminé sa fonction) : le thread appelant est mis en attente jusqu'à la terminaison du thread cible.\n* **Elle n'est pas bloquante** lorsque le thread cible a déjà terminé son exécution avant l'appel à `join()` (il attend simplement d'être joint) : `join()` retourne alors immédiatement.",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-2324-q4-3",
+          "block_type": "reflection_rubric",
+          "title": "4.3 Paramètre non signé du constructeur de sémaphore",
+          "prompt": "3. Le constructeur d'un sémaphore prend un entier non signé comme paramètre. Pourquoi pas un entier signé ? (La réponse *\"Parce que ça n'a pas de sens\"* n'est pas suffisante, justifiez)",
+          "self_check_criteria": [
+            "Expliqué le rôle du compteur initial (nombre de ressources/jetons disponibles, $0$ signifiant déjà aucune ressource disponible).",
+            "Expliqué ce qu'une valeur négative impliquerait (soit obliger à plusieurs `release()` avant qu'un `acquire()` ne puisse passer, soit corrompre la représentation interne si les valeurs négatives comptent les threads bloqués)."
+          ],
+          "model_answer": "Un sémaphore représente un compteur de ressources (ou de jetons) disponibles :\n* La valeur `0` indique déjà qu'aucune ressource n'est disponible (tout appel à `acquire()` sera bloquant). Initialiser un sémaphore à une valeur négative $-k$ obligerait à effectuer $k+1$ appels à `release()` avant qu'un seul thread ne puisse passer `acquire()`, ce qui ne correspond pas au modèle d'un compteur de ressources disponibles.\n* De plus, dans l'implémentation classique (de Dijkstra), la valeur négative $-k$ du compteur interne sert parfois à représenter le nombre $k$ de threads actuellement bloqués en attente sur le sémaphore : autoriser une initialisation négative fausserait cet invariant en laissant croire que des threads sont déjà en attente.",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-2324-q5",
+      "title": "Question 5 : 6 points",
+      "description": "Relecture et détection de bugs dans le code de TheClass.",
+      "blocks": [
+        {
+          "id": "th-te1-2324-q5-enonce",
+          "block_type": "markdown",
+          "title": "Énoncé : Relecture de code",
+          "bookmarkable": true,
+          "content": "Le code suivant a été proposé par un de vos collègues, lors de votre projet de semestre. Il vous demande de le relire afin d'y détecter de potentiels problèmes. En trouvez-vous ? Si oui, alors expliquez ce que vous avez trouvé, et pourquoi c'est problématique."
+        },
+        {
+          "id": "code-te1-2324-q5",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Code proposé par le collègue",
+          "filename": "q5_the_class.cpp",
+          "code": "const int N = 4;\n\nclass TheClass\n{\npublic:\n    // Initialise le vecteur avec N éléments à 0\n    TheClass(int index) : m_index(index), m_vec(N, 0) {}\n\n    // Cette fonction permet à un thread de signaler sa présence\n    void signale(int index) {\n        m_vec[index] += (1 << index);\n    }\n\nprivate:\n    int m_index;\n    std::vector<int> m_vec;\n};\n\n// Vecteur de N pointeurs sur objets\nstatic std::vector<TheClass*> theVector(N);\n\nvoid function(int i) {\n    for (int j = 0; j < N; j++)\n    {\n        theVector[j]->signale(i);\n    }\n}\n\nint main()\n{\n    std::vector<PcoThread*> threads(N);\n    for (int i = 0; i < N; i++) {\n        threads[i] = new PcoThread(function, i);\n        theVector[i] = new TheClass(i);\n    }\n\n    for (int i = 0; i < N; i++) {\n        threads[i]->join();\n        delete threads[i];\n    }\n\n    return 0;\n}",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-te1-2324-q5-rubric",
+          "block_type": "reflection_rubric",
+          "title": "Correction : Problèmes identifiés dans `TheClass`",
+          "prompt": "Y a-t-il des problèmes dans ce code ? Si oui, expliquez-les et indiquez comment les résoudre.",
+          "self_check_criteria": [
+            "Identifié le problème critique dans `main()` : `threads[i] = new PcoThread(function, i);` est exécuté **avant** `theVector[i] = new TheClass(i);`.",
+            "Expliqué la conséquence : un thread lancé peut exécuter `theVector[j]->signale(i)` alors que `theVector[j]` vaut encore `nullptr` → **Segmentation Fault** (comportement indéfini).",
+            "Mentionné la solution : allouer tous les objets `TheClass` dans `theVector` dans une boucle séparée **avant** de lancer les threads (et idéalement libérer `theVector[i]` avec `delete` en fin de `main()`)."
+          ],
+          "model_answer": "Oui, il y a un **problème critique de concurrence (course critique / déréférencement de pointeur nul)** :\n\n1. **Lancement des threads avant l'initialisation complète de `theVector` (`main()`, lignes 33–36) :**\n   ```cpp\n   for (int i = 0; i < N; i++) {\n       threads[i] = new PcoThread(function, i);\n       theVector[i] = new TheClass(i);\n   }\n   ```\n   Le thread `i` est démarré **avant** que `theVector[i]` (et a fortiori `theVector[i+1..N-1]`) ne soit alloué ! `theVector` contient initialement `N` pointeurs `nullptr`.\n   Dès qu'un thread exécute `function(i)`, il parcourt tous les `j` de `0` à `N-1` et appelle `theVector[j]->signale(i)`. Si `main()` n'a pas encore alloué `theVector[j]`, le thread déréférence `nullptr`, ce qui provoque un **Segmentation Fault** (plantage / comportement indéfini).\n   * *Correction :* Initialiser tous les éléments de `theVector` dans une première boucle **avant** de créer les `PcoThread`.\n\n2. **Fuite mémoire (mineur) :**\n   Les objets alloués dans `theVector[i]` ne sont jamais libérés avec `delete` avant la fin de `main()`.\n\n*(Note : concernant `m_vec[index] += (1 << index);`, il n'y a pas de data race entre threads car chaque thread `i` possède un `index = i` unique et accède donc à une case distincte du vecteur `m_vec`.)*",
+          "bookmarkable": true
+        }
+      ]
+    }
+  ]
+}
