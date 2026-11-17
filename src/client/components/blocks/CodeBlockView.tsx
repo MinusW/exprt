@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Check, Copy, FileCode, Info, Moon, Sun, Edit3, Eye, RotateCcw } from 'lucide-react';
 import type { CodeBlock } from '../../types.js';
 import { MathText } from '../MathText.js';
+import { HighlightedCodeEditor } from '../HighlightedCodeEditor.js';
 import {
   tokenizeCodeLine,
   DARK_TOKEN_CLASSES,
@@ -157,31 +158,12 @@ export const CodeBlockView: React.FC<Props> = ({ block }) => {
       {/* Code Editor or Highlighted View */}
       <div className="p-4 overflow-x-auto">
         {isEditing ? (
-          <textarea
+          <HighlightedCodeEditor
             value={code}
-            onChange={(e) => setCode(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Tab') {
-                e.preventDefault();
-                const target = e.currentTarget;
-                const start = target.selectionStart;
-                const end = target.selectionEnd;
-                const next = code.slice(0, start) + '  ' + code.slice(end);
-                setCode(next);
-                requestAnimationFrame(() => {
-                  target.selectionStart = target.selectionEnd = start + 2;
-                });
-              }
-            }}
+            onChange={setCode}
+            language={block.language}
+            theme={theme}
             rows={Math.max(5, Math.min(28, lines.length + 1))}
-            spellCheck={false}
-            autoCapitalize="off"
-            autoCorrect="off"
-            className={`w-full font-mono text-xs sm:text-[13px] leading-6 p-2 rounded-lg border outline-none resize-y ${
-              isLight
-                ? 'bg-white text-slate-900 border-slate-300 focus:border-sky-500'
-                : 'bg-slate-900 text-slate-100 border-slate-700 focus:border-sky-500'
-            }`}
           />
         ) : (
         <table className="w-full border-collapse">

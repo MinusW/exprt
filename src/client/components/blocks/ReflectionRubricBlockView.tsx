@@ -78,11 +78,11 @@ export const ReflectionRubricBlockView: React.FC<Props> = ({
                 const target = e.currentTarget;
                 const start = target.selectionStart;
                 const end = target.selectionEnd;
-                const next = note.slice(0, start) + '  ' + note.slice(end);
+                const next = note.slice(0, start) + '    ' + note.slice(end);
                 setNote(next);
                 onSaveNote(next);
                 requestAnimationFrame(() => {
-                  target.selectionStart = target.selectionEnd = start + 2;
+                  target.selectionStart = target.selectionEnd = start + 4;
                 });
               }
             }}
