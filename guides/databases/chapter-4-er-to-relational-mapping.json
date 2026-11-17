@@ -1,0 +1,273 @@
+{
+  "id": "chapter-4-er-to-relational-mapping",
+  "title": "Chapter 4: ER-to-Relational Mapping: The Complete 8-Step Transformation Algorithm",
+  "description": "A comprehensive practical guide to transforming conceptual ER/EER models into normalized relational schemas: strong entities, weak entities, 1:1, 1:N, M:N, multivalued attributes, n-ary associations, and inheritance strategies 8A, 8B, and 8C.",
+  "estimated_minutes": 55,
+  "category": "Database Systems",
+  "track": "Relational Database Fundamentals (BDR)",
+  "track_order": 4,
+  "difficulty_level": "intermediate",
+  "tags": [
+    "databases",
+    "er-to-relational",
+    "mapping-algorithm",
+    "inheritance-mapping",
+    "foreign-keys",
+    "weak-entities",
+    "bdr"
+  ],
+  "prerequisites": [
+    "chapter-2-entity-relationship-modeling",
+    "chapter-3-relational-model-and-constraints"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "BDR Chapter 4: Passage d'un modèle EA à un modèle relationnel",
+      "url_or_path": "sources/BDR-TE1/04-Passage_EA_vers_relationnel_avec_correction.pdf",
+      "notes": "Covers the formal 8-step mapping algorithm, constraint generation, and inheritance strategies 8A, 8B, 8C."
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-mapping-entities-and-weak-entities",
+      "title": "1. Mapping Entity Types & Weak Entities (Steps 1 & 2)",
+      "description": "Transforming regular entities, flattening composite attributes, and correctly deriving composite keys for weak entities.",
+      "blocks": [
+        {
+          "id": "th-mapping-algorithm-overview",
+          "block_type": "markdown",
+          "title": "The Complete 8-Step ER-to-Relational Algorithm",
+          "bookmarkable": true,
+          "content": "Translating a conceptual ER/EER diagram into a relational schema is performed via a deterministic 8-step algorithm:\n\n```text\nStep 1: Regular (Strong) Entity Types\nStep 2: Weak Entity Types\nStep 3: Binary 1:1 Relationship Types\nStep 4: Binary 1:N Relationship Types\nStep 5: Binary M:N Relationship Types\nStep 6: Multivalued Attributes\nStep 7: Higher-Degree (n-ary) Relationship Types\nStep 8: Specialization / Generalization Hierarchies (Strategies 8A, 8B, 8C)\n```\n\n### Relational Schema Notation Conventions\nRelational schemas are expressed in the standard notation:\n\n$$\\text{RelationName}(\\underline{\\text{PrimaryKey}}, \\text{Attribute}_1, \\text{Attribute}_2, \\text{ForeignKeyAttribute})$$\n\n* **Primary Key:** Formally underlined or explicitly designated.\n* **Foreign Keys:** Explicitly annotated with `references TargetRelation(TargetKey)` and deletion policy (`ON DELETE CASCADE`, etc.).\n* **Integrity Modifiers:** Explicitly declare `NOT NULL` and `UNIQUE` constraints."
+        },
+        {
+          "id": "th-step-1-regular-entities",
+          "block_type": "markdown",
+          "title": "Step 1: Mapping Regular (Strong) Entity Types",
+          "bookmarkable": true,
+          "content": "For each regular (strong) entity type $E$ in the ER schema:\n\n1. **Create Relation:** Create a relation $R$ containing all simple attributes of $E$.\n2. **Flatten Composite Attributes:** Decompose composite attributes into their simple atomic sub-components (e.g., composite `Address` becomes `street_number`, `street_name`, `city`, `postal_code`).\n3. **Primary Key Selection:** Designate one candidate key of $E$ as the Primary Key of $R$. If the chosen key is composite, the primary key of $R$ is the set of all simple attributes constituting that key.\n4. **Exclusions:** Multi-valued attributes are omitted (handled in Step 6). Derived attributes are omitted (computed dynamically via SQL views/queries).\n\n```text\nER Entity:   EMPLOYEE(ssn, name, address(street, city), birth_date)\nRelation:    EMPLOYEE(ssn, name, street, city, birth_date)\n             PK: ssn\n```"
+        },
+        {
+          "id": "th-step-2-weak-entities",
+          "block_type": "markdown",
+          "title": "Step 2: Mapping Weak Entity Types",
+          "bookmarkable": true,
+          "content": "For each weak entity type $W$ in the ER schema with identifying owner entity type(s) $O$:\n\n1. **Create Relation:** Create a relation $R$ containing all simple (or flattened composite) attributes of $W$, including its partial key (discriminator).\n2. **Import Owner Primary Key:** Include as foreign key attribute(s) in $R$ the primary key attribute(s) of the relation(s) corresponding to the identifying owner(s) $O$.\n3. **Composite Primary Key Formation:** The primary key of $R$ is formed by **combining** the owner's primary key and the weak entity's partial discriminator key:\n\n$$PK(R) = PK(O) \\cup \\text{PartialKey}(W)$$\n\n4. **Referential Integrity Constraint:**\n\n```sql\nFOREIGN KEY (owner_pk) REFERENCES OwnerTable(owner_pk) ON DELETE CASCADE\n```\n\n* *Why CASCADE?* Because a weak entity has an existential dependency on its owner. If employee *Smith* is deleted, all of Smith's dependents cease to exist in the mini-world."
+        },
+        {
+          "id": "diag-weak-entity-mapping",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Relational Transformation of a Weak Entity",
+          "caption": "The weak entity DEPENDENT borrows employee_ssn from its owner to construct its composite primary key.",
+          "source": "graph LR\n  subgraph ER [\"Conceptual ER Model\"]\n    E[\"EMPLOYEE\\nssn {PK}\"] --- Rel{\"Has_Dep\"} --- D[\"DEPENDENT\\ndep_name {Partial}\\nbdate\"]\n  end\n\n  subgraph Relational [\"Relational Schema Result\"]\n    R1[\"EMPLOYEE(\\n  ssn {PK},\\n  name\\n)\"]\n    R2[\"DEPENDENT(\\n  employee_ssn {PK, FK},\\n  dep_name {PK},\\n  bdate\\n)\\nFK: employee_ssn -> EMPLOYEE.ssn\\nON DELETE CASCADE\"]\n    R2 -.->|References| R1\n  end\n\n  ER ==> Relational\n\n  classDef er fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;\n  classDef rel fill:#fdf2f8,stroke:#db2777,stroke-width:1.5px;\n  class E,Rel,D er;\n  class R1,R2 rel;",
+          "bookmarkable": true
+        },
+        {
+          "id": "fc-weak-entity-mapping-rules",
+          "block_type": "flashcard",
+          "title": "Weak Entity Primary Key Mapping Rule",
+          "front": "What constitutes the primary key and foreign key when converting a weak entity into a relation?",
+          "back": "* **Foreign Key:** The primary key of the identifying strong owner table.\n* **Primary Key:** The **composite** combination of `{Owner_PK, WeakEntity_PartialKey}`.\n* **Referential Policy:** Usually declared with `ON DELETE CASCADE` because weak entities cannot exist independently of their owner.",
+          "hint": "Can a weak entity have an independent single-column primary key from its own attributes?",
+          "tags": ["er-to-relational", "weak-entities", "keys"],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-mapping-binary-and-n-ary-relationships",
+      "title": "2. Mapping Relationships: 1:1, 1:N, M:N & Higher-Degree (Steps 3, 4, 5 & 7)",
+      "description": "Rules for foreign key placement in 1:1 and 1:N associations, associative junction tables in M:N, and key selection in n-ary relationships.",
+      "blocks": [
+        {
+          "id": "th-step-3-binary-one-to-one",
+          "block_type": "markdown",
+          "title": "Step 3: Mapping Binary 1:1 Relationships",
+          "bookmarkable": true,
+          "content": "For a binary 1:1 relationship $R$ between entity relations $S$ and $T$, three implementation approaches exist. The **Foreign Key Approach** is standard:\n\n### The Foreign Key Approach\n* **Which Table Receives the Foreign Key?** Choose one of the relations (say $S$) and include the primary key of $T$ as a foreign key in $S$.\n* **The Total Participation Placement Rule:** To prevent columns filled with NULL values, **always place the foreign key in the relation that has TOTAL (mandatory `1..1`) participation** in the relationship!\n  * *Example:* If every Department has a Manager (`1..1`), but only a few Employees manage a Department (`0..1`), place `mgr_ssn` in `DEPARTMENT`, not in `EMPLOYEE`!\n* **Mandatory Constraints on the Foreign Key:**\n  1. `UNIQUE`: Ensures the 1:1 ratio (no two rows in $S$ can reference the same row in $T$).\n  2. `NOT NULL`: Mandatory if $S$'s participation is total (`1..1`).\n* **Relationship Attributes:** Place any attributes of the 1:1 relationship in the table that receives the foreign key (e.g., `mgr_start_date` in `DEPARTMENT`)."
+        },
+        {
+          "id": "th-step-4-binary-one-to-many",
+          "block_type": "markdown",
+          "title": "Step 4: Mapping Binary 1:N Relationships",
+          "bookmarkable": true,
+          "content": "For a binary 1:N (or N:1) relationship type $R$ between relation $S$ (on the 1-side) and relation $T$ (on the $N$-side):\n\n1. **Foreign Key Placement:** The foreign key **must** be placed in the relation on the **$N$-side** ($T$). It references the primary key of the $1$-side relation ($S$).\n   * *Intuition:* Each employee works for at most 1 department $\\implies$ `department_id` is a single scalar value per employee. A department has many employees $\\implies$ placing employee IDs in department would violate 1NF atomicity!\n2. **Participation Nullability:** If $T$'s participation is total (`1..*`), the foreign key column is marked `NOT NULL`. If optional (`0..*`), it permits `NULL`.\n3. **Relationship Attributes:** Any attributes belonging to the 1:N relationship are placed directly in the $N$-side relation ($T$)."
+        },
+        {
+          "id": "th-step-5-binary-many-to-many",
+          "block_type": "markdown",
+          "title": "Step 5: Mapping Binary M:N Relationships",
+          "bookmarkable": true,
+          "content": "For a binary M:N relationship type $R$ between relations $S$ and $T$:\n\n1. **Create Associative (Junction) Relation:** Create a new relation $R$.\n2. **Include Foreign Keys:** Include the primary keys of both $S$ and $T$ as foreign key columns in $R$.\n3. **Composite Primary Key:** The primary key of $R$ is formed by the combination of both foreign keys:\n\n$$PK(R) = \\{ PK(S), PK(T) \\}$$\n\n4. **Relationship Attributes:** Any attributes of the M:N relationship (e.g., `hours_worked`) are stored in $R$.\n\n```text\nWORKS_ON(\n  employee_ssn, \n  project_number, \n  hours_per_week,\n  PRIMARY KEY (employee_ssn, project_number),\n  FOREIGN KEY (employee_ssn) REFERENCES EMPLOYEE(ssn),\n  FOREIGN KEY (project_number) REFERENCES PROJECT(pnumber)\n)\n```"
+        },
+        {
+          "id": "th-step-7-n-ary-relationships",
+          "block_type": "markdown",
+          "title": "Step 7: Mapping Higher-Degree ($n$-ary) Relationships ($n > 2$)",
+          "bookmarkable": true,
+          "content": "For an $n$-ary relationship type $R$ among $n$ participating entity relations $E_1, E_2, \\dots, E_n$:\n\n1. **Create Associative Relation:** Create a new relation $R$.\n2. **Include Foreign Keys:** Include the primary keys of all $n$ participating relations as foreign keys in $R$.\n3. **Primary Key Formation Rule:**\n   * If all $n$ sides have cardinality $*$ ($M:N:P$), the primary key is the composite combination of **all $n$ foreign keys**.\n   * **The 1-Side Exception:** If any participating entity type $E_k$ has a maximum cardinality of `1` on its branch, its primary key is **NOT** part of $R$'s primary key! Instead, it remains a foreign key with a `NOT NULL` constraint.\n\n* **Example (Screening Ternary):** `Screening` connects `CinemaHall (*)` + `TimeSlot (*)` + `Film (1)`.\n  * For a given Hall and TimeSlot, only ONE film can be shown.\n  * Primary Key: `{hall_id, timeslot_id}`.\n  * `film_id` is an FK `NOT NULL`, but *not* part of the PK!"
+        },
+        {
+          "id": "fc-one-to-one-foreign-key-rule",
+          "block_type": "flashcard",
+          "title": "1:1 Foreign Key Placement and Constraints",
+          "front": "Where should the foreign key be placed when mapping a 1:1 relationship, and what constraints must be applied to it?",
+          "back": "* **Placement:** In the relation with **total participation** (`1..1`) to prevent NULL-filled columns.\n* **Constraints:**\n  1. `UNIQUE` (mandatory to guarantee the 1:1 ratio).\n  2. `NOT NULL` (mandatory if that table has total participation in the relationship).",
+          "hint": "Why does putting the foreign key in the optional side waste space?",
+          "tags": ["er-to-relational", "one-to-one", "foreign-keys"],
+          "bookmarkable": true
+        },
+        {
+          "id": "fc-n-ary-primary-key-rule",
+          "block_type": "flashcard",
+          "title": "Primary Key Formation in n-ary Relations",
+          "front": "When mapping an n-ary relationship into a table, which participating entity keys form the primary key of the new associative table?",
+          "back": "The primary key is formed by the keys of the participating entity types that have a **maximum cardinality of $*$ (`many`)**. Any entity type with a maximum cardinality of `1` has its key included as a **foreign key NOT NULL**, but NOT as part of the primary key.",
+          "hint": "If a combination of (A, B) uniquely determines C (cardinality 1 on C), is C needed in the primary key?",
+          "tags": ["er-to-relational", "n-ary", "keys"],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-mapping-multivalued-attributes",
+      "title": "3. Mapping Multivalued Attributes (Step 6)",
+      "description": "Deconstructing 1NF normalization for multivalued attributes and relational table representation.",
+      "blocks": [
+        {
+          "id": "th-step-6-multivalued-attributes",
+          "block_type": "markdown",
+          "title": "Step 6: Mapping Multivalued Attributes",
+          "bookmarkable": true,
+          "content": "In pure relational theory (1NF), tables cannot contain lists, sets, or nested arrays. Every multivalued attribute $A$ on an entity $E$ must be extracted into a dedicated relation:\n\n1. **Create Relation:** Create a new relation $R$.\n2. **Include Attribute & Owner Key:** Include an attribute corresponding to $A$ (or the simple components of $A$ if $A$ is composite) alongside the primary key $K$ of entity $E$.\n3. **Composite Primary Key:** The primary key of $R$ is the combination of the owner's key $K$ and the attribute $A$:\n\n$$PK(R) = \\{ K, A \\}$$\n\n4. **Referential Integrity Constraint:**\n\n```sql\nFOREIGN KEY (K) REFERENCES E(K) ON DELETE CASCADE\n```\n\n* **Example:** `EMPLOYEE(ssn, name)` has multivalued attribute `degrees[0..*]`:\n\n```text\nEMPLOYEE_DEGREE(ssn, degree_name)\nPK: (ssn, degree_name)\nFK: ssn REFERENCES EMPLOYEE(ssn) ON DELETE CASCADE\n```\n\n> [!NOTE]\n> **DDL Limitation:** A minimum cardinality constraint like `degrees[1..*]` cannot be guaranteed solely through relational schema declarations; it requires an application assertion or trigger."
+        },
+        {
+          "id": "fc-multivalued-mapping",
+          "block_type": "flashcard",
+          "title": "Multivalued Attribute Primary Key Rule",
+          "front": "How is a multivalued attribute mapped into the relational model to maintain First Normal Form (1NF)?",
+          "back": "A dedicated table is created containing:\n1. The foreign key referencing the owner entity's primary key ($K$).\n2. The attribute value itself ($A$).\n\nThe Primary Key of this table is the **composite pair `{K, A}`**, and the foreign key has `ON DELETE CASCADE`.",
+          "hint": "Why must the attribute value itself be part of the primary key?",
+          "tags": ["er-to-relational", "1nf", "multivalued-attributes"],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-mapping-inheritance-strategies",
+      "title": "4. Specialization & Inheritance Mapping: Strategies 8A, 8B & 8C (Step 8)",
+      "description": "Rigorous comparison and selection criteria among Strategy 8A (Table per Class), Strategy 8B (Subclasses Only), and Strategy 8C (Single Table).",
+      "blocks": [
+        {
+          "id": "th-inheritance-three-strategies",
+          "block_type": "markdown",
+          "title": "The 3 Canonical Inheritance Mapping Strategies",
+          "bookmarkable": true,
+          "content": "Mapping an EER specialization/generalization hierarchy into relational tables requires choosing among three architectural strategies:\n\n```text\n                     [SUPERCLASS E1]\n                     /             \\\n             [SUBCLASS E2]     [SUBCLASS E3]\n```\n\n### Strategy 8A: Table per Class (Superclass + Subclass Tables)\n* **Structure:** Create one relation for the superclass and one relation for every subclass.\n  * $R_1(a_1, a_2)$ where $a_1$ is PK.\n  * $R_2(\\underline{a_1}, b_1, b_2)$ where $a_1$ is PK and FK referencing $R_1(a_1)$.\n  * $R_3(\\underline{a_1}, c_1, c_2)$ where $a_1$ is PK and FK referencing $R_1(a_1)$.\n* **Applicability:** **Universal!** Works for all 4 types (total/partial, disjoint/overlapping).\n* **Pros:** Clean normalization, zero duplicate column definitions, minimal NULLs.\n* **Cons:** Accessing all attributes of a subclass requires a relational `JOIN` on the primary key.\n\n### Strategy 8B: Subclass Tables Only (Eliminating the Superclass Table)\n* **Structure:** Do not create a superclass table. Create one relation for each subclass, duplicating all inherited superclass attributes into every subclass table:\n  * $R_2(\\underline{a_1}, a_2, b_1, b_2)$\n  * $R_3(\\underline{a_1}, a_2, c_1, c_2)$\n* **Applicability:** **Strictly Limited!** Only valid if the specialization is **TOTAL and DISJOINT**.\n* **Fatal Pitfalls:**\n  1. If *partial*, superclass entities that belong to no subclass cannot be stored.\n  2. If *overlapping*, common attributes are duplicated across tables, and key uniqueness of $a_1$ across tables cannot be enforced by standard DDL.\n  3. Other entities cannot have a foreign key pointing to the generic superclass.\n  4. Querying all entities requires expensive `UNION` operations.\n\n### Strategy 8C: Single Table with Discriminator Column\n* **Structure:** Create a single flattened relation containing all superclass and subclass attributes, plus a discriminator column:\n  * If *disjoint:* $R(\\underline{a_1}, a_2, b_1, b_2, c_1, c_2, \\text{type})$ where `type IN ('E2', 'E3')`.\n  * If *overlapping:* $R(\\underline{a_1}, a_2, b_1, b_2, c_1, c_2, \\text{is\\_E2}, \\text{is\\_E3})$ with boolean flags.\n* **Applicability:** Works for all 4 types.\n* **Pros:** No joins required; simple single-table queries.\n* **Cons:** Generates many `NULL` values; requires complex SQL `CHECK` constraints to ensure mutually exclusive column populations."
+        },
+        {
+          "id": "th-strategy-comparison-matrix",
+          "block_type": "markdown",
+          "title": "Comprehensive Comparison Matrix: 8A vs 8B vs 8C",
+          "bookmarkable": true,
+          "content": "| Evaluation Criterion | Strategy 8A (Class Hierarchy) | Strategy 8B (Subclasses Only) | Strategy 8C (Single Table) |\n| :--- | :--- | :--- | :--- |\n| **Partial Specialization** | ✅ Fully supported | ❌ **Impossible** (entities lost) | ✅ Supported (`type` can be NULL) |\n| **Overlapping Specialization** | ✅ Fully supported | ❌ **Not recommended** (duplication) | ✅ Supported (via boolean flags) |\n| **Presence of NULL values** | Very low | Very low | **Very high** (sparse columns) |\n| **Subclass Complete Retrieval** | Requires 1 `JOIN` | Direct (no join) | Direct (no join) |\n| **Generic Superclass Retrieval** | Direct from superclass table | Requires multi-table `UNION` | Direct from single table |\n| **Cross-Table Foreign Keys** | Allowed to superclass PK | ❌ Impossible (no superclass table) | Allowed to single table PK |\n| **Enforcing Disjointness** | Requires triggers | Inherently separate tables | Requires SQL `CHECK` constraints |"
+        },
+        {
+          "id": "ref-inheritance-strategy-rubric",
+          "block_type": "reflection_rubric",
+          "title": "Synthesis: Choosing an Inheritance Mapping Strategy",
+          "bookmarkable": true,
+          "prompt": "A university database has a `Person` superclass with subclasses `Professor` and `Student`. The specialization is PARTIAL (some persons are administrative staff) and OVERLAPPING (a graduate student can also be an adjunct teaching professor). Explain why Strategy 8B is strictly prohibited, why Strategy 8C is cumbersome, and why Strategy 8A is the optimal design.",
+          "self_check_criteria": [
+            "Demonstrated that Strategy 8B cannot store administrative staff because the specialization is partial (no Person table exists).",
+            "Demonstrated that Strategy 8B duplicates data and cannot enforce single SSN uniqueness for a person who is both Professor and Student (overlapping).",
+            "Explained that Strategy 8C requires multiple boolean flags and yields massive NULL sparsity across hundreds of columns.",
+            "Concluded that Strategy 8A cleanly represents both roles with foreign keys referencing the Person table."
+          ],
+          "model_answer": "Strategy 8B is prohibited for two fatal reasons: 1) Because the specialization is partial, administrative staff cannot be stored anywhere without a Person table. 2) Because it is overlapping, a person who is both a Professor and a Student would exist as two disconnected rows in separate tables, duplicating their common name and address while making global SSN uniqueness impossible to enforce. Strategy 8C would require sparse boolean flags (is_professor, is_student) resulting in tables littered with NULLs. Strategy 8A is optimal: Person holds common attributes, Professor holds academic rank, and Student holds major, linked cleanly by foreign keys."
+        },
+        {
+          "id": "ref-feynman-inheritance-mapping",
+          "block_type": "feynman_prompt",
+          "concept": "Inheritance Mapping Strategies",
+          "target_audience": "a junior backend developer",
+          "prompt": "Explain the trade-offs between Strategy 8A (separate tables per class) and Strategy 8C (one giant table with a type column) using the analogy of organizing paperwork into file folders.",
+          "key_points_to_cover": [
+            "Strategy 8A: Having a general folder for everyone, plus specialized sub-folders when someone has a special role (clean, but you have to look into two folders)",
+            "Strategy 8C: Using one massive form where most boxes are left blank with N/A (fast to grab, but messy and wastes space)",
+            "Why Strategy 8B fails if someone doesn't fit into the specialized forms"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-strategy-8b-applicability",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-inheritance-three-strategies",
+          "title": "Validity Conditions for Inheritance Strategy 8B",
+          "question": "Under what exact structural constraints on an EER specialization is Strategy 8B (Subclasses Only, no superclass table) valid?",
+          "options": [
+            "Only when the specialization is both Total and Disjoint",
+            "Only when the specialization is Partial and Disjoint",
+            "Only when the specialization is Total and Overlapping",
+            "Strategy 8B is universally applicable to all specializations"
+          ],
+          "correct_answer": "Only when the specialization is both Total and Disjoint",
+          "explanation": "Strategy 8B discards the superclass table entirely. If the specialization were Partial, entities that belong to no subclass would have nowhere to be stored. If the specialization were Overlapping, an entity belonging to two subclasses would have its inherited attributes duplicated in two separate tables, breaking entity identity. Therefore, Strategy 8B is ONLY valid when the specialization is Total and Disjoint.",
+          "hints": [
+            "What happens to an entity if it doesn't belong to any subclass and there is no superclass table?",
+            "What happens if an entity belongs to two subclasses simultaneously?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-one-to-one-total-placement",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-step-3-binary-one-to-one",
+          "title": "Optimal Foreign Key Placement in 1:1 Relationships",
+          "question": "In a company schema, `Employee` and `Department` are linked by the 1:1 relationship `Manages`. Every Department has exactly one Manager (`1..1`), while an Employee can manage zero or one Department (`0..1`). In which relation should the foreign key be placed to minimize NULL values?",
+          "options": [
+            "In DEPARTMENT, because Department has total participation (1..1)",
+            "In EMPLOYEE, because Employee has partial participation (0..1)",
+            "A separate junction table is strictly required by the relational model",
+            "The foreign key must be placed symmetrically in both tables"
+          ],
+          "correct_answer": "In DEPARTMENT, because Department has total participation (1..1)",
+          "explanation": "Placing the foreign key (`mgr_ssn`) in `DEPARTMENT` guarantees that every single department row has a non-null manager (since participation is total `1..1`), avoiding NULLs. Placing it in `EMPLOYEE` would result in 95%+ of employee rows containing a NULL in their `managed_dnumber` column.",
+          "hints": [
+            "Does every department have a manager?",
+            "Does every employee manage a department?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-many-to-many-key-composition",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-step-5-binary-many-to-many",
+          "title": "Junction Table Primary Key in M:N Relationships",
+          "question": "When converting an M:N relationship `STUDENT Enrolls_In COURSE` into relational tables, what constitutes the primary key of the resulting junction table?",
+          "options": [
+            "The composite combination of {student_id, course_id}",
+            "student_id alone",
+            "course_id alone",
+            "A newly invented surrogate key is strictly mandatory"
+          ],
+          "correct_answer": "The composite combination of {student_id, course_id}",
+          "explanation": "In an M:N relationship, a student enrolls in multiple courses and a course contains multiple students. Neither `student_id` nor `course_id` alone is unique. Uniqueness is guaranteed by the combination pair `{student_id, course_id}`, which forms the primary key of the junction table.",
+          "hints": [
+            "Can a student appear multiple times in the enrollment table?",
+            "Can a course appear multiple times in the enrollment table?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    }
+  ]
+}

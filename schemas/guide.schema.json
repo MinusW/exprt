@@ -1,0 +1,710 @@
+{
+  "$ref": "definitions/StudyGuide",
+  "definitions": {
+    "StudyGuide": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "estimated_minutes": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "category": {
+          "type": "string"
+        },
+        "track": {
+          "type": "string"
+        },
+        "track_order": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "difficulty_level": {
+          "type": "string",
+          "enum": [
+            "beginner",
+            "intermediate",
+            "advanced"
+          ],
+          "default": "intermediate"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "prerequisites": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "layout_mode": {
+          "type": "string",
+          "enum": [
+            "single-page",
+            "multi-page"
+          ],
+          "default": "single-page"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "url_or_path": {
+                "type": "string"
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "url_or_path"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": {
+                "type": "string"
+              },
+              "blocks": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "bookmarkable": {
+                          "type": "boolean",
+                          "default": true
+                        },
+                        "block_type": {
+                          "type": "string",
+                          "const": "markdown"
+                        },
+                        "content": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "block_type",
+                        "content"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "$ref": "3/0/properties/id"
+                        },
+                        "title": {
+                          "$ref": "3/0/properties/title"
+                        },
+                        "bookmarkable": {
+                          "$ref": "3/0/properties/bookmarkable"
+                        },
+                        "block_type": {
+                          "type": "string",
+                          "const": "code"
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "language": {
+                          "type": "string",
+                          "default": "typescript"
+                        },
+                        "filename": {
+                          "type": "string"
+                        },
+                        "highlight_lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "annotations": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "line": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0
+                              },
+                              "note": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "line",
+                              "note"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "block_type",
+                        "code"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "$ref": "3/0/properties/id"
+                        },
+                        "title": {
+                          "$ref": "3/0/properties/title"
+                        },
+                        "bookmarkable": {
+                          "$ref": "3/0/properties/bookmarkable"
+                        },
+                        "block_type": {
+                          "type": "string",
+                          "const": "kroki"
+                        },
+                        "diagram_type": {
+                          "type": "string",
+                          "enum": [
+                            "mermaid",
+                            "plantuml",
+                            "graphviz",
+                            "dot",
+                            "excalidraw",
+                            "d2",
+                            "vega",
+                            "vega-lite",
+                            "blockdiag",
+                            "c4plantuml",
+                            "bpmn",
+                            "bytefield",
+                            "seqdiag",
+                            "actdiag",
+                            "nwdiag",
+                            "packetdiag",
+                            "rackdiag",
+                            "erd",
+                            "nomnoml",
+                            "svgbob",
+                            "umlet",
+                            "wavedrom",
+                            "pikchr"
+                          ]
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "caption": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "block_type",
+                        "diagram_type",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "$ref": "3/0/properties/id"
+                        },
+                        "title": {
+                          "$ref": "3/0/properties/title"
+                        },
+                        "bookmarkable": {
+                          "$ref": "3/0/properties/bookmarkable"
+                        },
+                        "block_type": {
+                          "type": "string",
+                          "const": "media"
+                        },
+                        "media_type": {
+                          "type": "string",
+                          "enum": [
+                            "image",
+                            "audio",
+                            "video",
+                            "youtube"
+                          ]
+                        },
+                        "url": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "caption": {
+                          "type": "string"
+                        },
+                        "start_time": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "why_watch": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "block_type",
+                        "media_type",
+                        "url"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "$ref": "3/0/properties/id"
+                        },
+                        "title": {
+                          "$ref": "3/0/properties/title"
+                        },
+                        "bookmarkable": {
+                          "$ref": "3/0/properties/bookmarkable"
+                        },
+                        "block_type": {
+                          "type": "string",
+                          "const": "sandbox"
+                        },
+                        "runtime": {
+                          "type": "string",
+                          "enum": [
+                            "javascript",
+                            "html",
+                            "python",
+                            "c",
+                            "cpp",
+                            "bash",
+                            "java",
+                            "rust",
+                            "go"
+                          ],
+                          "default": "javascript"
+                        },
+                        "runner": {
+                          "type": "string",
+                          "enum": [
+                            "browser",
+                            "docker"
+                          ]
+                        },
+                        "docker_image": {
+                          "type": "string"
+                        },
+                        "instructions": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "starter_code": {
+                          "type": "string"
+                        },
+                        "expected_output": {
+                          "type": "string"
+                        },
+                        "solution": {
+                          "type": "string"
+                        },
+                        "hints": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "block_type",
+                        "instructions",
+                        "starter_code"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "$ref": "3/0/properties/id"
+                        },
+                        "title": {
+                          "$ref": "3/0/properties/title"
+                        },
+                        "bookmarkable": {
+                          "$ref": "3/0/properties/bookmarkable"
+                        },
+                        "block_type": {
+                          "type": "string",
+                          "const": "simulation"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "formula": {
+                          "type": "string"
+                        },
+                        "variables": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "min": {
+                                "type": "number"
+                              },
+                              "max": {
+                                "type": "number"
+                              },
+                              "step": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                              },
+                              "default": {
+                                "type": "number"
+                              },
+                              "unit": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "min",
+                              "max",
+                              "step",
+                              "default"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "minItems": 1
+                        },
+                        "compute_expression": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "chart_type": {
+                          "type": "string",
+                          "enum": [
+                            "line",
+                            "bar",
+                            "gauge",
+                            "value"
+                          ],
+                          "default": "value"
+                        },
+                        "output_label": {
+                          "type": "string"
+                        },
+                        "output_unit": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "block_type",
+                        "description",
+                        "variables",
+                        "compute_expression",
+                        "output_label"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "$ref": "3/0/properties/id"
+                        },
+                        "title": {
+                          "$ref": "3/0/properties/title"
+                        },
+                        "bookmarkable": {
+                          "$ref": "3/0/properties/bookmarkable"
+                        },
+                        "block_type": {
+                          "type": "string",
+                          "const": "reflection_rubric"
+                        },
+                        "prompt": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "self_check_criteria": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "minItems": 1
+                        },
+                        "model_answer": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "block_type",
+                        "prompt",
+                        "self_check_criteria",
+                        "model_answer"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "$ref": "3/0/properties/id"
+                        },
+                        "title": {
+                          "$ref": "3/0/properties/title"
+                        },
+                        "bookmarkable": {
+                          "$ref": "3/0/properties/bookmarkable"
+                        },
+                        "block_type": {
+                          "type": "string",
+                          "const": "feynman_prompt"
+                        },
+                        "concept": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "prompt": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "target_audience": {
+                          "type": "string",
+                          "default": "a high school student with no background in this topic"
+                        },
+                        "key_points_to_cover": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "block_type",
+                        "concept",
+                        "prompt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "$ref": "3/0/properties/id"
+                        },
+                        "title": {
+                          "$ref": "3/0/properties/title"
+                        },
+                        "bookmarkable": {
+                          "$ref": "3/0/properties/bookmarkable"
+                        },
+                        "block_type": {
+                          "type": "string",
+                          "const": "quiz_question"
+                        },
+                        "question_type": {
+                          "type": "string",
+                          "enum": [
+                            "multiple_choice",
+                            "multi_select",
+                            "fill_in_the_blank",
+                            "code_output",
+                            "short_answer"
+                          ]
+                        },
+                        "question": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "options": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "correct_answer": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          ]
+                        },
+                        "explanation": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "hints": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "difficulty": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 5,
+                          "default": 3
+                        },
+                        "related_block_id": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "block_type",
+                        "question_type",
+                        "question",
+                        "correct_answer",
+                        "explanation",
+                        "related_block_id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "$ref": "3/0/properties/id"
+                        },
+                        "title": {
+                          "$ref": "3/0/properties/title"
+                        },
+                        "bookmarkable": {
+                          "$ref": "3/0/properties/bookmarkable"
+                        },
+                        "block_type": {
+                          "type": "string",
+                          "const": "flashcard"
+                        },
+                        "front": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "back": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "hint": {
+                          "type": "string"
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "block_type",
+                        "front",
+                        "back"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "minItems": 1
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "blocks"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "phases": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "3/sections/items/properties/blocks/items"
+            }
+          }
+        },
+        "folder": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "description",
+        "estimated_minutes"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

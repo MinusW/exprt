@@ -1,0 +1,226 @@
+{
+  "id": "sye-te1-exam-supplement",
+  "title": "SYE TE1 Exam Supplement: High-Yield Traps, Trace Diagrams & 2-Pipe IPC",
+  "description": "Targeted supplement covering subtle TE1 exam concepts: mode switch vs. context switch, single syscall vector, timer IRQ software flow, multi-fork() sequence tracing, multi-threaded memory maps, and bidirectional 2-pipe IPC.",
+  "estimated_minutes": 60,
+  "category": "Operating Systems",
+  "track": "SYE - Operating Systems",
+  "track_order": 2,
+  "difficulty_level": "intermediate",
+  "tags": [
+    "operating-systems",
+    "sye",
+    "te1",
+    "exam-prep",
+    "fork",
+    "pipes",
+    "memory-layout",
+    "interrupts"
+  ],
+  "prerequisites": [
+    "sye-te1-complete-study-guide"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "C2: Hardware Architectures & OS",
+      "url_or_path": "sources/SYE-TE1/20240922_7_SYE_C2_Hardware_Architectures_OS.pdf",
+      "notes": "IRQ handling, mode switches vs context switches"
+    },
+    {
+      "title": "C3: Syscalls, Binary Image & Processes",
+      "url_or_path": "sources/SYE-TE1/20250926_SYE_C3_Syscalls_process.pdf",
+      "notes": "Single syscall interrupt vector, object code vs executable, memory sections"
+    },
+    {
+      "title": "C4: Process Syscalls & Context Switch",
+      "url_or_path": "sources/SYE-TE1/20250926_SYE_C4_Process_syscalls_context_switch.pdf",
+      "notes": "fork, waitpid, exit, zombie/orphan lifecycle"
+    },
+    {
+      "title": "C5: Process States & POSIX Threads",
+      "url_or_path": "sources/SYE-TE1/261009_SYE_C5_States_threads.pdf",
+      "notes": "Multi-threaded stacks and shared heap/bss/data"
+    },
+    {
+      "title": "C6: IPC & Pipes",
+      "url_or_path": "sources/SYE-TE1/20251010_SYE_C6_IPC_pipes.pdf",
+      "notes": "Unidirectional pipes and bidirectional 2-pipe pattern"
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-supp-traps",
+      "title": "1. Interrupt, Mode Switch & Process State Exam Traps",
+      "description": "Clarifying the exact distinctions tested in True/False and short-answer questions.",
+      "blocks": [
+        {
+          "id": "th-supp-mode-vs-context",
+          "block_type": "markdown",
+          "title": "Trap #1: Mode Switch ≠ Context Switch",
+          "content": "A **CPU mode switch** (User $\\rightarrow$ Kernel $\\rightarrow$ User) does **NOT** automatically cause a **context switch**!\n\n- When a running process invokes a syscall (e.g., `getpid()` or `write()`) or is briefly interrupted by an IRQ, the CPU switches to **Kernel Mode**, handles the request, and—if no preemption or blocking occurs—returns to **the exact same process** in User Mode.\n- **No PCB swap, no MMU reconfiguration, no cache flush** happened, so **no context switch** took place.\n- A context switch only happens if the kernel decides to switch to a **different** process (`schedule()`).",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-supp-timer-software",
+          "block_type": "markdown",
+          "title": "Trap #2: What Happens at the Software Level on a Timer IRQ?",
+          "content": "When the hardware timer fires an IRQ:\n1. **Kernel Level:** CPU enters Kernel Mode and jumps to the **Timer ISR**. The ISR acknowledges the timer IRQ, updates system time / decrements the current process's time quantum, and calls the **scheduler (`schedule()`)**.\n   - If the quantum expired (or a higher-priority `Ready` process exists), the kernel performs a **context switch**: outgoing process transitions `Running -> Ready` (state saved in its PCB), and the next `Ready` process transitions `Ready -> Running`.\n2. **User Level:** The interrupted user process is **completely unaware** it was paused and later resumes from the exact instruction (`PC`) where it stopped.",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-supp-syscall-vector-and-obj",
+          "block_type": "markdown",
+          "title": "Trap #3: Single Syscall Vector, Software Interrupts & Object Code",
+          "content": "### Three Categories of Software Interrupts\n1. **Intentional syscall instruction:** `svc` / `swi` (ARM), `int 0x80` / `sysenter` (x86), `syscall` (MIPS).\n2. **Arithmetic / execution exceptions:** Division by zero, illegal instruction.\n3. **Memory / alignment faults:** Invalid memory access (segmentation fault), unaligned data access.\n\n### Single Syscall Interrupt Vector\n- All system calls share **one** dedicated software interrupt vector (e.g., `int 0x80` on x86, `svc` on ARM). The kernel distinguishes *which* syscall to run by reading the **syscall number** from a register (e.g., `R7` on ARM SO3).\n\n### Object Code vs. Executable Binary\n- **Object code (`.o`)** is **NOT** executable! It contains machine code with **unresolved symbolic addresses** (e.g., `printf`). Only after the **linker** resolves symbols against libraries (`libc.a`) and adds C runtime startup (`crt`) do we get an **executable binary** (ELF / PE / Mach-O).\n\n### Can an Orphan Process Become a Zombie?\n- **YES!** When a child's original parent dies first, the child becomes an **orphan** and is reparented to `init` (`PID 1`). Later, when that orphan calls `exit()`, it enters the **`Zombie`** state until `init` calls `waitpid()` to collect its status and free its PCB.",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-supp-fork-tracing",
+      "title": "2. Tracing Multi-fork() + waitpid() Loops & Sequence Diagrams",
+      "description": "Step-by-step method to trace nested or looped fork() calls, draw sequence diagrams, and track count/res/exit codes.",
+      "blocks": [
+        {
+          "id": "th-supp-fork-method",
+          "block_type": "markdown",
+          "title": "How to Trace a fork() + waitpid() Loop Without Mistakes",
+          "content": "In TE1 exams, tracing a `for` loop containing `fork()` and `waitpid()` is often worth **10+ points**. Follow this systematic 4-step method:\n\n1. **Track each process's state tuple:** `(ProcessName, i, count, res)`.\n2. **Remember `fork()` duplication:** The child inherits the **exact current values** of `i`, `count`, `res`, and continues at the line immediately after `fork()` with `pid == 0`.\n3. **Remember `waitpid(pid, &res, ...)`:** The parent **blocks** (`Waiting`) until that specific child calls `exit(status)`.\n   - *SYE/SO3 simplified exam convention:* `res` receives the child's `exit(code)` value directly (whereas real POSIX packs it so you use `WEXITSTATUS(res)`).\n4. **Draw the Sequence Diagram:** Draw one vertical lifeline per process (`P0`, `P1`, `P2`, ...). Show `fork()` arrows creating lifelines, `waitpid()` blocking bars, `printf()` events, and `exit()` arrows waking the parent.",
+          "bookmarkable": true
+        },
+        {
+          "id": "diag-supp-fork-loop",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Example Trace: 2-Iteration fork() + waitpid() Loop",
+          "caption": "Every parent waits for its immediate child before continuing the loop, making execution order deterministic.",
+          "source": "sequenceDiagram\n  participant P0 as P0 (i=0, cnt=0)\n  P0->>+P1: fork() [i=0, cnt=0->1]\n  Note over P0: waitpid(P1) [Waiting]\n  P1->>+P2: fork() [i=1, cnt=1->2]\n  Note over P1: waitpid(P2) [Waiting]\n  Note over P2: i=2 ends loop -> printf(2+0=2)\n  P2-->>-P1: exit(2) -> res=2\n  Note over P1: printf(1+2=3)\n  P1-->>-P0: exit(1) -> res=1\n  Note over P0: i=1: forks P3\n  P0->>+P3: fork() [i=1, cnt=0->1]\n  Note over P0: waitpid(P3) [Waiting]\n  Note over P3: printf(1+0=1)\n  P3-->>-P0: exit(1) -> res=1\n  Note over P0: printf(0+1=1) -> exit(0)",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-supp-thread-memory",
+      "title": "3. Multi-Threaded Process Memory Map & Variable Placement",
+      "description": "Where globals, malloc() buffers, and thread-local variables live when a process spawns multiple pthreads.",
+      "blocks": [
+        {
+          "id": "th-supp-thread-mem-map",
+          "block_type": "markdown",
+          "title": "Mapping Every C Variable to Its Exact Memory Section",
+          "content": "When drawing a process's virtual address space with multiple threads (`main`, `T1`, `T2`), remember:\n\n| C Declaration | Memory Section | Shared Across Threads? | Shared Across `fork()`? |\n| :--- | :--- | :--- | :--- |\n| `int tids[10];` (uninitialized global) | **`.bss`** | Yes | No (copied on `fork()`) |\n| `int x = 5;` (initialized global) | **`.data`** | Yes | No (copied on `fork()`) |\n| `packet = malloc(65536);` | **Heap** (`packet` ptr in `.bss`, buffer in Heap) | **Yes!** (Race condition if threads write without lock!) | No (copied on `fork()`) |\n| `int gw_len = 3;` (local inside thread fn) | **Each thread's own Stack** (`Stack T1`, `Stack T2`) | **No!** Private per thread | No |\n\n> [!TIP]\n> **Drawing Rule for Exams:** Always draw **multiple separate Stacks** at the top (high addresses)—one for `main` and one for each spawned thread (`T1`, `T2`, ...)—with free space between them and the upward-growing **Heap**.",
+          "bookmarkable": true
+        },
+        {
+          "id": "diag-supp-mt-mem",
+          "block_type": "kroki",
+          "diagram_type": "graphviz",
+          "title": "Multi-Threaded Process Memory Layout (main + T1 + T2)",
+          "caption": "Each thread gets its own Stack at high addresses, while Heap, .bss, .data, and .text are shared.",
+          "source": "digraph MTMem {\n  rankdir=TB;\n  node [fontname=\"Helvetica\", shape=record, style=\"filled\"];\n  Mem [label=\"{Stack (main) — pid, status, i | Stack (T1) — gw_len, arg | Stack (T2) — gw_len, arg | Free Virtual Space | Heap (grows UP ↑) — 65536B packet buffer | .bss — uninitialized globals (packet ptr, tids[]) | .data — initialized globals & string literals | .text — main(), handle_packet()}\", fillcolor=\"#f8fafc\", color=\"#475569\"];\n}",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-supp-two-pipes",
+      "title": "4. Bidirectional IPC Using Two Anonymous Pipes",
+      "description": "Why a single pipe cannot safely do round-trip A -> B -> A communication, and how to wire two pipes cleanly.",
+      "blocks": [
+        {
+          "id": "th-supp-two-pipes-why",
+          "block_type": "markdown",
+          "title": "Why You Need TWO Pipes for Round-Trip Communication",
+          "content": "Anonymous pipes (`pipe()`) are **unidirectional**. If Process A writes to a single pipe and Process B writes back to the *same* pipe, Process A could accidentally read its own data back before Process B wakes up!\n\n### The 2-Pipe Pattern (`p_a2b` & `p_b2a`)\n1. Create **two** pipes before `fork()`: `pipe(p_a2b)` and `pipe(p_b2a)`.\n2. **In Process A (parent):**\n   - Close `p_a2b[0]` (doesn't read A->B) and `p_b2a[1]` (doesn't write B->A).\n   - `write(p_a2b[1], buffer, len)` $\\rightarrow$ `read(p_b2a[0], buffer_aux, len)` $\\rightarrow$ close remaining FDs $\\rightarrow$ `waitpid()`.\n3. **In Process B (child):**\n   - Close `p_a2b[1]` (doesn't write A->B) and `p_b2a[0]` (doesn't read B->A).\n   - `read(p_a2b[0], buffer_aux, ...)` $\\rightarrow$ `write(p_b2a[1], buffer_aux, n)` $\\rightarrow$ close remaining FDs $\\rightarrow$ `exit(0)`.",
+          "bookmarkable": true
+        },
+        {
+          "id": "exp-supp-two-pipes-starter",
+          "block_type": "code",
+          "title": "Practice: Complete the 2-Pipe Round-Trip Function",
+          "language": "c",
+          "filename": "two_pipes_starter.c",
+          "code": "#include <unistd.h>\n#include <stdlib.h>\n#include <sys/wait.h>\n\nvoid pipe_buffer(char *buffer, int len) /* len < 500 < MAX_PIPE_ATOMIC_BUF */\n{\n    unsigned char buffer_aux[500];\n    int p_a2b[2], p_b2a[2];\n    int pid, status;\n\n    /* TODO: 1. Create both pipes, then fork() */\n    /* TODO: 2. Child (B): close unused ends, read from p_a2b[0] into buffer_aux, write back to p_b2a[1], exit(0) */\n    /* TODO: 3. Parent (A): close unused ends, write buffer to p_a2b[1], read reply from p_b2a[0] into buffer_aux, waitpid() */\n}",
+          "highlight_lines": [
+            11,
+            12,
+            13
+          ],
+          "annotations": [
+            {
+              "line": 11,
+              "note": "Both pipes must be created BEFORE fork()."
+            },
+            {
+              "line": 12,
+              "note": "Always close the two unused pipe ends in each process."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-supp-two-pipes-check",
+          "block_type": "reflection_rubric",
+          "title": "Check Your 2-Pipe Round-Trip Solution",
+          "prompt": "Draft the complete body of `pipe_buffer(char *buffer, int len)` before revealing the model answer.",
+          "self_check_criteria": [
+            "Created both p_a2b and p_b2a before fork().",
+            "Closed p_a2b[1] and p_b2a[0] in child; closed p_a2b[0] and p_b2a[1] in parent.",
+            "Child reads from p_a2b[0] into buffer_aux, writes n bytes to p_b2a[1], closes remaining FDs, and calls exit(0).",
+            "Parent writes len bytes to p_a2b[1], reads reply from p_b2a[0] into buffer_aux, closes remaining FDs, and calls waitpid()."
+          ],
+          "model_answer": "pipe(p_a2b); pipe(p_b2a); pid = fork(); if (pid == 0) { close(p_a2b[1]); close(p_b2a[0]); int n = read(p_a2b[0], buffer_aux, sizeof(buffer_aux)); write(p_b2a[1], buffer_aux, n); close(p_a2b[0]); close(p_b2a[1]); exit(0); } else { close(p_a2b[0]); close(p_b2a[1]); write(p_a2b[1], buffer, len); read(p_b2a[0], buffer_aux, sizeof(buffer_aux)); close(p_a2b[1]); close(p_b2a[0]); waitpid(pid, &status, 0); }",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-supp-quiz",
+      "title": "5. Quick Check: Exam Traps",
+      "description": "Verify you have mastered the subtle distinctions from the supplement.",
+      "blocks": [
+        {
+          "id": "qz-supp-mode-switch",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-supp-mode-vs-context",
+          "title": "Mode Switch vs. Context Switch",
+          "question": "True or False: Every CPU mode switch (User Mode $\\rightarrow$ Kernel Mode) automatically triggers a process context switch.",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct_answer": "False",
+          "explanation": "False! If a process makes a syscall or is briefly interrupted by an IRQ and the kernel returns control to the *same* process, a mode switch occurred without any context switch.",
+          "hints": [
+            "Does calling getpid() switch to a different process?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-supp-gw-len",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-supp-thread-mem-map",
+          "title": "Variable Placement in Multi-Threaded Process",
+          "question": "In a multi-threaded C program, `int gw_len = 3;` is declared inside `void *handle_packet(void *arg)`. Where is `gw_len` stored?",
+          "options": [
+            "On each thread's own private Stack",
+            "In the shared .data section",
+            "In the shared .bss section",
+            "On the shared Heap"
+          ],
+          "correct_answer": "On each thread's own private Stack",
+          "explanation": "Local variables inside a function are allocated on the Stack. Since each thread has its own private Stack, each thread running `handle_packet()` gets its own independent `gw_len`.",
+          "hints": [
+            "Is gw_len a global variable, a malloc() allocation, or a local variable?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,117 @@
+{
+  "id": "pco-ch3-critical-sections",
+  "title": "Chapter 3: Critical Sections — Where & When?",
+  "description": "Diagnosing when shared global variables require mutual exclusion: atomic vs. compound writes, structs, read-modify-write (var++), floats/doubles, std::vector<bool>, and multi-core cache hazards.",
+  "estimated_minutes": 30,
+  "category": "Concurrent Programming",
+  "track": "PCO - Programmation Concurrente (TE1)",
+  "track_order": 3,
+  "difficulty_level": "intermediate",
+  "tags": [
+    "pco",
+    "critical-section",
+    "data-race",
+    "atomicity",
+    "multicore",
+    "vector-bool"
+  ],
+  "prerequisites": [
+    "pco-ch2-context-switching"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "PCO Chapter 3: Section critique: Où et quand?",
+      "url_or_path": "sources/PCO-TE1/PCO_3_sectioncritique.pdf",
+      "notes": "Slides 1-17: 12 concrete C++ concurrent access scenarios and multi-core cache synchronization conclusion."
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-single-core-scenarios",
+      "title": "1. Analyzing Concurrent Access Scenarios (Single-Core)",
+      "description": "Evaluating when data corruption can occur on a single-core CPU.",
+      "blocks": [
+        {
+          "id": "th-sc-goal",
+          "block_type": "markdown",
+          "title": "What Are We Protecting Against?",
+          "bookmarkable": true,
+          "content": "In `PCO_3_sectioncritique.pdf`, we examine **12 concrete C++ scenarios** on a **single-core CPU** (*processeur simple cœur*), asking:\n\n> *Is mutual exclusion required to avoid **data corruption** or **broken behavior** (ignoring instruction ordering)?*\n\n### Category A: Simple `int` Writes & Reads (Slides 5–6, 13)\n* **Case 1:** `TacheA: var = a;` and `TacheB: var = b;` (`static int var;`). On a 32-bit/64-bit CPU, a single aligned `int` store is one machine instruction—`var` ends up holding either `a` or `b` (never half-`a`, half-`b`).\n* **Case 2:** `taskA: var = a;` and `taskB: b = var;`. Similarly, `b` reads either the old or new `var`.\n\n### Category B: Compound Data & Read-Modify-Write (Slides 7–12)\n* **Case 3 & 4 (`struct_t var` with `var.a`, `var.b`):** Writing/reading two fields is **not atomic**! A context switch between `var.a = a` and `var.b = b` causes **torn structs** (mixing `TacheA`'s `a` with `TacheB`'s `b`). **Needs mutual exclusion!**\n* **Case 5 (`var++` vs `var++`):** `var++` compiles to 3 instructions (`load`, `add 1`, `store`). Interleaving loses updates! **Needs mutual exclusion!**\n* **Case 6 (`var++` vs `b = var`):** `b` reads a valid integer (before or after increment), though in C++ a data race is still Undefined Behavior.\n* **Case 7 (`TacheA: var++`, `TacheB: var++`, `TacheC: c = var`):** Both `var++` tasks corrupt each other -> **Needs mutual exclusion!**\n* **Case 8 (`taskA: var++`, `taskB: if (b > 10) var = 0; else var++;`):** Both modify `var` non-atomically -> **Needs mutual exclusion!**"
+        },
+        {
+          "id": "th-sc-hidden-traps",
+          "block_type": "markdown",
+          "title": "Hidden Non-Atomic Traps: `double` & `std::vector<bool>`",
+          "bookmarkable": true,
+          "content": "Even seemingly innocent single-line assignments can corrupt data on a single core:\n\n| Scenario | Safe on 32-bit Single-Core? | Why? |\n| :--- | :---: | :--- |\n| `static float var;` (`var = a` / `var = b`) | Depends on arch (usually 32-bit) | A 32-bit `float` fits in a single 32-bit bus transfer. |\n| `static double var;` (`var = a` / `var = b`) | **NO (on 32-bit CPU)** | A 64-bit `double` requires **two** 32-bit memory writes! A preemption mid-write produces a **corrupted half-old, half-new `double`**. |\n| `std::vector<bool> vec;` (`vec[0] = a` / `vec[1] = b` or `vec[0] = b`) | **NO** | `std::vector<bool>` packs 8 booleans into **1 byte** (bitfield)! Modifying `vec[0]` performs a **read-modify-write** on the entire byte, clobbering adjacent bits! |"
+        },
+        {
+          "id": "diag-vector-bool-trap",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Why std::vector<bool> Causes Data Races",
+          "caption": "Even writing to DIFFERENT indices (vec[0] and vec[1]) in std::vector<bool> is a race condition because both share the same underlying byte.",
+          "source": "graph LR\n  Byte[\"Shared Byte in Memory (8 bits)\"]\n  TA[\"Thread A: vec[0] = true\\n1. Read byte\\n2. Set bit 0\\n3. Write byte\"]\n  TB[\"Thread B: vec[1] = true\\n1. Read byte\\n2. Set bit 1\\n3. Write byte\"]\n  Byte -->|read| TA\n  Byte -->|read| TB\n  TA -->|clobbers bit 1!| Byte\n  TB -->|clobbers bit 0!| Byte\n  classDef warn fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px;\n  class Byte,TA,TB warn;",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-multicore-golden-rule",
+      "title": "2. Multi-Core Caches & The Golden Rule",
+      "description": "Why single-core assumptions collapse on multi-core hardware.",
+      "blocks": [
+        {
+          "id": "th-multicore-caches",
+          "block_type": "markdown",
+          "title": "Multi-Core Processors & Cache Coherency",
+          "bookmarkable": true,
+          "content": "Even if an operation looks single-instruction on a single core, **modern processors are multi-core**:\n\n* **Private Core Caches:** Each CPU core has its own local L1/L2 cache.\n* **No Automatic Sync Without Synchronization:** Nothing forces cores to immediately flush/synchronize caches unless explicit synchronization primitives (mutexes, atomics, memory barriers) are used.\n* **C++ Standard:** Concurrent unsynchronized read/write (or write/write) to the same memory location is a **Data Race = Undefined Behavior**.\n\n> [!CAUTION]\n> **The Golden Rule of PCO (Slide 17):**\n> *\"Dans le doute... **Protégez tous les accès concurrents !**\"* (When in doubt, protect **all** concurrent accesses!)"
+        },
+        {
+          "id": "qz-ch3-double-trap",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-sc-hidden-traps",
+          "question": "Why can `static double var; var = a;` (executed concurrently by two threads) corrupt `var` on a 32-bit single-core CPU?",
+          "options": [
+            "A 64-bit `double` requires two 32-bit memory writes, so a context switch between them produces a torn value.",
+            "Floating-point registers are shared across all threads in the same process.",
+            "C++ `double` variables are always stored on the stack, not in the data segment.",
+            "A `double` cannot be stored in a global variable."
+          ],
+          "correct_answer": "A 64-bit `double` requires two 32-bit memory writes, so a context switch between them produces a torn value.",
+          "explanation": "On a 32-bit architecture, writing a 64-bit `double` takes two separate 32-bit store instructions. If a preemption occurs between the first and second store, `var` ends up with 32 bits from Thread A and 32 bits from Thread B (a torn, corrupted floating-point value).",
+          "hints": [
+            "How many bits wide is a `double` compared to a 32-bit CPU bus?",
+            "What happens if a context switch occurs halfway through writing a 64-bit value?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch3-vector-bool",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-sc-hidden-traps",
+          "question": "Why is concurrent modification of `std::vector<bool>` dangerous even when Thread A only writes `vec[0]` and Thread B only writes `vec[1]`?",
+          "options": [
+            "`std::vector<bool>` packs multiple booleans as bits inside the same byte, requiring a non-atomic read-modify-write of that byte.",
+            "`std::vector<bool>` allocates each boolean on a separate heap page.",
+            "`std::vector<bool>` is immutable after construction.",
+            "Each `bool` in `std::vector<bool>` is 64 bits wide."
+          ],
+          "correct_answer": "`std::vector<bool>` packs multiple booleans as bits inside the same byte, requiring a non-atomic read-modify-write of that byte.",
+          "explanation": "`std::vector<bool>` is a space-optimized specialization that stores 8 booleans per byte. Setting `vec[0]` reads the whole byte, flips bit 0, and writes the whole byte back—potentially overwriting Thread B's concurrent update to bit 1 (`vec[1]`).",
+          "hints": [
+            "How does `std::vector<bool>` optimize memory usage in C++?",
+            "Can a CPU write a single bit in RAM without reading and writing the surrounding byte?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    }
+  ]
+}

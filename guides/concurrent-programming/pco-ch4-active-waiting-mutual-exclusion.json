@@ -1,0 +1,152 @@
+{
+  "id": "pco-ch4-active-waiting-mutual-exclusion",
+  "title": "Chapter 4: Mutual Exclusion by Active Waiting",
+  "description": "Critical resources, counter++ race condition (minimum value = 2), the 4 mutual exclusion rules, Dekker & Peterson algorithms, multi-core memory barriers, and active vs. passive waiting.",
+  "estimated_minutes": 45,
+  "category": "Concurrent Programming",
+  "track": "PCO - Programmation Concurrente (TE1)",
+  "track_order": 4,
+  "difficulty_level": "intermediate",
+  "tags": [
+    "pco",
+    "mutual-exclusion",
+    "dekker",
+    "peterson",
+    "active-waiting",
+    "deadlock",
+    "starvation",
+    "memory-barrier"
+  ],
+  "prerequisites": [
+    "pco-ch3-critical-sections"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "PCO Chapter 3: Exclusion mutuelle par attente active",
+      "url_or_path": "sources/PCO-TE1/PCO_3_exclusion.pdf",
+      "notes": "Slides 1-35: Critical resources, counter++ interleaving, 4 properties, 4 failed attempts, Dekker, Peterson, memory barriers, final exercise."
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-critical-resource-race",
+      "title": "1. Critical Resources & The `counter++` Race Condition",
+      "description": "How machine-level load/add/store interleaving causes lost updates.",
+      "blocks": [
+        {
+          "id": "th-counter-race",
+          "block_type": "markdown",
+          "title": "Anatomy of a Lost Update (`counter = counter + 1`)",
+          "bookmarkable": true,
+          "content": "A **critical resource** (*ressource critique*) is a non-shareable resource accessed by multiple tasks (e.g., a global variable or a physical peripheral). The code accessing it is a **critical section** (*section critique*), bracketed by an **entry protocol** (*prélude*) and an **exit protocol** (*postlude*).\n\nWhen two threads each run `counter = counter + 1` $N = 1\\,000\\,000$ times, the statement compiles to three machine instructions:\n```asm\nmov counter, r1   ; 1. Load shared counter into private register r1\naddi 1, r1        ; 2. Increment local register r1\nmov r1, counter   ; 3. Store r1 back to shared counter\n```\nIf a context switch happens after step 1, both threads read the **same** value, increment it locally, and overwrite each other—causing **lost updates**.\n\n> [!IMPORTANT]\n> **Classic Exam Question:** With 2 threads each looping $1\\,000\\,000$ times, what is the **theoretical minimum** final value of `counter`? **Answer: `2`** (not `1,000,000`!).\n> *How?* T1 loads `0`, gets preempted. T2 runs $999\\,999$ iterations (`counter = 999,999`). T1 resumes and writes `1` (wiping out $999\\,999$!). T2 loads `1`, gets preempted. T1 finishes its remaining $999\\,999$ iterations, then T2 resumes and writes `2`!"
+        },
+        {
+          "id": "th-four-properties",
+          "block_type": "markdown",
+          "title": "The 4 Rules of a Valid Mutual Exclusion Algorithm",
+          "bookmarkable": true,
+          "content": "1. **Mutual Exclusion (*Exclusion mutuelle*):** At any instant, at most **one** task may be in the critical section.\n2. **No Deadlock (*Absence d'interblocage / Liveness*):** If tasks are waiting to enter and no task is inside, one waiting task must enter in finite time.\n3. **Independence (*Pas de couplage*):** A task's behavior outside the critical section (e.g., crashing/stopping in the non-critical section) must **never** block other tasks.\n4. **Symmetry & Fairness (*Pas de famine / Starvation*):** No task plays a privileged role, and no waiting task is starved indefinitely."
+        }
+      ]
+    },
+    {
+      "id": "sec-naive-attempts",
+      "title": "2. Why Naive Attempts Fail (Attempts 1–4)",
+      "description": "Diagnosing each classic failure mode: broken exclusion, strict coupling, and deadlock.",
+      "blocks": [
+        {
+          "id": "th-attempts-table",
+          "block_type": "markdown",
+          "title": "Summary of the 4 Failed Attempts (PCO_3_exclusion.pdf)",
+          "bookmarkable": true,
+          "content": "| Attempt | Mechanism | What Goes Wrong? |\n| :--- | :--- | :--- |\n| **1. `bool occupe`** | `while (occupe); occupe = true;` | **No Mutual Exclusion!** Both threads can see `occupe == false` before either sets `occupe = true`. |\n| **2. `int tour`** | `while (tour != 0); ... tour = 1;` | **Strict Alternation / Coupling!** If `T0` stops outside the CS, `T1` is blocked forever waiting for `tour = 1`. |\n| **3. `bool etat[2]` (check then set)** | `while (etat[1]); etat[0] = true;` | **No Mutual Exclusion!** Both see `etat[other] == false` and enter simultaneously. |\n| **4. `bool etat[2]` (set then check)** | `etat[0] = true; while (etat[1]);` | **Deadlock (*Interblocage*)!** Both set `etat[i] = true` simultaneously, then spin forever waiting for the other. |\n| **4b. Set, yield if busy** | Reset `etat[0] = false` inside `while (etat[1])` | **Livelock / Starvation (*Famine*)!** Both can infinitely set, clear, and retry in lockstep. |"
+        }
+      ]
+    },
+    {
+      "id": "sec-dekker-peterson",
+      "title": "3. Dekker's & Peterson's Algorithms + Multi-Core Barriers",
+      "description": "How Dekker and Peterson achieve software mutual exclusion, and why multi-core CPUs need memory fences.",
+      "blocks": [
+        {
+          "id": "code-peterson",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Peterson's Algorithm (Single-Core vs. Multi-Core)",
+          "filename": "peterson.cpp",
+          "code": "#define BARRIER std::atomic_thread_fence(std::memory_order_acq_rel)\n\nbool intention[2] = {false, false};\nint tour = 0; // ou 1\n\nvoid T0() {\n    while (true) {\n        intention[0] = true;\n        tour = 1;\n        BARRIER; // Required on multi-core!\n        while (intention[1] && tour == 1)\n            ;\n        /* section critique */\n        intention[0] = false;\n        /* section non-critique */\n    }\n}",
+          "highlight_lines": [8, 9, 10, 11],
+          "annotations": [
+            {
+              "line": 8,
+              "note": "Announce intention to enter."
+            },
+            {
+              "line": 9,
+              "note": "Politely yield priority to the other thread (tour = 1)."
+            },
+            {
+              "line": 10,
+              "note": "Memory barrier prevents CPU/compiler reordering and forces cache visibility across cores."
+            },
+            {
+              "line": 11,
+              "note": "Wait ONLY if the other thread wants in AND it is the other thread's turn."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "th-active-vs-passive",
+          "block_type": "markdown",
+          "title": "Active Waiting vs. Passive Waiting",
+          "bookmarkable": true,
+          "content": "* **Active Waiting (*Attente active*):** The thread wastes CPU cycles spinning in a `while (...) ;` loop testing a condition (e.g., Dekker, Peterson).\n* **Passive Waiting (*Attente passive*):** The OS kernel suspends the waiting thread (`bloqué`), freeing the CPU for other ready threads. Requires kernel-supported primitives: **Mutexes**, **Semaphores**, and **Monitors**."
+        },
+        {
+          "id": "qz-ch4-min-counter",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-counter-race",
+          "question": "Two threads each increment a shared `static int counter = 0;` `1,000,000` times without synchronization (`counter = counter + 1`). What is the theoretical minimum possible final value of `counter`?",
+          "options": [
+            "2",
+            "1",
+            "500,000",
+            "1,000,000"
+          ],
+          "correct_answer": "2",
+          "explanation": "Through adversarial context switching between `mov counter, r1` and `mov r1, counter`, T1 can load 0, let T2 run 999,999 times, overwrite counter with 1, let T2 load 1, finish T1's remaining 999,999 iterations, and then T2 writes 2.",
+          "hints": [
+            "Consider what happens if T1 loads `counter = 0` into `r1` and is preempted before writing it back.",
+            "Can the same trick be repeated once more on T2's final iteration?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch4-barriers",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "code-peterson",
+          "question": "Why do Dekker's and Peterson's algorithms fail on modern multi-core CPUs unless a memory barrier (`std::atomic_thread_fence`) is added?",
+          "options": [
+            "CPU cache coherency delays and out-of-order memory access reordering can allow both threads to read stale values and enter the critical section simultaneously.",
+            "C++ `bool` variables are not supported on multi-core processors.",
+            "Multi-core processors cannot execute `while` loops.",
+            "The `tour` variable overflows when two cores access it."
+          ],
+          "correct_answer": "CPU cache coherency delays and out-of-order memory access reordering can allow both threads to read stale values and enter the critical section simultaneously.",
+          "explanation": "Each core has its own store buffer and cache, and compilers/CPUs reorder independent loads and stores. `std::atomic_thread_fence(std::memory_order_acq_rel)` ensures all prior loads/stores complete and are visible before subsequent loads/stores.",
+          "hints": [
+            "What happens if Core 0 writes `intention[0] = true` to its local store buffer while reading `intention[1]` from cache?",
+            "What does `std::atomic_thread_fence(std::memory_order_acq_rel)` guarantee?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    }
+  ]
+}

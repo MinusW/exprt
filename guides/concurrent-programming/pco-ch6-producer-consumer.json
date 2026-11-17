@@ -1,0 +1,108 @@
+{
+  "id": "pco-ch6-producer-consumer",
+  "title": "Chapter 6: The Producer-Consumer Problem",
+  "description": "Synchronizing producers and consumers over single-slot (Buffer1a) and circular N-slot buffers (BufferNa and optimized BufferN with passing-the-baton), plus semaphore ordering and splitting exercises.",
+  "estimated_minutes": 45,
+  "category": "Concurrent Programming",
+  "track": "PCO - Programmation Concurrente (TE1)",
+  "track_order": 6,
+  "difficulty_level": "intermediate",
+  "tags": [
+    "pco",
+    "producer-consumer",
+    "circular-buffer",
+    "semaphore",
+    "passing-the-baton"
+  ],
+  "prerequisites": [
+    "pco-ch5-locks-and-semaphores"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "PCO Chapter 5: Producteurs-consommateurs",
+      "url_or_path": "sources/PCO-TE1/PCO_5_prodcons.pdf",
+      "notes": "Slides 1-29: Constraints, AbstractBuffer, Buffer1a, BufferNa, optimized BufferN, Exercises 1 & 2."
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-prodcons-problem",
+      "title": "1. Problem Statement & Single-Slot Buffer (`Buffer1a`)",
+      "description": "The 3 fundamental constraints and the 2-semaphore single-slot solution.",
+      "blocks": [
+        {
+          "id": "th-prodcons-constraints",
+          "block_type": "markdown",
+          "title": "The 3 Producer-Consumer Constraints",
+          "bookmarkable": true,
+          "content": "Producers call `buffer->put(item)` and consumers call `buffer->get()` on a shared `AbstractBuffer<T>`:\n\n1. **Consume Once:** Every item in the buffer is consumed **at most once**.\n2. **FIFO Order:** Items are consumed in the **exact order** they were produced.\n3. **No Premature Overwrite:** If the buffer is full, a producer must wait until a slot is freed; if empty, a consumer must wait until an item is deposited.\n\n### Single-Slot Buffer (`Buffer1a`, size = 1)\nTwo semaphores maintain the invariant `waitEmpty + waitFull = 1`:\n* `waitEmpty(1)` — `1` when the slot is empty (producer can write)\n* `waitFull(0)` — `1` when the slot is full (consumer can read)\n\n```cpp\nvoid put(T item) override {\n    waitEmpty.acquire();\n    element = item;\n    waitFull.release();\n}\nT get() override {\n    T item;\n    waitFull.acquire();\n    item = element;\n    waitEmpty.release();\n    return item;\n}\n```"
+        }
+      ]
+    },
+    {
+      "id": "sec-circular-buffer",
+      "title": "2. Circular N-Slot Buffer (`BufferNa` vs. Optimized `BufferN`)",
+      "description": "Managing writePointer, readPointer, mutual exclusion, and passing the baton.",
+      "blocks": [
+        {
+          "id": "diag-circular-buffer",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Circular Buffer & BufferNa Synchronization Flow",
+          "caption": "BufferNa uses waitNotFull(size) and waitNotEmpty(0) for capacity/item counting, plus mutex(1) to protect writePointer, readPointer, and elements[].",
+          "source": "graph LR\n  Prod[\"Producer: put(item)\"] --> WNF[\"waitNotFull.acquire()\"]\n  WNF --> M1[\"mutex.acquire()\"]\n  M1 --> Write[\"elements[writePointer] = item\\nwritePointer = (writePointer + 1) % size\"]\n  Write --> R1[\"waitNotEmpty.release()\"]\n  R1 --> U1[\"mutex.release()\"]\n\n  Cons[\"Consumer: get()\"] --> WNE[\"waitNotEmpty.acquire()\"]\n  WNE --> M2[\"mutex.acquire()\"]\n  M2 --> Read[\"item = elements[readPointer]\\nreadPointer = (readPointer + 1) % size\"]\n  Read --> R2[\"waitNotFull.release()\"]\n  R2 --> U2[\"mutex.release()\"]\n  classDef sem fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px;\n  class WNF,M1,R1,U1,WNE,M2,R2,U2 sem;",
+          "bookmarkable": true
+        },
+        {
+          "id": "code-bufferna-and-buffern",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "BufferNa (3 Semaphores) vs. BufferN (Passing the Baton)",
+          "filename": "buffer_n.cpp",
+          "code": "// BufferNa: mutex(1), waitNotFull(size), waitNotEmpty(0)\nvoid put(T item) override {\n    waitNotFull.acquire();\n    mutex.acquire();\n    elements[writePointer] = item;\n    writePointer = (writePointer + 1) % bufferSize;\n    waitNotEmpty.release();\n    mutex.release();\n}\n\n// BufferN (Optimized: \"passage de témoin\")\n// mutex(1), waitProd(0), waitConso(0), nbElements(0), nbWaitingProd(0), nbWaitingConso(0)\nvoid put_opt(T item) {\n    mutex.acquire();\n    if (nbElements == bufferSize) {\n        nbWaitingProd += 1;\n        mutex.release();\n        waitProd.acquire(); // receives mutex ownership when woken!\n    }\n    elements[writePointer] = item;\n    writePointer = (writePointer + 1) % bufferSize;\n    nbElements++;\n    if (nbWaitingConso > 0) {\n        nbWaitingConso -= 1;\n        waitConso.release(); // passes baton (mutex) to waiting consumer!\n    } else {\n        mutex.release();\n    }\n}",
+          "highlight_lines": [18, 25, 26],
+          "annotations": [
+            {
+              "line": 18,
+              "note": "Notice: after waitProd.acquire(), the woken producer does NOT re-acquire mutex—ownership was passed to it!"
+            },
+            {
+              "line": 25,
+              "note": "If a consumer is waiting, we release waitConso instead of mutex, transferring the critical section directly ('passage de témoin')."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "th-exercises-1-2",
+          "block_type": "markdown",
+          "title": "Critical Analysis: Exercises 1 & 2 (Slides 27–29)",
+          "bookmarkable": true,
+          "content": "* **Exercise 1 — Can we swap `waitNotEmpty.release()` and `mutex.release()` in `BufferNa`?**\n  **Yes!** Releasing `mutex` *before* `waitNotEmpty.release()` is actually **slightly better**: if a consumer wakes up immediately on `waitNotEmpty.release()`, `mutex` is already free so the consumer won't immediately block on `mutex.acquire()`. (Whereas acquiring `waitNotFull` and `mutex` at the *start* must NOT be swapped—that would deadlock!)\n* **Exercise 2 — Can we split `mutex` into two semaphores (`mutexProd` and `mutexConso`)?**\n  * **In `BufferNa`:** **Yes!** Producers only modify `writePointer` and consumers only modify `readPointer`, and `waitNotFull`/`waitNotEmpty` guarantee they never access the same slot simultaneously.\n  * **In `BufferN` (optimized):** **No!** Both producers and consumers read and modify the shared `nbElements`, `nbWaitingProd`, and `nbWaitingConso` variables—they *must* share a single `mutex`."
+        },
+        {
+          "id": "qz-ch6-split-mutex",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-exercises-1-2",
+          "question": "Can we replace the single `mutex` in `BufferNa` and `BufferN` with two separate semaphores (`mutexProd` for producers and `mutexConso` for consumers)?",
+          "options": [
+            "Yes in `BufferNa` (separate `writePointer` and `readPointer`), but NO in `BufferN` (both share `nbElements`, `nbWaitingProd`, and `nbWaitingConso`).",
+            "Yes in both `BufferNa` and `BufferN`.",
+            "No in `BufferNa`, but yes in `BufferN`.",
+            "No in either `BufferNa` or `BufferN`."
+          ],
+          "correct_answer": "Yes in `BufferNa` (separate `writePointer` and `readPointer`), but NO in `BufferN` (both share `nbElements`, `nbWaitingProd`, and `nbWaitingConso`).",
+          "explanation": "In `BufferNa`, `waitNotFull` and `waitNotEmpty` ensure producers and consumers never touch the same array slot simultaneously, and `writePointer`/`readPointer` are disjoint. In `BufferN`, both roles mutate `nbElements`, `nbWaitingProd`, and `nbWaitingConso`, requiring a single shared `mutex`.",
+          "hints": [
+            "Which variables do producers and consumers both modify in `BufferNa` vs. `BufferN`?",
+            "In `BufferN`, what happens if a producer increments `nbElements` while a consumer decrements `nbElements`?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    }
+  ]
+}

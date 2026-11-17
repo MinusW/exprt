@@ -1,0 +1,412 @@
+{
+  "id": "sye-te1-mock-exam",
+  "title": "SYE TE1 Practice Mock Exam (90 min, 58 pts)",
+  "description": "Full-length English TE1 practice exam modeled after the HEIG-VD SYE TE1 format: Architecture & Interrupts, Process States & Context Switch, fork()/waitpid() Tracing, Threads & Memory Map, 2-Pipe IPC, Signals & Sockets, and CPU Scheduling.",
+  "estimated_minutes": 90,
+  "category": "Operating Systems",
+  "track": "SYE - Operating Systems",
+  "track_order": 3,
+  "difficulty_level": "intermediate",
+  "tags": [
+    "operating-systems",
+    "sye",
+    "te1",
+    "mock-exam",
+    "practice-test"
+  ],
+  "prerequisites": [
+    "sye-te1-complete-study-guide",
+    "sye-te1-exam-supplement"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "SYE TE1 Complete Study Guide",
+      "url_or_path": "guides/operating-systems/sye-te1-complete-study-guide.json",
+      "notes": "Primary TE1 curriculum (C1-C8 & E1-E5)"
+    },
+    {
+      "title": "SYE TE1 Exam Supplement",
+      "url_or_path": "guides/operating-systems/sye-te1-exam-supplement.json",
+      "notes": "High-yield traps, sequence tracing, memory maps, and 2-pipe IPC"
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-mock-part1",
+      "title": "Part 1: Architecture, Memory & Interrupts (14 pts)",
+      "description": "Closed-book style questions on byte-addressable RAM, hardware/software interrupts, and syscall mechanics.",
+      "blocks": [
+        {
+          "id": "ref-mock-q1-ram",
+          "block_type": "reflection_rubric",
+          "title": "Q1–Q2 (4 pts): RAM Region & Address Space",
+          "prompt": "A 32-bit system has RAM mapped from `0x0040'0000` to `0x00BF'FFFF` (inclusive).\n\n1. **(2 pts)** What is the exact size of this RAM region (in MiB / KiB)?\n2. **(2 pts)** What is the maximum addressable space of this 32-bit CPU (in GiB), and why?",
+          "self_check_criteria": [
+            "Computed size = 0x00BF'FFFF - 0x0040'0000 + 1 = 0x0080'0000 bytes.",
+            "Converted 0x0080'0000 = 8 * 2^20 = 8 MiB (8,388,608 bytes).",
+            "Stated max 32-bit address space = 2^32 bytes = 4 GiB because address registers are 32 bits wide and memory is byte-addressable."
+          ],
+          "model_answer": "1) Size = 0x00BF'FFFF - 0x0040'0000 + 1 = 0x0080'0000 bytes = 8 * 16^5 = 8 * 2^20 bytes = 8 MiB.\n2) Max address space = 2^32 bytes = 4 GiB, because each byte has a unique 32-bit address (0x0000'0000 to 0xFFFF'FFFF).",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-mock-q3-irq",
+          "block_type": "reflection_rubric",
+          "title": "Q3–Q5 (6 pts): Hardware IRQs, Software Interrupts & Timer",
+          "prompt": "3. **(2 pts)** Describe the hardware/OS steps when a device raises a hardware interrupt (IRQ).\n4. **(2 pts)** Name three distinct types of software interrupts.\n5. **(2 pts)** \"The hardware timer sends an IRQ to the CPU.\" Explain what happens at the **software level** (both kernel side and user side).",
+          "self_check_criteria": [
+            "Q3: Device -> Interrupt Controller (APIC) -> CPU finishes current instruction & switches to Kernel Mode -> looks up Interrupt Vector -> executes ISR -> acknowledges IRQ & restores task in User Mode.",
+            "Q4: (1) Syscall instruction (svc/int 0x80/syscall), (2) Arithmetic/execution fault (div-by-zero, illegal instruction), (3) Memory/alignment fault (invalid address / segfault).",
+            "Q5: Kernel side: Timer ISR updates ticks/quantum, calls schedule(); if quantum expired, context switch (Running->Ready, next Ready->Running). User side: interrupted process is transparently paused and later resumes unaware."
+          ],
+          "model_answer": "3) Device asserts IRQ -> APIC prioritizes & signals CPU -> CPU finishes current instruction, enters Kernel Mode, uses Interrupt Vector to jump to ISR -> ISR handles/acknowledges IRQ -> restores saved state and returns to User Mode.\n4) Syscall instruction (svc/int 0x80), arithmetic/execution error (divide by zero, illegal instruction), memory/alignment fault (segfault).\n5) Kernel side: Timer ISR runs, decrements quantum, invokes schedule(); if quantum=0, saves outgoing PCB (Running->Ready) and restores next process PCB (Ready->Running). User side: running app is paused transparently without knowing it was interrupted.",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-mock-q6-orphan-zombie",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "ref-mock-q3-irq",
+          "title": "Q6 (1 pt): Orphan & Zombie States",
+          "question": "True or False: An orphan process can enter the `Zombie` state.",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct_answer": "True",
+          "explanation": "True! An orphan is reparented to `init` (`PID 1`). When the orphan later calls `exit()`, it enters the `Zombie` state until `init` reaps it with `waitpid()`.",
+          "hints": [
+            "What happens when an adopted orphan finishes executing?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-mock-q7-obj-code",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "ref-mock-q3-irq",
+          "title": "Q7 (1 pt): Object Code",
+          "question": "True or False: Object code (`.o`) produced by the compiler is a complete executable binary.",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct_answer": "False",
+          "explanation": "False! Object code contains unresolved symbolic addresses and lacks linked libraries and `crt` startup code. The **linker** produces the executable binary (e.g., ELF).",
+          "hints": [
+            "What tool resolves calls like printf() into an ELF executable?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-mock-q8-syscall",
+          "block_type": "quiz_question",
+          "question_type": "multi_select",
+          "difficulty": 3,
+          "related_block_id": "ref-mock-q3-irq",
+          "title": "Q8 (2 pts): System Call Properties",
+          "question": "A system call... (Select all that apply)",
+          "options": [
+            "...requires passing arguments between user space and kernel space.",
+            "...is an asynchronous interrupt.",
+            "...uses a single interrupt vector shared across all system calls.",
+            "...is wrapped by a C stub function in user space."
+          ],
+          "correct_answer": [
+            "...requires passing arguments between user space and kernel space.",
+            "...uses a single interrupt vector shared across all system calls.",
+            "...is wrapped by a C stub function in user space."
+          ],
+          "explanation": "Syscalls are **synchronous** software interrupts (not asynchronous). They pass syscall number + args via the ABI, share a single software interrupt vector (e.g., `svc` / `int 0x80`), and are invoked via C stub functions in `libc`.",
+          "hints": [
+            "Are software interrupts synchronous or asynchronous?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-mock-part2",
+      "title": "Part 2: Process Management & Context Switching (10 pts)",
+      "description": "State transitions, PCB contents, process vs. thread context switch, and mode switch traps.",
+      "blocks": [
+        {
+          "id": "ref-mock-q9-states",
+          "block_type": "reflection_rubric",
+          "title": "Q9–Q11 (7 pts): State Trace, PCB & Context Switch Cost",
+          "prompt": "9. **(3 pts)** A process enters the system, is preempted once by the scheduler, then blocks on an I/O request, and finally terminates. List **every state and transition** in order (assume 2 processes in the system).\n10. **(2 pts)** What is a PCB and what is its role?\n11. **(2 pts)** What does a **process** context switch involve compared to a **thread** context switch?",
+          "self_check_criteria": [
+            "Q9: New -> Ready -> Running -> Ready (preempted) -> Running -> Waiting (I/O) -> Ready (I/O done, never Waiting->Running!) -> Running -> Zombie -> Terminated.",
+            "Q10: Kernel-only data structure ('ID card') storing PID, state, PC/registers, SP, address space, open FDs, exit code; used during context switches.",
+            "Q11: Process switch saves/restores PCB, flushes/syncs caches, and reconfigures the MMU (different virtual address spaces). Thread switch only swaps TCB (PC, registers, SP) within the same address space (no MMU reconfiguration)."
+          ],
+          "model_answer": "9) New -> Ready -> Running -> Ready (preemption) -> Running -> Waiting (I/O request) -> Ready (I/O complete) -> Running -> Zombie (exit) -> Freed (waitpid).\n10) Process Control Block: kernel-only structure holding process state, PID, registers/PC/SP, memory context, open FDs, and exit code.\n11) Process context switch requires saving/restoring PCB, syncing caches, and reconfiguring the MMU; thread context switch shares the same address space/MMU and only swaps TCB registers/SP/PC.",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-mock-q12-mode-switch",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "ref-mock-q9-states",
+          "title": "Q12 (1 pt): Mode Switch vs. Context Switch",
+          "question": "True or False: A CPU execution mode switch automatically causes a context switch.",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct_answer": "False",
+          "explanation": "False! Entering Kernel Mode for a syscall or IRQ returns to the *same* process if no rescheduling occurs—a mode switch with zero context switch.",
+          "hints": [
+            "Does every syscall switch to a different process?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-mock-q13-pcb",
+          "block_type": "quiz_question",
+          "question_type": "multi_select",
+          "difficulty": 3,
+          "related_block_id": "ref-mock-q9-states",
+          "title": "Q13 (2 pts): PCB Properties",
+          "question": "A process PCB... (Select all that apply)",
+          "options": [
+            "...is used during context switches between processes.",
+            "...is used during a CPU mode switch.",
+            "...contains information about all currently running processes.",
+            "...contains a reference to the process's heap."
+          ],
+          "correct_answer": [
+            "...is used during context switches between processes.",
+            "...contains a reference to the process's heap."
+          ],
+          "explanation": "Each process has its *own* PCB (not a global list of all processes). It is used for process context switches and stores memory pointers including the heap, whereas a pure CPU mode switch does not swap PCBs.",
+          "hints": [
+            "Is there one PCB per process or one PCB for the whole OS?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-mock-part3",
+      "title": "Part 3: Process Creation — fork() & waitpid() (16 pts)",
+      "description": "Trace a 2-iteration fork() + waitpid() loop, draw the sequence diagram, and analyze orphans/zombies.",
+      "blocks": [
+        {
+          "id": "exp-mock-fork-code",
+          "block_type": "code",
+          "title": "Part 3 C Program to Trace",
+          "language": "c",
+          "filename": "mock_fork_trace.c",
+          "code": "int i, pid, status = 0;\nint val = 1;\n\nint main(void) {\n    for (i = 0; i < 2; i++) {\n        pid = fork();\n        if (pid == 0) {\n            val = val * 2;\n        } else {\n            waitpid(pid, &status, 0); /* SYE convention: status receives child exit code directly */\n            val = val + status;\n        }\n    }\n    printf(\"val = %d\\n\", val);\n    exit(val);\n}",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-mock-q14-17",
+          "block_type": "reflection_rubric",
+          "title": "Q14–Q17 (16 pts): Sequence Diagram, Outputs, Orphans & Zombies",
+          "prompt": "14. **(10 pts)** Draw the full sequence diagram showing all processes (`P0`, `P1`, ...), `fork()`, `waitpid()`, `printf()`, and `exit()`.\n15. **(2 pts)** List all possible console outputs.\n16. **(2 pts)** Are there any orphan processes? Justify.\n17. **(2 pts)** Can any process enter the `Zombie` state here, and if so, until when?",
+          "self_check_criteria": [
+            "Identified 4 processes total: P0, P1 (child of P0 at i=0), P2 (child of P1 at i=1), P3 (child of P0 at i=1).",
+            "Traced exact deterministic output: val = 4, val = 6, val = 14, val = 21.",
+            "Q16: No orphans, because every parent calls waitpid() on every child before exiting.",
+            "Q17: Yes, a child enters Zombie when it calls exit() until its parent's waitpid() collects its exit code and frees its PCB."
+          ],
+          "model_answer": "14-15) P0(val=1) forks P1(val=2) and waits. P1 forks P2(val=4) and waits. P2 prints 'val = 4' and calls exit(4). P1 wakes (status=4, val=2+4=6), prints 'val = 6', calls exit(6). P0 wakes (status=6, val=1+6=7), loops i=1, forks P3(val=14) and waits. P3 prints 'val = 14', calls exit(14). P0 wakes (status=14, val=7+14=21), prints 'val = 21', calls exit(21). Only 1 output order is possible: 4, 6, 14, 21.\n16) No orphans: every parent waits for its children via waitpid().\n17) Yes: each child is briefly a Zombie between its exit() call and its parent's waitpid() returning and freeing its PCB.",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-mock-part4",
+      "title": "Part 4: Processes, Threads & Memory Map (11 pts)",
+      "description": "Analyze a multi-process, multi-threaded C program, buffer sharing, process states, and virtual memory sections.",
+      "blocks": [
+        {
+          "id": "exp-mock-mt-code",
+          "block_type": "code",
+          "title": "Part 4 C Program to Analyze",
+          "language": "c",
+          "filename": "mock_threads_mem.c",
+          "code": "char *log_buf;\npthread_t workers[4];\n\nvoid *process_req(void *arg) {\n    int req_id = 42;\n    memcpy(log_buf, arg, 4);\n    sleep(5);\n    return NULL;\n}\n\nint main(void) {\n    int pid, status, i;\n    log_buf = (char *)malloc(4096);\n    pid = fork();\n    if (pid == 0) {\n        for (i = 0; i < 2; i++)\n            pthread_create(&workers[i], NULL, process_req, \"REQ1\");\n        for (i = 0; i < 2; i++)\n            pthread_join(workers[i], NULL);\n        exit(0);\n    } else {\n        pthread_create(&workers[2], NULL, process_req, \"MAIN\"); /* Line 22 */\n        pthread_join(workers[2], NULL);\n        waitpid(pid, &status, 0);\n    }\n    exit(0);\n}",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-mock-q18-22",
+          "block_type": "reflection_rubric",
+          "title": "Q18–Q22 (11 pts): Process/Thread Tree, Buffer Sharing, States & Memory Map",
+          "prompt": "18. **(2 pts)** Sketch the process/thread hierarchy of this application.\n19. **(2 pts)** Do all threads share the same `log_buf` buffer? Justify.\n20. **(3 pts)** Suppose the parent is currently **`Running`** at Line 22 (`pthread_create(&workers[2], ...)`). In what state(s) can the child process be? Justify each case.\n21. **(3 pts)** Draw the virtual memory sections of the **child** process (high to low addresses), clearly showing all stacks and where `req_id` and `log_buf` (both pointer and allocated bytes) live.\n22. **(1 pt)** Can there be orphan processes or threads? Justify.",
+          "self_check_criteria": [
+            "Q18: Parent P0 (main + T2); Child P1 (main + T0, T1).",
+            "Q19: No across processes (P0 and P1 have separate virtual address spaces after fork()); YES within P1 (T0 and T1 share the same Heap log_buf!).",
+            "Q20: Child P1 can be Ready (created/running earlier, waiting for CPU), Running (on another core in SMP), Waiting (blocked in sleep(5) or pthread_join), or Zombie (already finished and exited before parent called waitpid!).",
+            "Q21: High->Low: 3 Stacks (main, T0, T1) with req_id on T0/T1 stacks; Free space; Heap (4096B malloc buffer); .bss (log_buf pointer & workers[]); .data (string literals); .text.",
+            "Q22: No orphan processes (parent calls waitpid) and no orphan threads (both processes join their threads before exit)."
+          ],
+          "model_answer": "18) P0 has main + workers[2]; P1 has main + workers[0], workers[1].\n19) P0 and P1 have separate copies of log_buf (fork duplicates address space), but within P1, workers[0] and workers[1] share the same Heap log_buf (race condition!).\n20) If parent is Running at Line 22, child P1 may be: Ready (scheduled after fork, waiting for CPU), Running (simultaneously on a 2nd core), Waiting (blocked in sleep(5) or pthread_join), or Zombie (already called exit(0) before parent reached waitpid).\n21) High->Low: Stack(main), Stack(T0 with req_id), Stack(T1 with req_id), Free space, Heap (4096B buffer), .bss (log_buf ptr, workers[]), .data, .text.\n22) No orphan processes (waitpid) and no orphan threads (pthread_join).",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-mock-part5-6",
+      "title": "Part 5 & 6: 2-Pipe IPC, Signals, Sockets & Scheduling (17 pts)",
+      "description": "Bidirectional 2-pipe C coding, signals/sockets True-False, and a quick scheduling check.",
+      "blocks": [
+        {
+          "id": "ref-mock-q23-pipes",
+          "block_type": "reflection_rubric",
+          "title": "Q23 (6 pts): Bidirectional 2-Pipe IPC in C",
+          "prompt": "Process A must send a `msg` (`len < 256` bytes) to Process B via an anonymous pipe. Process B must convert every lowercase ASCII letter to uppercase (or copy it to `reply_buf`) and send it back to Process A via a second anonymous pipe. Write the C function `void roundtrip_pipe(char *msg, int len)`.",
+          "self_check_criteria": [
+            "Created 2 pipes (p_a2b[2], p_b2a[2]) BEFORE fork().",
+            "Closed unused ends in both parent and child.",
+            "Child reads from p_a2b[0], transforms/copies, writes to p_b2a[1], closes FDs, calls exit(0).",
+            "Parent writes to p_a2b[1], reads reply from p_b2a[0], closes FDs, calls waitpid()."
+          ],
+          "model_answer": "int p_a2b[2], p_b2a[2]; char reply[256]; pipe(p_a2b); pipe(p_b2a); pid_t pid = fork(); if (pid == 0) { close(p_a2b[1]); close(p_b2a[0]); int n = read(p_a2b[0], reply, len); for (int i=0; i<n; i++) if (reply[i]>='a' && reply[i]<='z') reply[i]-=32; write(p_b2a[1], reply, n); close(p_a2b[0]); close(p_b2a[1]); exit(0); } else { close(p_a2b[0]); close(p_b2a[1]); write(p_a2b[1], msg, len); read(p_b2a[0], reply, len); close(p_a2b[1]); close(p_b2a[0]); waitpid(pid, NULL, 0); }",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-mock-q24-sig-hw",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "ref-mock-q9-states",
+          "title": "Q24 (1 pt): Signals & Hardware Interrupts",
+          "question": "True or False: Sending a POSIX signal from one process to another requires a hardware interrupt.",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct_answer": "False",
+          "explanation": "False! Signals are software events delivered by the kernel (e.g., via the `kill()` syscall), not hardware IRQs.",
+          "hints": [
+            "Is kill() a hardware device or a syscall?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-mock-q25-sig-mask",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "ref-mock-q9-states",
+          "title": "Q25 (1 pt): Masking Signals",
+          "question": "True or False: A process can mask a signal so that it is deferred and delivered later when unmasked.",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct_answer": "True",
+          "explanation": "True! Masking a signal holds it pending until the process unmasks it (except `SIGKILL` and `SIGSTOP`, which cannot be masked).",
+          "hints": [
+            "What is the difference between masking and ignoring (SIG_IGN)?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-mock-q26-sig-queue",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "ref-mock-q9-states",
+          "title": "Q26 (1 pt): Pending Signal Queue",
+          "question": "True or False: Standard POSIX signals are queued so that 5 identical pending `SIGINT` signals will invoke the handler 5 times.",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct_answer": "False",
+          "explanation": "False! At most **one** pending occurrence of a given signal type is stored; duplicates while pending are coalesced.",
+          "hints": [
+            "Recall C7: what happens if you press Ctrl+C multiple times before the process runs?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-mock-q27-tcp-ipc",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 1,
+          "related_block_id": "ref-mock-q9-states",
+          "title": "Q27 (1 pt): TCP/IP Sockets as IPC",
+          "question": "True or False: A TCP/IP socket (e.g., over `127.0.0.1`) can be used as an IPC mechanism.",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct_answer": "True",
+          "explanation": "True! Sockets are part of the IPC subsystem and work both over networks and locally via loopback (`127.0.0.1`).",
+          "hints": [
+            "Can two processes on the same machine talk over localhost?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-mock-q28-fifo-fork",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "ref-mock-q23-pipes",
+          "title": "Q28 (1 pt): Named Pipes & fork()",
+          "question": "True or False: A named pipe (`mkfifo()`) requires `fork()` so unrelated processes can share it.",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct_answer": "False",
+          "explanation": "False! That is true for **anonymous** pipes (`pipe()`). A **named pipe (FIFO)** exists as a path in the filesystem, so any unrelated process can `open()` it.",
+          "hints": [
+            "Why does a named pipe have a filename in the filesystem?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-mock-q29-ip-port",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "ref-mock-q9-states",
+          "title": "Q29 (1 pt): TCP Addressing",
+          "question": "True or False: In TCP/IP, IP addresses alone are sufficient to identify the sending and receiving applications.",
+          "options": [
+            "True",
+            "False"
+          ],
+          "correct_answer": "False",
+          "explanation": "False! IP identifies the host machine; **TCP port numbers** are also required to identify the specific application/socket.",
+          "hints": [
+            "What identifies a specific server on 192.168.1.34:8080?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-mock-q30-rr",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "ref-mock-q9-states",
+          "title": "Q30 (5 pts bonus): Round Robin Quantum Trade-off",
+          "question": "In Round Robin scheduling, what happens if the time quantum $q$ is set **much smaller** than the context-switch duration?",
+          "options": [
+            "CPU efficiency collapses because most CPU time is spent in kernel context-switching overhead",
+            "Round Robin behaves identically to FCFS",
+            "Short processes suffer starvation",
+            "Processes transition directly from Waiting to Running"
+          ],
+          "correct_answer": "CPU efficiency collapses because most CPU time is spent in kernel context-switching overhead",
+          "explanation": "A tiny quantum causes constant timer preemptions and context switches, wasting CPU cycles in kernel overhead. Conversely, a huge quantum makes RR behave like FCFS.",
+          "hints": [
+            "What happens when context-switch time dominates useful user execution time?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    }
+  ]
+}

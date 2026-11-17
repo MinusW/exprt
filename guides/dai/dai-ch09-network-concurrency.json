@@ -1,0 +1,687 @@
+{
+  "id": "dai-ch09-network-concurrency",
+  "title": "Chapter 09: Network Concurrency",
+  "description": "Master concurrency fundamentals, diagnosing race conditions, iterative vs. concurrent TCP servers, Java's ExecutorService, Platform vs. Virtual Threads (Java 21+), and thread-safe data structures for building scalable network applications.",
+  "estimated_minutes": 75,
+  "category": "Internet Applications (DAI)",
+  "track": "DAI - Développement d'Applications Internet (TE1)",
+  "track_order": 9,
+  "difficulty_level": "advanced",
+  "tags": [
+    "java",
+    "concurrency",
+    "networking",
+    "multithreading",
+    "virtual-threads",
+    "executor-service",
+    "race-conditions",
+    "thread-safety"
+  ],
+  "prerequisites": [
+    "dai-ch08-tcp-and-udp"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "HEIG-VD DAI Course — Chapter 09: Network concurrency",
+      "url_or_path": "https://heigvd-dai-26.github.io/chapters/09-network-concurrency.html",
+      "notes": "Authored by O. Tischhauser, based on the HEIG-VD DAI course by L. Delafontaine and H. Louis (CC BY-SA 4.0), itself based on the original course by O. Liechti and J. Ehrensberger."
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-concurrency-foundations",
+      "title": "1. Concurrency Foundations & Hardware Reality",
+      "description": "Understand processors, cores, processes, and threads, and distinguish concurrency from parallelism.",
+      "blocks": [
+        {
+          "id": "th-proc-core-process-thread",
+          "block_type": "markdown",
+          "title": "Hardware & OS Building Blocks: CPU, Core, Process, and Thread",
+          "content": "Before writing concurrent network servers, you need an accurate mental model of what executes your code:\n\n* **Processor (CPU):** The physical chip that executes billions of instructions per second. Modern CPUs contain multiple **cores**.\n* **Core:** An independent physical execution unit inside a processor. For our mental model, one core executes one instruction from one thread at any given instant.\n* **Process:** A program in execution, identified by a Process ID (PID). Each process has its own **isolated memory space**—by default, other processes cannot read or write it. Processes are resource-heavy to create and destroy, and communicate via **Inter-Process Communication (IPC)** (e.g., TCP sockets on `localhost`, pipes, files, or explicit shared memory).\n* **Thread:** A sequence of instructions running *inside* a process. Every application starts with a **main thread**, which can spawn additional threads.\n  * **Private to each thread:** Its own **call stack** (local variables, method frames) and **program counter** (next instruction).\n  * **Shared across threads in the same process:** The **heap memory** (objects, static fields, shared collections).\n\n> [!IMPORTANT]\n> **Memory Trade-off:** Because threads share the process's memory space, creating a thread and sharing data between threads is far cheaper than spawning a whole new process. However, shared memory is also why threads can corrupt each other's data if not synchronized!\n\n| Dimension | Process | Thread |\n| :--- | :--- | :--- |\n| **Memory Space** | Isolated per process | Shared heap; private stack & program counter |\n| **Creation / Destruction Cost** | High (OS allocates new address space) | Lower than a process, but still limited by the OS |\n| **Communication** | Explicit IPC (sockets, pipes, files) | Direct via shared heap variables |\n| **Crash Isolation** | A crash in one process does not crash others | An unhandled error or memory corruption affects the whole process |",
+          "bookmarkable": true
+        },
+        {
+          "id": "diag-concurrency-vs-parallelism",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Concurrency (Single Core) vs. Parallelism (Multi-Core)",
+          "caption": "On 1 core, concurrent tasks interleave via OS time-slicing. On 2+ cores, concurrent tasks can also execute in parallel at the exact same instant.",
+          "source": "flowchart LR\n  subgraph SingleCore[\"Concurrency on 1 Core (Time-Slicing)\"]\n    direction LR\n    C1A[\"Core 1: Client A (t=0..10ms)\"] --> C1B[\"Core 1: Client B (t=10..20ms)\"] --> C1A2[\"Core 1: Client A (t=20..30ms)\"]\n  end\n  subgraph MultiCore[\"Concurrency + Parallelism on 2 Cores\"]\n    direction LR\n    CA[\"Core 1: Client A (t=0..10ms)\"]\n    CB[\"Core 2: Client B (t=0..10ms)\"]\n  end\n  classDef core1 fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px;\n  classDef core2 fill:#d1fae5,stroke:#059669,stroke-width:1.5px;\n  class C1A,C1A2,CA core1;\n  class C1B,CB core2;",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-concurrency-vs-parallelism",
+          "block_type": "markdown",
+          "title": "Concurrency vs. Parallelism",
+          "content": "Although people often use these words interchangeably, they describe two distinct concepts:\n\n1. **Concurrency (Overlapping in Time):** Several tasks make progress during the same time period without waiting for one another to finish completely. A server accepting Client B while still serving Client A is *concurrent*—even on a single-core CPU where the OS scheduler rapidly switches between threads.\n2. **Parallelism (Simultaneous Execution):** Several tasks execute at the **exact same instant** on different physical cores.\n\n> [!NOTE]\n> **Key Relationship:** Parallelism is one way to run concurrent tasks, but **concurrent does not always mean parallel**. On 1 core, you have concurrency without parallelism. On 8 cores, up to 8 threads can run in parallel *and* hundreds of threads can run concurrently.\n\n**Explicit Non-Example:** Splitting a single heavy mathematical matrix multiplication across 8 cores solely to finish one calculation faster is **parallel computing**, which is distinct from network concurrency (handling many independent client I/O sessions overlapping in time).",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-proc-vs-thread",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "title": "Process Isolation vs. Thread Sharing",
+          "question": "Which statement accurately describes the memory architecture of two threads running inside the same Java process?",
+          "options": [
+            "Each thread has its own private call stack and program counter, while both share the same heap memory.",
+            "Each thread has its own completely isolated heap and stack, requiring TCP sockets on localhost to communicate.",
+            "Threads share a single call stack, which is why local variables inside a method are visible to all other threads.",
+            "Threads share the same program counter so the CPU executes the exact same line of code in lockstep."
+          ],
+          "correct_answer": "Each thread has its own private call stack and program counter, while both share the same heap memory.",
+          "explanation": "Inside a single process, every thread maintains its own call stack (for method frames and local variables) and its own program counter (tracking its current instruction), while sharing the process's heap memory where objects reside.\n\n* Isolated memory requiring IPC (like localhost sockets) describes **processes**, not threads.\n* Threads do not share a call stack; local primitive variables on one thread's stack are private to that thread.\n* Each thread executes independently with its own program counter, not in lockstep.",
+          "hints": [
+            "Think about what happens when two threads call the same method with different arguments—can they have different local variable values?",
+            "Contrast how threads communicate (shared objects) versus how separate OS processes communicate (IPC)."
+          ],
+          "difficulty": 2,
+          "related_block_id": "th-proc-core-process-thread",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-concurrency-parallelism",
+          "block_type": "quiz_question",
+          "question_type": "multi_select",
+          "title": "Diagnosing Concurrency and Parallelism",
+          "question": "A Java TCP server with 4 client threads runs on a virtual machine that has been allocated **1 single CPU core**. Which of the following statements are true? (Select all that apply)",
+          "options": [
+            "The server is concurrent because all 4 client sessions overlap in time.",
+            "The OS scheduler switches between the 4 threads on the single core so none of them must wait for another to disconnect.",
+            "The 4 threads execute in true parallelism at the exact same nanosecond.",
+            "If one client blocks waiting for network input, the OS can schedule another client's thread onto the core."
+          ],
+          "correct_answer": [
+            "The server is concurrent because all 4 client sessions overlap in time.",
+            "The OS scheduler switches between the 4 threads on the single core so none of them must wait for another to disconnect.",
+            "If one client blocks waiting for network input, the OS can schedule another client's thread onto the core."
+          ],
+          "explanation": "On a single core, 4 threads cannot execute at the exact same instant (no true parallelism), because a single core executes one thread's instructions at a time. However, the server IS **concurrent**: the OS scheduler time-slices across the 4 threads and immediately switches away from any thread that blocks on network I/O, allowing all 4 clients to make overlapping progress.",
+          "hints": [
+            "How many instructions can a single core execute at one exact instant?",
+            "Does concurrency require multiple cores, or only overlapping progress over time?"
+          ],
+          "difficulty": 3,
+          "related_block_id": "th-concurrency-vs-parallelism",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-concurrency-hazards",
+      "title": "2. What Goes Wrong? Race Conditions, Visibility & Exhaustion",
+      "description": "See why naive shared state breaks under concurrency through interleaving diagrams and a live Java sandbox.",
+      "blocks": [
+        {
+          "id": "th-race-conditions",
+          "block_type": "markdown",
+          "title": "Why Shared State Breaks: Race Conditions & Exhaustion",
+          "content": "When multiple threads access the same mutable variable or collection simultaneously, several classes of bugs emerge:\n\n1. **Race Conditions (Lost Updates):** Even a seemingly single-line Java statement like `count++` is **not atomic**. At the CPU/bytecode level, it consists of three separate steps:\n   1. **Read** the current value of `count` from memory.\n   2. **Add 1** to that value in a register.\n   3. **Write** the new value back to memory.\n\n   Because the OS can preempt a thread *between* any of those steps—or two cores can execute them simultaneously—two threads can read the same `count`, both add 1, and both write back the same result. One increment is **silently lost**. In chapter 09's benchmark, 8 threads each running `count++` 100,000 times (expecting `800,000`) produced between `260,000` and `400,000`!\n\n2. **Visibility & Stale Reads:** Without proper synchronization, a thread may read a stale value while another thread is modifying it, or two threads may each run `containsKey(name)` before either calls `put(name, ...)`, allowing both to claim the same unique name.\n\n3. **Deadlocks:** When threads acquire locks on multiple shared resources in conflicting orders, each waits forever for the other to release its lock.\n\n4. **Resource Exhaustion (`OutOfMemoryError`):** Operating-system threads are limited and consume substantial stack memory (~1 MB each). Spawning an unbounded number of OS threads—one per incoming connection—can exhaust memory or OS thread limits under heavy load.",
+          "bookmarkable": true
+        },
+        {
+          "id": "diag-race-condition-seq",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Race Condition Interleaving on count++",
+          "caption": "Both threads read count = 5 before either writes, causing one increment to be lost (final value is 6 instead of 7).",
+          "source": "sequenceDiagram\n  participant TA as \"Thread A\"\n  participant Mem as \"Shared Heap (count = 5)\"\n  participant TB as \"Thread B\"\n  TA->>Mem: \"1. Read count -> gets 5\"\n  TB->>Mem: \"2. Read count -> gets 5\"\n  Note over TA: \"3. Compute 5 + 1 = 6\"\n  Note over TB: \"4. Compute 5 + 1 = 6\"\n  TA->>Mem: \"5. Write count = 6\"\n  TB->>Mem: \"6. Write count = 6 (Lost update!)\"",
+          "bookmarkable": true
+        },
+        {
+          "id": "exp-sandbox-atomic-fix",
+          "block_type": "sandbox",
+          "runtime": "java",
+          "title": "Fix the Race Condition with AtomicInteger",
+          "instructions": "The starter code spawns 8 threads that each increment a shared counter 10,000 times (expected total: 80000). Right now it uses a plain `int` inside an array (`int[] count = {0}`), which suffers from lost increments. Replace it with `java.util.concurrent.atomic.AtomicInteger` and call `incrementAndGet()` so the program deterministically prints `80000`.",
+          "starter_code": "import java.util.ArrayList;\nimport java.util.List;\n// TODO: Import AtomicInteger\n\npublic class Main {\n    public static void main(String[] args) throws InterruptedException {\n        int[] count = {0}; // <-- Race condition!\n        List<Thread> threads = new ArrayList<>();\n\n        for (int t = 0; t < 8; t++) {\n            Thread worker = new Thread(() -> {\n                for (int i = 0; i < 10_000; i++) {\n                    count[0]++;\n                }\n            });\n            threads.add(worker);\n            worker.start();\n        }\n\n        for (Thread worker : threads) {\n            worker.join();\n        }\n\n        System.out.println(count[0]);\n    }\n}",
+          "expected_output": "80000",
+          "solution": "import java.util.ArrayList;\nimport java.util.List;\nimport java.util.concurrent.atomic.AtomicInteger;\n\npublic class Main {\n    public static void main(String[] args) throws InterruptedException {\n        AtomicInteger count = new AtomicInteger(0);\n        List<Thread> threads = new ArrayList<>();\n\n        for (int t = 0; t < 8; t++) {\n            Thread worker = new Thread(() -> {\n                for (int i = 0; i < 10_000; i++) {\n                    count.incrementAndGet();\n                }\n            });\n            threads.add(worker);\n            worker.start();\n        }\n\n        for (Thread worker : threads) {\n            worker.join();\n        }\n\n        System.out.println(count.get());\n    }\n}",
+          "hints": [
+            "Import `java.util.concurrent.atomic.AtomicInteger;` and initialize `AtomicInteger count = new AtomicInteger(0);`.",
+            "Inside the inner loop, replace `count[0]++;` with `count.incrementAndGet();`.",
+            "At the end, print `count.get()`."
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-race-condition-output",
+          "block_type": "quiz_question",
+          "question_type": "code_output",
+          "title": "Predicting Unsynchronized Concurrent Increments",
+          "question": "Consider this Java snippet where 8 threads each run `counter++` 100,000 times without synchronization:\n\n```java\nstatic int counter = 0;\n// 8 threads each execute:\nfor (int i = 0; i < 100_000; i++) {\n    counter++;\n}\n```\n\nAfter all 8 threads finish (`join()`), what can we reliably say about `counter`?",
+          "options": [
+            "It is non-deterministic and will typically be significantly less than 800,000 due to lost increments.",
+            "It is guaranteed to equal exactly 800,000 because `counter++` is a single Java statement.",
+            "It will throw a ConcurrentModificationException as soon as two threads touch `counter`.",
+            "It will be greater than 800,000 because threads double-count each other's writes."
+          ],
+          "correct_answer": "It is non-deterministic and will typically be significantly less than 800,000 due to lost increments.",
+          "explanation": "`counter++` compiles to three separate steps (read, increment, write). When two threads read the same value before either writes, one increment is overwritten and lost. Therefore, the final value varies from run to run and is almost always far below 800,000.\n\n* A single Java line is NOT guaranteed to be atomic.\n* `ConcurrentModificationException` is thrown by iterators on fail-fast collections like `ArrayList`, not by primitive `int` fields.\n* Interleaving loses updates rather than inventing extra increments.",
+          "hints": [
+            "Break `counter++` down into its three machine-level steps: read, add 1, write.",
+            "If Thread A and Thread B both read `10` and both write `11`, what happened to the second increment?"
+          ],
+          "difficulty": 2,
+          "related_block_id": "th-race-conditions",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-count-plusplus-steps",
+          "block_type": "quiz_question",
+          "question_type": "fill_in_the_blank",
+          "title": "Terminology: Interleaved Shared-State Bug",
+          "question": "When the outcome of a concurrent program depends on the unpredictable order in which threads read and write shared data—such as two threads executing `count++` simultaneously—this bug is called a ___ condition.",
+          "correct_answer": "race",
+          "explanation": "A **race condition** occurs when multiple threads access and mutate shared resources concurrently and the final result depends on the timing/interleaving of thread execution.",
+          "hints": [
+            "The threads are 'racing' to read and write the same variable.",
+            "It is a two-word phrase: '___ condition'."
+          ],
+          "difficulty": 1,
+          "related_block_id": "th-race-conditions",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-iterative-vs-concurrent",
+      "title": "3. Iterative vs. Concurrent Server Architectures",
+      "description": "Compare single-client iterative servers against multiprocessing, multithreading, and asynchronous event-driven concurrency.",
+      "blocks": [
+        {
+          "id": "th-iterative-vs-concurrent",
+          "block_type": "markdown",
+          "title": "Handling One Client at a Time: The Iterative Server",
+          "content": "A server that serves clients **one after another** until each disconnects is called an **iterative server**.\n\nIn the hotline analogy from Chapter 08, an iterative server is a hotline with **one operator**: while the operator talks to Caller 1, Callers 2 and 3 hear *\"please hold\"* (the OS keeps their TCP connections queued in the `ServerSocket` backlog) until Caller 1 hangs up and the server calls `accept()` again.\n\n> [!WARNING]\n> **Subtle Trap — `TcpServerSingleThreadExample`:**\n> Even though `TcpServerSingleThreadExample` uses two threads (the `main` thread calling `accept()` and **one** worker thread from `Executors.newSingleThreadExecutor()`), it is **still an iterative server**! With 3 clients that each take 10 seconds, the clients receive their answers after **10, 20, and 30 seconds** because the single worker drains its queue one client at a time.\n>\n> *(Bonus bug from the chapter)*: `TcpServerSingleThreadExample` also uses `StandardCharsets.US_ASCII` instead of `UTF_8`, which corrupts the 4-byte UTF-8 wave emoji `👋` into `` and encodes outgoing emojis as `?`!",
+          "bookmarkable": true
+        },
+        {
+          "id": "diag-iterative-vs-multithreaded",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Iterative accept() Loop vs. Concurrent Executor accept() Loop",
+          "caption": "In an iterative server, the main thread blocks serving Client 1 before calling accept() again. In a concurrent server, submit() returns immediately.",
+          "source": "flowchart TD\n  subgraph Iterative[\"Iterative Server (1 Client at a Time)\"]\n    I1[\"serverSocket.accept()\"] --> I2[\"Handle Client 1 (blocks 10s)\"]\n    I2 --> I3[\"Close Client 1\"]\n    I3 --> I1\n  end\n  subgraph Concurrent[\"Concurrent Server (ExecutorService)\"]\n    C1[\"serverSocket.accept()\"] --> C2[\"executor.submit(new ClientHandler(socket))\"]\n    C2 -->|\"returns immediately\"| C1\n    C2 -.->|\"Worker Thread 1\"| W1[\"Serve Client 1\"]\n    C2 -.->|\"Worker Thread 2\"| W2[\"Serve Client 2\"]\n  end\n  classDef iter fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px;\n  classDef conc fill:#d1fae5,stroke:#059669,stroke-width:1.5px;\n  class I1,I2,I3 iter;\n  class C1,C2,W1,W2 conc;",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-three-concurrency-models",
+          "block_type": "markdown",
+          "title": "Three Ways to Handle Multiple Clients Concurrently",
+          "content": "To serve multiple clients simultaneously, network applications generally use one of three architectures:\n\n| Model | How It Works | Pros & Cons | Hotline Analogy |\n| :--- | :--- | :--- | :--- |\n| **Multiprocessing** | Main process forks a new OS process per client (e.g., classic Apache). | **Pro:** Crash isolation (one client crash doesn't kill others). **Con:** Heavy creation cost; requires IPC. | A separate call centre building and phone system for each caller. |\n| **Multithreading** | Main thread spawns or submits tasks to threads sharing process memory (Java's focus). | **Pro:** Much lighter than processes; direct shared memory. **Con:** OS platform threads are limited; requires thread-safe data structures. | One building with multiple operators sharing a desk/whiteboard. |\n| **Asynchronous / Event-Driven** | One (or few) threads start non-blocking I/O and register **callbacks** for completion (e.g., Node.js). | **Pro:** Scales to many connections with tiny thread count. **Con:** Complex callback/async control flow. | *\"Leave your number, we will call you back when your answer is ready.\"* |\n\nWithin **Multithreading**, there are two classic OS-thread strategies:\n* **Unlimited threads (`new Thread(task).start()`):** Hires a new operator and builds a new desk for every call—under a flood of clients, the building runs out of space (`OutOfMemoryError`).\n* **Fixed thread pool (`newFixedThreadPool(n)`):** Keeps $n$ operators. When all $n$ are busy, new callers wait in a queue—resources stay bounded, but slow clients delay queued clients.",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-server-strategies",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "title": "Timing Behavior of Server Concurrency Strategies",
+          "question": "Three clients connect at the exact same instant (`t = 0s`), and each client's request takes **10 seconds** of server work. If the server uses `Executors.newFixedThreadPool(2)`, at what times will the three clients receive their responses?",
+          "options": [
+            "10s, 10s, and 20s",
+            "10s, 20s, and 30s",
+            "10s, 10s, and 10s",
+            "20s, 20s, and 20s"
+          ],
+          "correct_answer": "10s, 10s, and 20s",
+          "explanation": "A fixed thread pool of size 2 has 2 worker threads. Client 1 and Client 2 start immediately at `t = 0s` and finish at `t = 10s`. Client 3 waits in the executor's unbounded queue until one of the 2 threads becomes free at `t = 10s`, then takes 10 seconds to finish at `t = 20s`.\n\n* `10s, 20s, 30s` is the timing of an iterative server (`TcpServerSimpleExample` or `newSingleThreadExecutor()`).\n* `10s, 10s, 10s` occurs when at least 3 threads (e.g., `newCachedThreadPool()` or `newVirtualThreadPerTaskExecutor()`) are available.\n* `20s, 20s, 20s` would imply all clients blocked each other for double the duration, which does not happen.",
+          "hints": [
+            "How many clients can the pool execute simultaneously at `t = 0s`?",
+            "When does the third client leave the waiting queue and begin its 10-second work?"
+          ],
+          "difficulty": 3,
+          "related_block_id": "th-three-concurrency-models",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-three-models-match",
+          "block_type": "quiz_question",
+          "question_type": "multi_select",
+          "title": "Comparing Multiprocessing, Multithreading, and Async I/O",
+          "question": "Which of the following statements accurately contrast multiprocessing, multithreading, and asynchronous programming? (Select all that apply)",
+          "options": [
+            "Multiprocessing provides strong crash isolation because each client runs in its own isolated memory space.",
+            "Asynchronous programming can serve many concurrent clients using only a single thread by relying on non-blocking I/O and callbacks.",
+            "Creating a new OS thread for every incoming client without any limit can trigger an OutOfMemoryError.",
+            "Multiprocessing is always faster and uses less memory than multithreading because processes share the same heap."
+          ],
+          "correct_answer": [
+            "Multiprocessing provides strong crash isolation because each client runs in its own isolated memory space.",
+            "Asynchronous programming can serve many concurrent clients using only a single thread by relying on non-blocking I/O and callbacks.",
+            "Creating a new OS thread for every incoming client without any limit can trigger an OutOfMemoryError."
+          ],
+          "explanation": "Processes have isolated memory spaces, giving multiprocessing strong crash isolation at the cost of higher memory/CPU overhead and IPC. Asynchronous programming avoids blocking a thread per client by using callbacks. Unlimited OS threads risk `OutOfMemoryError` because each platform thread reserves OS resources and stack space.\n\n* Processes do **not** share the same heap by default—that is a property of threads, not processes.",
+          "hints": [
+            "Which model isolates crashes best, and why?",
+            "Check the fourth option carefully: do processes or threads share the heap by default?"
+          ],
+          "difficulty": 2,
+          "related_block_id": "th-three-concurrency-models",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-java-threads-executors",
+      "title": "4. Managing Threads in Java: Runnable, ExecutorService & Try-with-Resources",
+      "description": "Learn how to structure client tasks, use Executors factories, and cleanly manage executor lifecycles.",
+      "blocks": [
+        {
+          "id": "th-runnable-callable-executor",
+          "block_type": "markdown",
+          "title": "Tasks (`Runnable` / `Callable`) and `ExecutorService`",
+          "content": "In Java, you separate **what** work to do for a client from **how** threads are managed:\n\n1. **Define the Task (`Runnable` or `Callable<T>`):**\n   * `Runnable` defines `void run()` (no arguments, no return value). Pass dependencies like the client `Socket` through the constructor of your `ClientHandler`.\n   * `Callable<T>` defines `T call()` (returns a value and can throw checked exceptions).\n   * **Crucial Distinction:** Calling `task.run()` directly runs the code **on the current thread** like any normal method! To run on a new thread, you must either call `new Thread(task).start()` (accepts `Runnable` only) or submit it to an `ExecutorService`.\n\n2. **Manage Threads with `ExecutorService` (`Executors` factory):**\n   * `Executors.newSingleThreadExecutor()`: 1 worker + unbounded queue (still iterative!).\n   * `Executors.newFixedThreadPool(n)`: `n` reused platform threads + shared unbounded queue. Bounds thread count, but slow clients can fill the queue.\n   * `Executors.newCachedThreadPool()`: Creates threads as needed and reuses idle ones (terminating threads idle for 60s). Still unbounded under sudden spikes!\n   * `Executors.newVirtualThreadPerTaskExecutor()` *(Java 21+)*: Spawns a lightweight virtual thread per task.\n\n3. **Try-with-Resources on `ExecutorService` (Java 19+):**\n   `ExecutorService` implements `AutoCloseable`. When a `try (ExecutorService executor = ...)` block exits, `close()` is called automatically—it initiates an orderly shutdown and **waits until all submitted tasks have completed**.\n\n4. **Exception Visibility with `submit()`:**\n   Unlike `new Thread(...).start()`, `executor.submit(task)` captures any uncaught exception inside the returned `Future` instead of printing it to `stderr`. Wrap your worker logic (e.g., `runAndReport(this::worker)`) if you want exceptions logged immediately.",
+          "bookmarkable": true
+        },
+        {
+          "id": "code-fixed-pool-server",
+          "block_type": "code",
+          "language": "java",
+          "filename": "ConcurrentTcpServer.java",
+          "title": "Multi-Threaded TCP Server with ExecutorService & Try-with-Resources",
+          "code": "import java.io.*;\nimport java.net.*;\nimport java.util.concurrent.*;\n\npublic class ConcurrentTcpServer {\n    private static final int PORT = 1234;\n\n    public static void main(String[] args) throws IOException {\n        try (ServerSocket serverSocket = new ServerSocket(PORT);\n             ExecutorService executor = Executors.newFixedThreadPool(10)) {\n            while (!serverSocket.isClosed()) {\n                Socket clientSocket = serverSocket.accept();\n                executor.submit(new ClientHandler(clientSocket));\n            }\n        }\n    }\n\n    static class ClientHandler implements Runnable {\n        private final Socket socket;\n\n        public ClientHandler(Socket socket) {\n            this.socket = socket;\n        }\n\n        @Override\n        public void run() {\n            try (socket) {\n                // Read from and write to the client socket\n            } catch (IOException e) {\n                System.err.println(\"Client error: \" + e.getMessage());\n            }\n        }\n    }\n}",
+          "highlight_lines": [9, 10, 12, 13, 21, 27],
+          "annotations": [
+            { "line": 9, "note": "ServerSocket and ExecutorService are both AutoCloseable in try-with-resources." },
+            { "line": 10, "note": "Fixed pool of 10 platform threads bounds OS thread creation." },
+            { "line": 12, "note": "Main thread blocks only until the next TCP connection arrives." },
+            { "line": 13, "note": "submit() returns immediately so main can loop back to accept() right away." },
+            { "line": 21, "note": "run() takes no parameters, so the client Socket is injected via the constructor." },
+            { "line": 27, "note": "try (socket) ensures the client socket is closed when this worker finishes." }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "exp-sandbox-executor-pool",
+          "block_type": "sandbox",
+          "runtime": "java",
+          "title": "Run Concurrent Tasks with ExecutorService Try-with-Resources",
+          "instructions": "Complete the `main` method to create a fixed thread pool of 3 threads using `Executors.newFixedThreadPool(3)` inside a `try (...)` try-with-resources block. Submit 6 tasks that each add `10` to an `AtomicInteger total`. Because `try-with-resources` calls `executor.close()` and waits for all tasks to finish, printing `total.get()` after the `try` block will deterministically output `60`.",
+          "starter_code": "import java.util.concurrent.ExecutorService;\nimport java.util.concurrent.Executors;\nimport java.util.concurrent.atomic.AtomicInteger;\n\npublic class Main {\n    public static void main(String[] args) {\n        AtomicInteger total = new AtomicInteger(0);\n\n        // TODO: Use try (ExecutorService executor = Executors.newFixedThreadPool(3))\n        //       to submit 6 tasks that each call total.addAndGet(10)\n\n        System.out.println(total.get());\n    }\n}",
+          "expected_output": "60",
+          "solution": "import java.util.concurrent.ExecutorService;\nimport java.util.concurrent.Executors;\nimport java.util.concurrent.atomic.AtomicInteger;\n\npublic class Main {\n    public static void main(String[] args) {\n        AtomicInteger total = new AtomicInteger(0);\n\n        try (ExecutorService executor = Executors.newFixedThreadPool(3)) {\n            for (int i = 0; i < 6; i++) {\n                executor.submit(() -> total.addAndGet(10));\n            }\n        }\n\n        System.out.println(total.get());\n    }\n}",
+          "hints": [
+            "Open `try (ExecutorService executor = Executors.newFixedThreadPool(3)) { ... }`.",
+            "Inside the `try` block, loop `i` from `0` to `5` and call `executor.submit(() -> total.addAndGet(10));`.",
+            "You do not need `Thread.sleep()` or `awaitTermination()` manually—Java 19+ `ExecutorService.close()` waits for all submitted tasks before exiting the `try` block."
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-executor-close",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "title": "Try-with-Resources Behavior on ExecutorService",
+          "question": "In Java 19+, what happens when execution reaches the closing brace `}` of a `try (ExecutorService executor = Executors.newFixedThreadPool(2))` block while submitted tasks are still running?",
+          "options": [
+            "close() is called automatically, initiating shutdown and blocking until all submitted tasks finish.",
+            "close() immediately kills all running worker threads with Thread.stop() so the program can exit.",
+            "The main thread exits the try block immediately, leaving the 2 worker threads running in the background.",
+            "A compiler error occurs because ExecutorService does not implement AutoCloseable."
+          ],
+          "correct_answer": "close() is called automatically, initiating shutdown and blocking until all submitted tasks finish.",
+          "explanation": "Since Java 19, `ExecutorService` extends `AutoCloseable`. Its default `close()` implementation calls `shutdown()` and awaits termination until all previously submitted tasks complete.\n\n* It does **not** forcibly kill running tasks.\n* It does **not** return immediately while tasks are still running; it waits for them.\n* `ExecutorService` has implemented `AutoCloseable` since Java 19.",
+          "hints": [
+            "Remember the UDP `Receiver` example from the chapter: two workers run inside `try (ExecutorService ...)`.",
+            "Why doesn't `call()` return `0` before the two workers finish?"
+          ],
+          "difficulty": 2,
+          "related_block_id": "th-runnable-callable-executor",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-run-vs-start",
+          "block_type": "quiz_question",
+          "question_type": "code_output",
+          "title": "Calling run() Directly vs. start()",
+          "question": "What does the following Java program print?\n\n```java\nThread.currentThread().setName(\"main\");\nRunnable task = () -> System.out.print(Thread.currentThread().getName() + \" \");\n\nThread t = new Thread(task, \"worker\");\nt.run();\nt.start();\nt.join();\n```",
+          "options": [
+            "main worker ",
+            "worker worker ",
+            "main main ",
+            "worker main "
+          ],
+          "correct_answer": "main worker ",
+          "explanation": "Calling `t.run()` directly is just a normal method call on the **current** thread (`main`), so it prints `main ` first. Calling `t.start()` asks the JVM/OS to launch a new thread named `worker` and invoke `run()` on it, printing `worker ` second. `t.join()` waits for `worker` to finish.",
+          "hints": [
+            "Does calling `.run()` create a new OS thread?",
+            "In what order are `t.run()` and `t.start()` called?"
+          ],
+          "difficulty": 2,
+          "related_block_id": "th-runnable-callable-executor",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-platform-vs-virtual-threads",
+      "title": "5. Platform Threads vs. Virtual Threads (Java 21+)",
+      "description": "Understand 1:1 OS threads vs. M:N JVM-managed virtual threads, unmounting on blocking I/O, and I/O-bound vs. CPU-bound benchmarks.",
+      "blocks": [
+        {
+          "id": "th-platform-vs-virtual",
+          "block_type": "markdown",
+          "title": "Platform Threads (1:1) vs. Virtual Threads (M:N, JEP 444)",
+          "content": "Since **Java 21**, `java.lang.Thread` comes in two flavors (checkable with `thread.isVirtual()`):\n\n1. **Platform Threads (1:1 OS Thread):**\n   * Backed by **one operating-system thread** for their entire lifetime (`new Thread(...)`, `newFixedThreadPool`, `newCachedThreadPool`).\n   * Heavyweight (~1 MB stack) and expensive to context-switch.\n   * Even when a platform thread is blocked waiting on `socket.readLine()` or `Thread.sleep()`, it **holds its OS thread hostage**, doing nothing.\n\n2. **Virtual Threads (M:N JVM-Managed):**\n   * Managed by the JVM, which schedules **many virtual threads** onto a **few platform carrier threads**.\n   * Extremely lightweight and fast to create—a server can easily spawn **thousands or millions**, one per client.\n   * **The Magic of Unmounting:** When a virtual thread blocks on network I/O (`readLine()`, `accept()`) or `Thread.sleep()`, the JVM **unmounts** it from its carrier thread and runs another virtual thread on that carrier in the meantime. When data arrives, the JVM remounts the virtual thread onto a free carrier.\n\n> [!TIP]\n> **Chapter 09 Benchmark Reality (`SLEEP` vs. `COMPUTE`):**\n> * **I/O-Bound (`SLEEP` 100 ms per request):** `fixed-14` achieved ~134 req/s (each thread blocked for 100 ms), whereas **`virtual` achieved 4,500–5,800 req/s**!\n> * **CPU-Bound (`COMPUTE` 6 ms of math):** `fixed-14` achieved 1,310–1,530 req/s, and **`virtual` achieved 1,330–1,500 req/s**.\n>\n> **Rule of Thumb:** Virtual threads are **not faster** than platform threads—they are **lighter**. Use virtual threads (`Executors.newVirtualThreadPerTaskExecutor()`) for **I/O-bound** network servers, and a fixed pool (~1 thread per core) for pure **CPU-bound** computation.",
+          "bookmarkable": true
+        },
+        {
+          "id": "diag-platform-vs-virtual",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "1:1 Platform Threads vs. M:N Virtual Threads on Carrier Threads",
+          "caption": "Platform threads pin 1:1 to OS threads even while waiting. Virtual threads multiplex M:N onto a small pool of carrier threads and unmount when blocked on I/O.",
+          "source": "flowchart TB\n  subgraph Platform[\"Platform Threads (1:1)\"]\n    P1[\"Platform Thread 1\"] --> OS1[\"OS Thread 1\"]\n    P2[\"Platform Thread 2\"] --> OS2[\"OS Thread 2\"]\n  end\n  subgraph Virtual[\"Virtual Threads (M:N)\"]\n    V1[\"VT 1 (active)\"] --> C1[\"Carrier Thread 1\"]\n    V2[\"VT 2 (unmounted on readLine)\"] -.-> C1\n    V3[\"VT 3 (active)\"] --> C2[\"Carrier Thread 2\"]\n    V4[\"VT 4 (waiting)\"] -.-> C2\n    C1 --> OS3[\"OS Thread A\"]\n    C2 --> OS4[\"OS Thread B\"]\n  end\n  classDef plat fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px;\n  classDef virt fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px;\n  classDef carr fill:#d1fae5,stroke:#059669,stroke-width:1.5px;\n  class P1,P2 plat;\n  class V1,V2,V3,V4 virt;\n  class C1,C2 carr;",
+          "bookmarkable": true
+        },
+        {
+          "id": "code-virtual-thread-server",
+          "block_type": "code",
+          "language": "java",
+          "filename": "VirtualThreadServer.java",
+          "title": "Modern Java 21+ Virtual Thread Server & Multi-Worker Pattern",
+          "code": "import java.io.*;\nimport java.net.*;\nimport java.util.concurrent.*;\n\npublic class VirtualThreadServer {\n    public static void main(String[] args) throws IOException {\n        try (ServerSocket serverSocket = new ServerSocket(1234);\n             ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {\n            while (!serverSocket.isClosed()) {\n                Socket clientSocket = serverSocket.accept();\n                executor.submit(new ClientHandler(clientSocket));\n            }\n        }\n    }\n\n    // Direct single virtual thread launch:\n    static void spawnOne(Runnable task) {\n        Thread vt = Thread.ofVirtual().start(task);\n        System.out.println(\"Is virtual: \" + vt.isVirtual()); // true\n    }\n}",
+          "highlight_lines": [8, 11, 18, 19],
+          "annotations": [
+            { "line": 8, "note": "Creates a fresh lightweight virtual thread for every submitted client task—no fixed pool bottleneck!" },
+            { "line": 11, "note": "ClientHandler can use simple blocking I/O (readLine/accept) because blocking unmounts the virtual thread." },
+            { "line": 18, "note": "Thread.ofVirtual().start(task) creates and starts a virtual thread directly without an ExecutorService." },
+            { "line": 19, "note": "isVirtual() returns true for virtual threads and false for platform threads." }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "sim-io-throughput",
+          "block_type": "simulation",
+          "title": "Interactive Simulator: Fixed Thread Pool Throughput on Blocking I/O",
+          "description": "Explore why fixed platform thread pools bottleneck when clients spend time waiting on I/O (such as a database query or slow network read). Adjust the pool size and average I/O wait time per request to observe the maximum theoretical throughput in requests/second (assuming 1,000 concurrent clients).",
+          "formula": "\\text{Throughput} = \\min(\\text{clients}, \\text{pool\\_size}) \\times \\frac{1000}{\\text{io\\_wait\\_ms}}",
+          "variables": [
+            { "id": "pool_size", "name": "Fixed Pool Size (threads)", "min": 1, "max": 500, "step": 1, "default": 14, "unit": "threads" },
+            { "id": "io_wait_ms", "name": "Blocking I/O Wait per Request", "min": 10, "max": 500, "step": 10, "default": 100, "unit": "ms" },
+            { "id": "clients", "name": "Concurrent Clients", "min": 10, "max": 1000, "step": 10, "default": 1000, "unit": "clients" }
+          ],
+          "compute_expression": "Math.round(Math.min(clients, pool_size) * (1000 / io_wait_ms))",
+          "chart_type": "bar",
+          "output_label": "Max Theoretical Throughput",
+          "output_unit": "req/s",
+          "bookmarkable": true
+        },
+        {
+          "id": "feynman-virtual-threads",
+          "block_type": "feynman_prompt",
+          "concept": "Platform Threads vs. Virtual Threads",
+          "target_audience": "a first-year computer science student who knows what a phone hotline is",
+          "prompt": "Using the hotline analogy (operators, desks, and phone calls), explain why virtual threads allow a server to handle thousands of waiting network clients far more efficiently than platform threads—and why they don't speed up pure math calculations.",
+          "key_points_to_cover": [
+            "Platform thread = 1 operator locked to 1 call even while waiting on hold for a database.",
+            "Carrier thread = the physical operator/desk; Virtual thread = a lightweight call.",
+            "Unmounting: when a call waits on I/O, the operator puts it on hold and serves another call.",
+            "CPU-bound limit: if every call is nonstop mental math (no waiting), more calls don't create more operators (CPU cores)."
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-virtual-threads-cpu-vs-io",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "title": "When Virtual Threads Shine (and When They Don't)",
+          "question": "You are building a Java 21 service whose tasks perform **pure CPU-heavy cryptographic hashing** with zero network or disk I/O. Your machine has 8 CPU cores. How will `Executors.newVirtualThreadPerTaskExecutor()` perform compared to `Executors.newFixedThreadPool(8)`?",
+          "options": [
+            "Roughly the same throughput, because the 8 physical CPU cores limit how much pure computation can run at once.",
+            "Dramatically faster (10x+), because virtual threads execute instructions faster than platform threads.",
+            "Much slower, because virtual threads cannot run on multi-core processors.",
+            "It will crash with OutOfMemoryError as soon as 8 tasks are submitted."
+          ],
+          "correct_answer": "Roughly the same throughput, because the 8 physical CPU cores limit how much pure computation can run at once.",
+          "explanation": "Virtual threads are **lighter**, not **faster**. Because pure computation never blocks on I/O, virtual threads never unmount to free up carrier threads for other work—the 8 CPU cores remain the hard bottleneck, so `newVirtualThreadPerTaskExecutor()` performs comparably to `newFixedThreadPool(8)`.\n\n* Virtual threads do not speed up CPU instructions.\n* Virtual threads run on carrier threads scheduled across all available CPU cores.\n* 8 virtual threads use negligible memory and will not cause `OutOfMemoryError`.",
+          "hints": [
+            "When does a virtual thread unmount from its carrier thread?",
+            "Recall the `COMPUTE` vs. `SLEEP` benchmark table from Chapter 09."
+          ],
+          "difficulty": 4,
+          "related_block_id": "th-platform-vs-virtual",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-virtual-thread-unmount",
+          "block_type": "quiz_question",
+          "question_type": "fill_in_the_blank",
+          "title": "Carrier Thread Multiplexing",
+          "question": "When a virtual thread blocks on `socket.readLine()` or `Thread.sleep()`, the JVM ___ it from its carrier thread so another virtual thread can run on that carrier in the meantime.",
+          "correct_answer": "unmounts",
+          "explanation": "When a virtual thread hits a blocking operation (such as network I/O or `Thread.sleep()`), the JVM **unmounts** it from its underlying platform carrier thread and mounts another ready virtual thread.",
+          "hints": [
+            "Think of the verb describing detaching a virtual thread from its carrier thread.",
+            "Opposite of 'mounts'."
+          ],
+          "difficulty": 2,
+          "related_block_id": "th-platform-vs-virtual",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-thread-safe-structures",
+      "title": "6. Thread-Safe Types & Concurrent Data Structures",
+      "description": "Replace unsafe primitives and collections with atomic types and concurrent collections, and avoid compound check-then-act race conditions.",
+      "blocks": [
+        {
+          "id": "th-thread-safe-structures",
+          "block_type": "markdown",
+          "title": "Atomic Types & `java.util.concurrent` Collections",
+          "content": "Standard types (`int`, `HashMap`, `ArrayList`) break when mutated by multiple threads. Java provides two primary ways to make shared state safe:\n\n1. **Atomic Variable Types (`java.util.concurrent.atomic`):**\n   * `AtomicBoolean`, `AtomicInteger`, `AtomicLong`\n   * Methods like `incrementAndGet()` and `addAndGet(delta)` perform read-modify-write as a **single indivisible (atomic) operation**.\n\n2. **Concurrent Collections (`java.util.concurrent`):**\n   * `ConcurrentHashMap` (replaces `HashMap`): Thread-safe map with atomic compound methods: `putIfAbsent()`, `replace()`, `remove(key, value)`, `compute()`, `merge()`, and `put()` (which atomically returns the previous value!).\n   * `CopyOnWriteArrayList` / `CopyOnWriteArraySet`: Ideal when **reads vastly outnumber writes**—every write copies the entire underlying array.\n   * `ConcurrentLinkedQueue` & `BlockingQueue`: Thread-safe queues (e.g., `BlockingQueue` supports producer-consumer coordination).\n\n> [!CAUTION]\n> **The Compound-Operation Trap:**\n> Even on a `ConcurrentHashMap`, calling `containsKey(name)` followed by `put(name, client)` is **two separate operations**! Another thread can slip in between `containsKey` and `put`, causing both clients to claim the same name. Always use single atomic methods like `putIfAbsent()` or `merge()`.\n>\n> **When you still need `synchronized` or `java.util.concurrent.locks`:** If you must update **multiple separate variables together** atomically (e.g., updating both an `AtomicInteger` and a `ConcurrentHashMap` as one transaction), single-object atomic methods aren't enough—you need a lock or `synchronized` block.",
+          "bookmarkable": true
+        },
+        {
+          "id": "code-concurrent-map-atomic",
+          "block_type": "code",
+          "language": "java",
+          "filename": "ClientRegistry.java",
+          "title": "Atomic Shared State: ConcurrentHashMap & AtomicInteger",
+          "code": "import java.util.Date;\nimport java.util.concurrent.ConcurrentHashMap;\nimport java.util.concurrent.atomic.AtomicInteger;\n\npublic class ClientRegistry {\n    private final AtomicInteger totalConnections = new AtomicInteger(0);\n    private final ConcurrentHashMap<String, Date> lastSeen = new ConcurrentHashMap<>();\n    private final ConcurrentHashMap<String, String> activeUsers = new ConcurrentHashMap<>();\n\n    public void recordVisit(String host) {\n        int count = totalConnections.incrementAndGet();\n        // Atomic: returns previous Date and stores new Date in ONE step\n        Date previous = lastSeen.put(host, new Date());\n        System.out.println(\"Visit #\" + count + \" from \" + host + \", prev=\" + previous);\n    }\n\n    public boolean tryRegisterUsername(String username, String ip) {\n        // Atomic check-and-insert: returns null only if username was absent\n        return activeUsers.putIfAbsent(username, ip) == null;\n    }\n}",
+          "highlight_lines": [11, 13, 19],
+          "annotations": [
+            { "line": 11, "note": "AtomicInteger.incrementAndGet() prevents lost increments across concurrent client threads." },
+            { "line": 13, "note": "put() atomically inserts the new Date and returns the old one—no race between get() and put()." },
+            { "line": 19, "note": "putIfAbsent() eliminates the containsKey() + put() race condition for unique usernames." }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "exp-sandbox-concurrent-map",
+          "block_type": "sandbox",
+          "runtime": "java",
+          "title": "Thread-Safe Counting with ConcurrentHashMap.merge()",
+          "instructions": "Four worker threads each record 1,000 hits for key `\"/api/status\"` in a shared `ConcurrentHashMap<String, Integer>`. Replace the unsafe `HashMap` and non-atomic `get` + `put` with `ConcurrentHashMap` and `hits.merge(\"/api/status\", 1, Integer::sum)` so the output is deterministically `4000`.",
+          "starter_code": "import java.util.HashMap;\nimport java.util.Map;\nimport java.util.concurrent.ExecutorService;\nimport java.util.concurrent.Executors;\n\npublic class Main {\n    public static void main(String[] args) {\n        Map<String, Integer> hits = new HashMap<>(); // <-- Unsafe!\n\n        try (ExecutorService executor = Executors.newFixedThreadPool(4)) {\n            for (int t = 0; t < 4; t++) {\n                executor.submit(() -> {\n                    for (int i = 0; i < 1_000; i++) {\n                        // TODO: Replace with atomic hits.merge(\"/api/status\", 1, Integer::sum)\n                        Integer cur = hits.get(\"/api/status\");\n                        hits.put(\"/api/status\", (cur == null ? 0 : cur) + 1);\n                    }\n                });\n            }\n        }\n\n        System.out.println(hits.get(\"/api/status\"));\n    }\n}",
+          "expected_output": "4000",
+          "solution": "import java.util.Map;\nimport java.util.concurrent.ConcurrentHashMap;\nimport java.util.concurrent.ExecutorService;\nimport java.util.concurrent.Executors;\n\npublic class Main {\n    public static void main(String[] args) {\n        Map<String, Integer> hits = new ConcurrentHashMap<>();\n\n        try (ExecutorService executor = Executors.newFixedThreadPool(4)) {\n            for (int t = 0; t < 4; t++) {\n                executor.submit(() -> {\n                    for (int i = 0; i < 1_000; i++) {\n                        hits.merge(\"/api/status\", 1, Integer::sum);\n                    }\n                });\n            }\n        }\n\n        System.out.println(hits.get(\"/api/status\"));\n    }\n}",
+          "hints": [
+            "Import `java.util.concurrent.ConcurrentHashMap;` and initialize `new ConcurrentHashMap<>()`.",
+            "Replace the `get` + `put` lines with `hits.merge(\"/api/status\", 1, Integer::sum);`."
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-concurrency-design",
+          "block_type": "reflection_rubric",
+          "title": "Synthesis: Designing a Concurrent Chat Server",
+          "prompt": "You are designing a Java 21 TCP chat server supporting up to 5,000 simultaneous clients. Clients send `JOIN <username>` (usernames must be unique) and broadcast messages, while the server tracks total messages sent. Choose your threading strategy and the exact Java thread-safe types for (a) the username registry and (b) the message counter, and explain why.",
+          "self_check_criteria": [
+            "Selected `Executors.newVirtualThreadPerTaskExecutor()` because chat clients spend most of their time blocked on network I/O.",
+            "Used `ConcurrentHashMap` with `putIfAbsent()` (not `containsKey()` + `put()`) to guarantee unique usernames atomically.",
+            "Used `AtomicLong` or `AtomicInteger` (`incrementAndGet()`) for the total message counter instead of `long++`.",
+            "Noted that if multiple independent structures must be updated together as one atomic unit, explicit locking (`synchronized` or `java.util.concurrent.locks`) is required."
+          ],
+          "model_answer": "For 5,000 mostly idle/waiting TCP clients in Java 21, `Executors.newVirtualThreadPerTaskExecutor()` is ideal: each client gets a lightweight virtual thread that unmounts from its carrier thread while blocked on `readLine()`, avoiding the memory exhaustion of 5,000 platform threads and the queueing bottleneck of a small fixed pool. For unique `JOIN <username>` registration, use a `ConcurrentHashMap<String, ClientHandler>` and call `putIfAbsent(username, handler)`—avoiding the check-then-act race condition of `containsKey()` followed by `put()`. For the total message count, use an `AtomicLong` with `incrementAndGet()`. If an operation must update both the map and another unrelated counter as a single invariant, wrap that compound action in a lock (`synchronized` or `ReentrantLock`).",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-compound-race",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "title": "Check-Then-Act Race on ConcurrentHashMap",
+          "question": "Two clients send `JOIN alice` at the same instant to a multithreaded server using `ConcurrentHashMap<String, Socket> users`. Why is `if (!users.containsKey(\"alice\")) { users.put(\"alice\", socket); }` unsafe?",
+          "options": [
+            "Each call is atomic individually, but another thread can execute between containsKey() and put(), letting both clients succeed.",
+            "ConcurrentHashMap.containsKey() is not thread-safe and throws ConcurrentModificationException.",
+            "ConcurrentHashMap cannot store Socket objects as values.",
+            "Calling put() on a ConcurrentHashMap blocks all other threads in the entire JVM forever."
+          ],
+          "correct_answer": "Each call is atomic individually, but another thread can execute between containsKey() and put(), letting both clients succeed.",
+          "explanation": "While `containsKey()` and `put()` are each individually thread-safe, executing them in sequence creates a **check-then-act** race condition: both threads can see `containsKey(\"alice\") == false` before either calls `put()`. Using `users.putIfAbsent(\"alice\", socket)` performs the check and insert in a single atomic step.\n\n* `containsKey()` is thread-safe and does not throw `ConcurrentModificationException`.\n* `ConcurrentHashMap` can store any non-null reference type, including `Socket`.\n* `put()` uses fine-grained internal synchronization and never blocks the entire JVM forever.",
+          "hints": [
+            "Remember what happens when two operations are each atomic on their own, but executed one after the other.",
+            "Which single `ConcurrentHashMap` method combines checking absence and inserting?"
+          ],
+          "difficulty": 3,
+          "related_block_id": "th-thread-safe-structures",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-concurrent-collections",
+          "block_type": "quiz_question",
+          "question_type": "multi_select",
+          "title": "Selecting the Right Concurrent Data Structure",
+          "question": "Which of the following pairings between use cases and Java concurrent types are appropriate? (Select all that apply)",
+          "options": [
+            "CopyOnWriteArrayList for a list of configuration listeners where reads are 1,000x more frequent than writes.",
+            "AtomicLong for a shared server-wide request counter incremented by all client threads.",
+            "ConcurrentHashMap.merge() for concurrently tallying word frequencies across multiple threads.",
+            "CopyOnWriteArrayList for a high-throughput queue where 50 threads append items thousands of times per second."
+          ],
+          "correct_answer": [
+            "CopyOnWriteArrayList for a list of configuration listeners where reads are 1,000x more frequent than writes.",
+            "AtomicLong for a shared server-wide request counter incremented by all client threads.",
+            "ConcurrentHashMap.merge() for concurrently tallying word frequencies across multiple threads."
+          ],
+          "explanation": "`CopyOnWriteArrayList` copies the entire backing array on every write, making it great for read-heavy, rarely modified lists—but terrible for write-heavy workloads (where `ConcurrentLinkedQueue` or `BlockingQueue` should be used instead). `AtomicLong` provides lock-free atomic increments, and `ConcurrentHashMap.merge()` atomically updates map counts.",
+          "hints": [
+            "What happens inside `CopyOnWriteArrayList` every time a write occurs?",
+            "Which option describes a write-heavy workload?"
+          ],
+          "difficulty": 3,
+          "related_block_id": "th-thread-safe-structures",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-flashcards",
+      "title": "7. Spaced Repetition Flashcards",
+      "description": "Lock in core concurrency concepts, Java APIs, and thread-safety rules.",
+      "blocks": [
+        {
+          "id": "fc-concurrency-vs-parallelism",
+          "block_type": "flashcard",
+          "title": "Concurrency vs. Parallelism",
+          "front": "What is the difference between **concurrency** and **parallelism**?",
+          "back": "**Concurrency** means multiple tasks overlap in time (making progress without waiting for others to finish, even on 1 core via time-slicing). **Parallelism** means multiple tasks execute at the exact same instant on different physical CPU cores.",
+          "hint": "One is about overlapping in time; the other is about simultaneous execution on multiple cores.",
+          "tags": ["concurrency", "fundamentals"]
+        },
+        {
+          "id": "fc-process-vs-thread",
+          "block_type": "flashcard",
+          "title": "Process vs. Thread",
+          "front": "How do a **process** and a **thread** differ in memory and creation cost?",
+          "back": "A **process** has its own isolated memory space, is expensive to create/destroy, and communicates via IPC (sockets, pipes, files). A **thread** runs inside a process, has its own stack & program counter, **shares heap memory** with sibling threads, and is much cheaper to create.",
+          "hint": "Think about memory isolation vs. shared heap.",
+          "tags": ["os", "threads", "processes"]
+        },
+        {
+          "id": "fc-race-condition",
+          "block_type": "flashcard",
+          "title": "Race Condition & count++",
+          "front": "Why is `count++` unsafe across multiple threads?",
+          "back": "`count++` is three separate steps: **read** `count`, **add 1**, **write** `count`. Two threads can read the same value before either writes, causing a **race condition** where one increment is lost.",
+          "hint": "Count the machine-level steps in `count++`.",
+          "tags": ["race-condition", "thread-safety"]
+        },
+        {
+          "id": "fc-iterative-server",
+          "block_type": "flashcard",
+          "title": "Iterative Server",
+          "front": "What is an **iterative server**, and why is `Executors.newSingleThreadExecutor()` still iterative?",
+          "back": "An iterative server handles clients **one after another**, each until it disconnects. `newSingleThreadExecutor()` has only **1 worker thread** draining an unbounded queue, so clients are still served sequentially one at a time.",
+          "hint": "How many worker threads serve the queue?",
+          "tags": ["tcp", "architecture"]
+        },
+        {
+          "id": "fc-three-concurrency-models",
+          "block_type": "flashcard",
+          "title": "Three Client Concurrency Models",
+          "front": "Name the **three** main ways to handle multiple network clients concurrently.",
+          "back": "1. **Multiprocessing** (separate OS process per client; crash isolation, heavy IPC).\n2. **Multithreading** (threads sharing process memory; Java's focus).\n3. **Asynchronous programming** (few/one thread using non-blocking I/O and callbacks, e.g., Node.js).",
+          "hint": "Processes, threads, or callbacks.",
+          "tags": ["architecture", "concurrency"]
+        },
+        {
+          "id": "fc-runnable-vs-callable",
+          "block_type": "flashcard",
+          "title": "Runnable vs. Callable",
+          "front": "How do `Runnable` and `Callable<T>` differ, and what happens if you call `run()` directly?",
+          "back": "`Runnable.run()` returns `void` and cannot throw checked exceptions; `Callable<T>.call()` returns `T` and can throw checked exceptions. Calling `run()` directly executes on the **current thread**—use `new Thread(r).start()` or `executor.submit(task)` to run on another thread.",
+          "hint": "Return type + current thread vs. new thread.",
+          "tags": ["java", "threads"]
+        },
+        {
+          "id": "fc-executor-close",
+          "block_type": "flashcard",
+          "title": "ExecutorService Try-with-Resources",
+          "front": "What does `try (ExecutorService ex = ...)` do at the end of the `try` block in Java 19+?",
+          "back": "`ExecutorService` implements `AutoCloseable`. Its `close()` method initiates an orderly `shutdown()` and **blocks until all submitted tasks have completed**.",
+          "hint": "It does more than just `shutdown()`—it waits.",
+          "tags": ["java", "executor-service"]
+        },
+        {
+          "id": "fc-platform-vs-virtual",
+          "block_type": "flashcard",
+          "title": "Platform Thread vs. Virtual Thread",
+          "front": "What is the key architectural difference between a **platform thread** and a **virtual thread** (Java 21+)?",
+          "back": "A **platform thread** is bound 1:1 to an OS thread for its whole life. A **virtual thread** is managed by the JVM (M:N) on a few **carrier threads** and **unmounts** whenever it blocks on I/O (`readLine()`, `accept()`, `Thread.sleep()`).",
+          "hint": "1:1 OS thread vs. M:N carrier threads.",
+          "tags": ["virtual-threads", "java21"]
+        },
+        {
+          "id": "fc-virtual-io-vs-cpu",
+          "block_type": "flashcard",
+          "title": "Virtual Threads: I/O-Bound vs. CPU-Bound",
+          "front": "When should you use `Executors.newVirtualThreadPerTaskExecutor()` vs. `Executors.newFixedThreadPool(cores)`?",
+          "back": "Use **virtual threads** for **I/O-bound** tasks (network clients, databases) where threads spend most of their time waiting. Use a **fixed pool (~1 thread per core)** for **CPU-bound** computation, because virtual threads are lighter, not faster.",
+          "hint": "Virtual threads are lighter, not faster.",
+          "tags": ["virtual-threads", "performance"]
+        },
+        {
+          "id": "fc-atomic-types",
+          "block_type": "flashcard",
+          "title": "Atomic Variable Types",
+          "front": "Which classes in `java.util.concurrent.atomic` replace `boolean`, `int`, and `long` for thread-safe updates?",
+          "back": "`AtomicBoolean`, `AtomicInteger`, and `AtomicLong` (e.g., `incrementAndGet()` performs read-add-write atomically).",
+          "hint": "Prefix with `Atomic`.",
+          "tags": ["java", "atomics"]
+        },
+        {
+          "id": "fc-concurrent-hashmap-compound",
+          "block_type": "flashcard",
+          "title": "ConcurrentHashMap Compound Operations",
+          "front": "Why is `if (!map.containsKey(k)) map.put(k, v)` unsafe on a `ConcurrentHashMap`, and what should you use instead?",
+          "back": "Each method is atomic, but **another thread can run between them** (check-then-act race). Use single atomic methods like `putIfAbsent(k, v)`, `merge()`, `compute()`, `replace()`, or `put()` (which atomically returns the previous value).",
+          "hint": "Two atomic calls in a row are not one atomic operation.",
+          "tags": ["concurrenthashmap", "race-condition"]
+        },
+        {
+          "id": "fc-copy-on-write",
+          "block_type": "flashcard",
+          "title": "CopyOnWriteArrayList Trade-off",
+          "front": "When is `CopyOnWriteArrayList` a good choice, and when is it a bad choice?",
+          "back": "It is **good** when **reads vastly outnumber writes**, because readers never block. It is **bad** for write-heavy lists because **every write copies the entire array**.",
+          "hint": "Look at the name: Copy-On-Write.",
+          "tags": ["collections", "java"]
+        }
+      ]
+    }
+  ]
+}

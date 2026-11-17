@@ -1,0 +1,719 @@
+{
+  "id": "dai-ch07-smtp-and-ncat",
+  "title": "Chapter 07: SMTP & ncat",
+  "description": "Master how email travels across the Internet (MUA, MSA, MTA, DNS MX), distinguish the SMTP envelope from RFC 5322 headers, understand spoofing defenses (SPF, DKIM, DMARC), test protocols interactively with Mailpit and ncat, and build a robust Java SMTP client.",
+  "estimated_minutes": 65,
+  "category": "Internet Applications (DAI)",
+  "track": "DAI - Développement d'Applications Internet (TE1)",
+  "track_order": 7,
+  "difficulty_level": "intermediate",
+  "tags": [
+    "smtp",
+    "ncat",
+    "dns",
+    "email",
+    "networking",
+    "java",
+    "sockets",
+    "spf",
+    "dkim",
+    "dmarc",
+    "mailpit"
+  ],
+  "prerequisites": [
+    "dai-ch06-application-protocols"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "HEIG-VD DAI Course — Chapter 07: SMTP & ncat",
+      "url_or_path": "https://heigvd-dai-26.github.io/chapters/07-smtp-and-ncat.html",
+      "notes": "Primary chapter text by O. Tischhauser, based on the HEIG-VD DAI course by L. Delafontaine, H. Louis, O. Liechti, and J. Ehrensberger."
+    },
+    {
+      "title": "RFC 5321 — Simple Mail Transfer Protocol",
+      "url_or_path": "https://datatracker.ietf.org/doc/html/rfc5321",
+      "notes": "SMTP commands, reply codes, CRLF line endings, and section 4.5.2 transparency (dot-stuffing)."
+    },
+    {
+      "title": "RFC 5322 — Internet Message Format",
+      "url_or_path": "https://datatracker.ietf.org/doc/html/rfc5322",
+      "notes": "Message headers (From, To, Cc, Subject, Date), blank line separator, and body."
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-networking-reminder",
+      "title": "1. Networking Foundations: IP, DNS & Ports",
+      "description": "Before sending a single email, anchor the three addressing layers that locate a mail server on the Internet: IP addresses, DNS records, and TCP port numbers.",
+      "blocks": [
+        {
+          "id": "th-ip-dns-basics",
+          "block_type": "markdown",
+          "title": "IP Addresses & Domain Name Resolution (DNS)",
+          "content": "Every machine connected to the Internet has an **IP address** that identifies it on the network:\n\n* **IPv4 (32-bit):** e.g., `193.134.223.20`. Because 32 bits only provide ~4.3 billion addresses, **NAT (Network Address Translation)** lets multiple devices behind a home or campus router share a single public IPv4 address using private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`).\n* **Loopback (`127.0.0.1` / `::1`):** Always refers to *this exact machine* (`localhost`), never leaving the local network stack—essential when testing against a local mock server.\n* **IPv6 (128-bit):** e.g., `2001:db8::1`, created to solve IPv4 exhaustion.\n\nHumans prefer memorable domain names (`heig-vd.ch`), while programs need IP addresses. The **DNS (Domain Name System)** translates names into addresses and stores specialized records for mail routing and anti-spoofing policies:\n\n| Record Type | Purpose | Example (`heig-vd.ch`) |\n| :--- | :--- | :--- |\n| **`A`** | Maps a hostname to an **IPv4** address | `193.134.223.20` |\n| **`AAAA`** | Maps a hostname to an **IPv6** address | `2001:db8::20` |\n| **`CNAME`** | Canonical Name alias (\"this name points to another name\") | `www.example.com` $\\rightarrow$ `example.com` |\n| **`NS`** | Authoritative DNS Name Servers for the domain | `ns1.heig-vd.ch` |\n| **`MX`** | **Mail Exchanger**: servers that receive email for the domain, with priority | `0 heigvd-ch01b.mail.protection.outlook.com.` |\n| **`TXT`** | Arbitrary text, heavily used for **SPF**, **DKIM**, and **DMARC** policies | `\"v=spf1 ... -all\"` |\n\n> [!IMPORTANT]\n> **MX Preference Rule:** The integer before an `MX` hostname (e.g., `0` or `5`) is its **preference**. When a domain publishes multiple `MX` records, the sending MTA always tries the **lowest number first**."
+        },
+        {
+          "id": "th-port-numbers",
+          "block_type": "markdown",
+          "title": "Port Numbers: Street Address vs. Apartment Number",
+          "content": "Think of an **IP address** as a building's street address and a **port number** as the apartment number inside that building. An IP identifies the *machine*; a port (a 16-bit integer from `0` to `65535`) identifies the specific *program* listening on that machine.\n\nTCP and UDP maintain completely separate port spaces: **TCP port 53** and **UDP port 53** are distinct endpoints that two different programs (or protocols) can use independently.\n\n| Port Range | Category | Common Examples |\n| :--- | :--- | :--- |\n| **`0–1023`** | **System (Well-Known) Ports** | `20/21` FTP, `22` SSH, `23` Telnet, `25/465/587` SMTP, `53` DNS, `80/443` HTTP/HTTPS, `110/995` POP3, `143/993` IMAP |\n| **`1024–49151`** | **User (Registered) Ports** | `1025` Mailpit SMTP, `3306` MySQL, `5432` PostgreSQL, `6379` Redis, `8025` Mailpit Web UI, `8080` HTTP alt |\n| **`49152–65535`** | **Dynamic / Ephemeral Ports** | Temporary client-side source ports and private services (e.g., `51820` WireGuard) |\n\n> [!NOTE]\n> On Linux and macOS, binding a server to a well-known port below `1024` requires elevated privileges (`root` or `CAP_NET_BIND_SERVICE`). That is why mock servers like Mailpit listen on `1025` and `8025` by default."
+        },
+        {
+          "id": "code-dns-dig-lookup",
+          "block_type": "code",
+          "language": "bash",
+          "filename": "dns-mail-inspection.sh",
+          "title": "Inspecting Mail Routing & Policies with dig",
+          "code": "# 1. Resolve IPv4 address with nslookup\nnslookup heig-vd.ch\n\n# 2. Query Mail Exchanger (MX) records (lowest preference tried first)\ndig +short heig-vd.ch MX\n# Output: 0 heigvd-ch01b.mail.protection.outlook.com.\n\n# 3. Query gmail.com MX records (multiple priorities)\ndig +short gmail.com MX\n# Output: 5 gmail-smtp-in.l.google.com. (tried before 10, 20, 30, 40)\n\n# 4. Inspect TXT records for SPF and DMARC policies\ndig +short heig-vd.ch TXT\ndig +short _dmarc.heig-vd.ch TXT",
+          "highlight_lines": [5, 9, 13, 14],
+          "annotations": [
+            {
+              "line": 5,
+              "note": "`+short` strips verbose DNS headers and returns only the answer section. `0` is the highest priority (lowest preference number)."
+            },
+            {
+              "line": 9,
+              "note": "When multiple MX records exist, an MTA tries preference 5 first, falling back to 10, 20, etc. only if unreachable."
+            },
+            {
+              "line": 13,
+              "note": "SPF policies are stored in TXT records on the domain itself (e.g., `v=spf1 ip4:... include:... -all`)."
+            },
+            {
+              "line": 14,
+              "note": "DMARC policies are always queried on the `_dmarc.` subdomain (`_dmarc.<domain>`)."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-email-journey-ports",
+      "title": "2. How an Email Travels & SMTP Ports",
+      "description": "Follow a message from Bob's laptop to Alice's inbox, distinguishing the four software roles and the exact ports used at each hop.",
+      "blocks": [
+        {
+          "id": "th-email-actors",
+          "block_type": "markdown",
+          "title": "The Four Actors of Email Delivery",
+          "content": "When Bob clicks **Send** on an email to `alice@gmail.com`, his computer does *not* connect directly to Alice's computer (her laptop might even be asleep). Instead, email uses a store-and-forward relay chain analogous to the postal system:\n\n1. **MUA (Mail User Agent):** Bob's email client (Thunderbird, Outlook, Apple Mail, or a webmail interface). Like writing a letter and dropping it in a postbox.\n2. **MSA (Mail Submission Agent):** Bob's organization's outgoing server. It authenticates Bob (username/password) and accepts his mail on port **587** or **465**.\n3. **MTA (Mail Transfer Agent):** The postal sorting and carrier network (e.g., Postfix, MS Exchange, Gmail's servers). Bob's MTA asks DNS for `gmail.com`'s `MX` record and relays the message over **port 25** to Alice's MTA. *(Note: MSA and MTA are often the same server software wearing two hats.)*\n4. **Mailbox / MDA (Mail Delivery Agent):** Stores the arrived email on Alice's server until Alice's MUA fetches it.\n\n**Push vs. Pull:** **SMTP only pushes** email forward up to the recipient's mailbox. Reading the mailbox requires a pull/sync protocol:\n* **POP3 (Ports 110 / 995):** Downloads messages to one device and optionally deletes them from the server. Simple, legacy single-device model.\n* **IMAP (Ports 143 / 993):** Keeps messages and folders on the server and synchronizes state (read/unread, flags) across phone, laptop, and desktop.\n* **Webmail:** A server-side MUA (e.g., Gmail web app) that talks HTTP/HTTPS to your browser and IMAP to your mailbox."
+        },
+        {
+          "id": "diag-email-delivery-flow",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "End-to-End Email Delivery Architecture",
+          "caption": "SMTP pushes email from MUA -> MSA -> MTA -> recipient Mailbox; IMAP or POP3 pulls it into the recipient's MUA.",
+          "source": "flowchart LR\n  BobMUA[\"Bob's MUA\\n(Outlook / Thunderbird)\"] -->|\"SMTP Port 587 or 465\\n(Auth + Submit)\"| BobServer[\"Bob's Mail Server\\n(MSA then MTA)\"]\n  BobServer -->|\"DNS Query: MX of gmail.com?\"| DNS[(\"DNS\\n(MX Records)\")]\n  BobServer -->|\"SMTP Port 25\\n(Server-to-Server Relay)\"| AliceServer[\"Alice's Mail Server\\n(MTA + Mailbox)\"]\n  AliceServer -->|\"IMAP (993) or POP3 (995)\\n(Fetch / Sync)\"| AliceMUA[\"Alice's MUA\\n(Phone / Laptop)\"]\n\n  classDef mua fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;\n  classDef server fill:#ede9fe,stroke:#6366f1,stroke-width:2px;\n  classDef dns fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;\n\n  class BobMUA,AliceMUA mua;\n  class BobServer,AliceServer server;\n  class DNS dns;"
+        },
+        {
+          "id": "th-smtp-imap-ports",
+          "block_type": "markdown",
+          "title": "Mail Ports: Plaintext, STARTTLS & Implicit TLS",
+          "content": "Why are there three different ports for SMTP (`25`, `587`, `465`)? Because **submission** (client $\\rightarrow$ MSA) and **relay** (MTA $\\rightarrow$ MTA) have different security and authentication needs:\n\n| Protocol | Role | Plaintext / Opportunistic TLS | Implicit TLS (from byte 0) |\n| :--- | :--- | :--- | :--- |\n| **SMTP** | Relay between MTAs | **25** | *(none)* |\n| **SMTP** | Submission by MUA | **587** (then `STARTTLS`) | **465** |\n| **POP3** | Reading mailbox | **110** | **995** |\n| **IMAP** | Syncing mailbox | **143** | **993** |\n\n> [!WARNING]\n> **Why `ncat` only works on ports 25 and 587 (not 465, 995, 993):**\n> On port **587**, the TCP connection begins in **clear text**, and the client sends `STARTTLS` to upgrade to TLS before sending credentials. On ports **465, 995, and 993**, the TLS cryptographic handshake happens *immediately* at byte 0, so a raw plaintext TCP tool like `ncat` cannot speak human-readable commands to them without `--ssl`."
+        }
+      ]
+    },
+    {
+      "id": "sec-envelope-vs-message",
+      "title": "3. Envelope vs. Message & Dot-Stuffing",
+      "description": "Separate the SMTP routing envelope from the RFC 5322 message body, understand how Cc/Bcc work, and master RFC 5321 dot-stuffing.",
+      "blocks": [
+        {
+          "id": "th-envelope-vs-headers",
+          "block_type": "markdown",
+          "title": "Envelope (Routing) vs. Message (Display)",
+          "content": "An SMTP transaction carries **two completely separate things**, just like a paper letter inside a sealed postal envelope:\n\n1. **The Envelope (SMTP Commands):** Tells the mail servers where to deliver the message and where to send bounce/error reports:\n   * `MAIL FROM:<alice@example.com>` — the **return path** (bounce address).\n   * `RCPT TO:<bob@example.com>` — the **actual delivery recipient(s)** (one command per recipient).\n2. **The Message (RFC 5322, sent after `DATA`):** What the user sees in their inbox:\n   * **Headers:** `Name: value` lines (`From:`, `To:`, `Cc:`, `Subject:`, `Date:`). Long headers fold onto the next line starting with a space.\n   * **Blank Line:** An empty line (`\\r\\n`) separating headers from the body.\n   * **Body:** The email text itself.\n\n> [!CAUTION]\n> **Servers deliver to the Envelope (`RCPT TO`), NEVER to `To:` or `Cc:` headers!**\n> * **Bcc (Blind Carbon Copy):** The MUA issues a `RCPT TO:<carol@example.com>` in the envelope, but omits Carol from the `To:` and `Cc:` headers. Carol receives the mail, and Bob has no idea.\n> * **Mailing Lists:** A list message with `To: dai@lists.example.com` is sent via `RCPT TO:` to every individual subscriber.\n> * **Angle Brackets:** In strict SMTP syntax, `MAIL FROM:<...>` and `RCPT TO:<...>` require `< >` around addresses; omitting them triggers a syntax error.\n> * **Non-Example:** Nothing in base SMTP checks that `MAIL FROM:` matches the `From:` header! A sender can put `MAIL FROM:<eve@example.com>` in the envelope and `From: The Boss <boss@heig-vd.ch>` in the message headers."
+        },
+        {
+          "id": "th-crlf-dot-stuffing",
+          "block_type": "markdown",
+          "title": "CRLF Line Endings, Dot-Stuffing & SMTP Smuggling",
+          "content": "Because SMTP is a line-oriented text protocol, two low-level framing rules are critical:\n\n1. **Strict CRLF (`\\r\\n`):** Every SMTP line—commands and message lines alike—must end with Carriage Return + Line Feed (`\\r\\n`). The `DATA` phase ends *only* when the server sees the exact 5-byte sequence: `\\r\\n.\\r\\n` (a line containing a single period).\n2. **Dot-Stuffing (RFC 5321 §4.5.2):** What if the body of your email legitimately contains a line starting with a period (or a line with just `.`)? Without escaping, the server would terminate `DATA` prematurely!\n   * **Client rule:** If any body line begins with `.`, prepend an extra `.` (`\".Hello\"` $\\rightarrow$ `\"..Hello\"`, `\".\"` $\\rightarrow$ `\"..\"`).\n   * **Server rule:** When receiving `DATA`, if a line starts with `.` (and is not the lone `.` terminator), strip the leading `.` (`\"..Hello\"` $\\rightarrow$ `\".Hello\"`).\n3. **SMTP Smuggling (2023 Vulnerability):** Researchers discovered that some servers accepted bare `\\n.\\n` as end-of-data while others strictly required `\\r\\n.\\r\\n`. An attacker could embed `\\n.\\n` inside a message body to trick a strict outgoing server into passing a second, hidden SMTP transaction to a lenient incoming server! Enforcing strict `\\r\\n.\\r\\n` prevents this."
+        },
+        {
+          "id": "exp-sandbox-dot-stuffing",
+          "block_type": "sandbox",
+          "runtime": "java",
+          "title": "Java Sandbox: RFC 5321 Dot-Stuffing Encoder & Decoder",
+          "instructions": "Complete the `dotStuff` and `dotUnstuff` methods in `Main` following RFC 5321 §4.5.2:\n1. `dotStuff(String line)`: if `line` starts with `\".\"`, prepend another `\".\"`; otherwise return `line` unchanged.\n2. `dotUnstuff(String line)`: if `line` starts with `\".\"`, strip the first `\".\"`; otherwise return `line` unchanged.\nRun the test cases in `main` to verify round-trip fidelity on `.`, `..`, `.Hello`, and `Normal line.`.",
+          "starter_code": "public class Main {\n  public static String dotStuff(String line) {\n    // TODO: If line starts with '.', prepend '.'\n    return line;\n  }\n\n  public static String dotUnstuff(String line) {\n    // TODO: If line starts with '.', remove the leading '.'\n    return line;\n  }\n\n  public static void main(String[] args) {\n    String[] samples = {\".\", \"..\", \".Hello\", \"Normal line.\"};\n    for (String s : samples) {\n      String wire = dotStuff(s);\n      String decoded = dotUnstuff(wire);\n      System.out.println(s + \" -> \" + wire + \" -> \" + decoded);\n    }\n  }\n}",
+          "expected_output": ". -> .. -> .\n.. -> ... -> ..\n.Hello -> ..Hello -> .Hello\nNormal line. -> Normal line. -> Normal line.",
+          "solution": "public class Main {\n  public static String dotStuff(String line) {\n    return line.startsWith(\".\") ? \".\" + line : line;\n  }\n\n  public static String dotUnstuff(String line) {\n    return line.startsWith(\".\") ? line.substring(1) : line;\n  }\n\n  public static void main(String[] args) {\n    String[] samples = {\".\", \"..\", \".Hello\", \"Normal line.\"};\n    for (String s : samples) {\n      String wire = dotStuff(s);\n      String decoded = dotUnstuff(wire);\n      System.out.println(s + \" -> \" + wire + \" -> \" + decoded);\n    }\n  }\n}",
+          "hints": [
+            "Use `line.startsWith(\".\")` to check whether a line begins with a period.",
+            "Note that a period at the *end* of a line (like `\"Normal line.\"`) must NOT be modified—only a leading period triggers dot-stuffing."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-spoofing-spf-dkim-dmarc",
+      "title": "4. Spam, Spoofing & Policies (SPF, DKIM, DMARC)",
+      "description": "Understand why 1982 SMTP allows trivial spoofing and how DNS-published SPF, DKIM, and DMARC policies defend against phishing.",
+      "blocks": [
+        {
+          "id": "th-spf-dkim-dmarc",
+          "block_type": "markdown",
+          "title": "Why Spoofing Works & How Three DNS Policies Stop It",
+          "content": "SMTP was designed in 1982 for a small, mutually trusting network: out of the box it has **no authentication** and **no encryption**. Writing a fake `From:` header is called **spoofing**—the foundation of phishing emails.\n\nTo combat spoofing without breaking backward compatibility, three complementary mechanisms publish policies in **DNS `TXT` records**:\n\n### 1. SPF — Sender Policy Framework (RFC 7208)\n* **What it checks:** Whether the **IP address** of the sending MTA is authorized to send mail for the domain in the **`MAIL FROM`** envelope command.\n* **Example (`heig-vd.ch`):**\n  `\"v=spf1 ip4:193.134.218.124 ... include:spf.protection.outlook.com -all\"`\n* **Qualifiers:**\n  * `-all` (**Hard Fail**): Reject or fail any IP not listed.\n  * `~all` (**Soft Fail**): Mark as suspect / spam, but do not outright reject.\n  * `redirect=_spf.google.com`: Delegate the entire SPF policy to another domain's `TXT` record.\n\n### 2. DKIM — DomainKeys Identified Mail (RFC 6376)\n* **What it checks:** **Cryptographic integrity and origin**. The sending server signs the email headers and body with a private key; the receiving server fetches the domain's public key from DNS (`<selector>._domainkey.<domain>`) to verify the message wasn't tampered with.\n\n### 3. DMARC — Domain-based Message Authentication, Reporting & Conformance (RFC 9989)\n* **The Gap:** What if an attacker uses `MAIL FROM:<eve@attacker.com>` (which passes *attacker.com*'s SPF!) while setting the visible `From: boss@heig-vd.ch` header?\n* **What DMARC checks:** **Alignment**—the domain in the visible `From:` header *must match* the domain authenticated by SPF or DKIM. Published at `_dmarc.<domain>`:\n  * `p=none`: Take no action on failure, just send reports to `rua=`.\n  * `p=quarantine` (or `sp=quarantine` for subdomains): Route failed mail to spam.\n  * `p=reject`: Refuse the email outright."
+        },
+        {
+          "id": "diag-spf-dkim-dmarc-flow",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Receiving MTA Authentication Pipeline (SPF, DKIM & DMARC)",
+          "caption": "SPF validates the connecting IP against MAIL FROM; DKIM validates the cryptographic signature; DMARC enforces alignment with the visible From: header.",
+          "source": "flowchart TD\n  Recv[\"Incoming Email at Recipient MTA\"] --> SPF[\"SPF Check:\\nDoes Sender IP match TXT of MAIL FROM domain?\"]\n  Recv --> DKIM[\"DKIM Check:\\nDoes Signature verify via DNS Public Key?\"]\n  SPF --> DMARC{\"DMARC Alignment:\\nDoes From: header domain match\\npassing SPF or DKIM domain?\"}\n  DKIM --> DMARC\n  DMARC -->|\"Aligned Pass\"| Deliver[\"Deliver to Inbox\"]\n  DMARC -->|\"Fail: p=none\"| Monitor[\"Deliver / Flag + Send rua= Report\"]\n  DMARC -->|\"Fail: p=quarantine\"| Spam[\"Move to Spam / Quarantine\"]\n  DMARC -->|\"Fail: p=reject\"| Reject[\"Reject Email (550)\"]\n\n  classDef check fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px;\n  classDef pass fill:#d1fae5,stroke:#059669,stroke-width:2px;\n  classDef warn fill:#fef3c7,stroke:#d97706,stroke-width:1.5px;\n  classDef fail fill:#ffe4e6,stroke:#e11d48,stroke-width:2px;\n\n  class SPF,DKIM,DMARC check;\n  class Deliver pass;\n  class Monitor,Spam warn;\n  class Reject fail;"
+        },
+        {
+          "id": "exp-sim-smtp-rtt",
+          "block_type": "simulation",
+          "title": "SMTP Lockstep Latency Simulator",
+          "description": "In standard lockstep SMTP (without PIPELINING), the client waits for a server reply after every single command: TCP+220 greeting, EHLO, MAIL FROM, N x RCPT TO, DATA, body+dot, and QUIT. Adjust the number of recipients and network RTT to observe total transaction latency.",
+          "formula": "T_{\\text{total}} = (6 + N_{\\text{rcpt}}) \\times \\text{RTT}",
+          "variables": [
+            {
+              "id": "n_rcpt",
+              "name": "Number of Recipients (RCPT TO)",
+              "min": 1,
+              "max": 50,
+              "step": 1,
+              "default": 3,
+              "unit": "recipients"
+            },
+            {
+              "id": "rtt_ms",
+              "name": "Network Round-Trip Time (RTT)",
+              "min": 5,
+              "max": 250,
+              "step": 5,
+              "default": 40,
+              "unit": "ms"
+            }
+          ],
+          "compute_expression": "(6 + n_rcpt) * rtt_ms",
+          "chart_type": "line",
+          "output_label": "Total Lockstep SMTP Time",
+          "output_unit": "ms"
+        }
+      ]
+    },
+    {
+      "id": "sec-mock-servers-ncat",
+      "title": "5. Mock Servers (Mailpit) & ncat Mastery",
+      "description": "Run Mailpit safely in Docker, drive an SMTP session by hand with ncat -C, and diagnose what breaks when CRLF is omitted.",
+      "blocks": [
+        {
+          "id": "th-mailpit-and-ncat",
+          "block_type": "markdown",
+          "title": "Mock Servers & ncat Client/Server Modes",
+          "content": "Never test an experimental SMTP client against a real mail server: a bug in a loop can blast thousands of emails, get your IP blocklisted, or violate institutional policy.\n\n**Mailpit** is a **mock SMTP server**: it speaks real SMTP on port **1025**, captures every incoming email in a temporary in-memory database without delivering anything to the Internet, and displays the messages (including raw headers and `Bcc:`) in a web UI at `http://localhost:8025`.\n\n```yaml\nservices:\n  mailpit:\n    image: axllent/mailpit:v1.32\n    ports:\n      - 1025:1025   # SMTP server\n      - 8025:8025   # Web interface\n```\n\n### Talking Raw TCP with `ncat`\n`ncat` (part of `nmap`) opens a raw TCP connection, sends whatever you type, and prints whatever arrives. It speaks no protocol of its own—**you** are the protocol:\n\n* **Client mode:** `ncat -C localhost 1025` (connects to Mailpit).\n* **Server mode:** `ncat -l -C 2525` (listens on port 2525 so you can play the server for your Java client).\n\n> [!WARNING]\n> **Why `-C` (`--crlf`) is Critical:**\n> Your terminal's Enter key sends a bare `\\n` (LF). With `-C`, `ncat` translates every newline into `\\r\\n` (CRLF). If you forget `-C` (`ncat localhost 1025`), Mailpit may still accept individual commands, **but `DATA` never ends!** Because `\\n.\\n` is not `\\r\\n.\\r\\n`, Mailpit treats `.` and `QUIT` as ordinary body text and hangs for 5 minutes until it times out with `421`."
+        },
+        {
+          "id": "diag-smtp-sequence",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Complete SMTP Session Sequence",
+          "caption": "In SMTP, the server speaks first (220). Multi-line replies use a hyphen (250-) until the final line (250 ).",
+          "source": "sequenceDiagram\n  participant C as Client (ncat -C / Java)\n  participant S as SMTP Server (Mailpit :1025)\n  Note over C,S: TCP Connection Established\n  S-->>C: 220 Mailpit ESMTP Service ready\n  C->>S: EHLO my-laptop.local\n  S-->>C: 250-greets my-laptop.local\n  S-->>C: 250-SIZE 52428800\n  S-->>C: 250 ENHANCEDSTATUSCODES\n  C->>S: MAIL FROM:<alice@example.com>\n  S-->>C: 250 2.1.0 Ok\n  C->>S: RCPT TO:<bob@example.com>\n  S-->>C: 250 2.1.5 Ok\n  C->>S: DATA\n  S-->>C: 354 Start mail input (terminate with CRLF.CRLF)\n  C->>S: Headers + blank line + body + CRLF.CRLF\n  S-->>C: 250 2.0.0 Ok queued\n  C->>S: QUIT\n  S-->>C: 221 2.0.0 closing transmission channel"
+        },
+        {
+          "id": "code-smtp-wire-transcript",
+          "block_type": "code",
+          "language": "text",
+          "filename": "smtp-wire-transcript.txt",
+          "title": "Annotated SMTP Wire Transcript & Status Codes",
+          "code": "S: 220 a825881dcf8e Mailpit ESMTP Service ready\nC: EHLO my-laptop.local\nS: 250-a825881dcf8e greets my-laptop.local\nS: 250-SIZE 52428800\nS: 250-ENHANCEDSTATUSCODES\nS: 250 8BITMIME\nC: MAIL FROM:<alice@example.com>\nS: 250 2.1.0 Ok\nC: RCPT TO:<bob@example.com>\nS: 250 2.1.5 Ok\nC: DATA\nS: 354 Start mail input; end with <CR><LF>.<CR><LF>\nC: From: Alice <alice@example.com>\nC: To: Bob <bob@example.com>\nC: Subject: Hello from ncat\nC: \nC: Hi Bob,\nC: this mail was typed by hand.\nC: .\nS: 250 2.0.0 Ok: queued as 0WN74Fza0O8ED2H17pjg9l\nC: QUIT\nS: 221 2.0.0 closing transmission channel\n\n# Out-of-order command example:\nC: RCPT TO:<bob@example.com>\nS: 503 5.5.1 Bad sequence of commands (MAIL required before RCPT)",
+          "highlight_lines": [1, 3, 6, 12, 16, 19, 26],
+          "annotations": [
+            {
+              "line": 1,
+              "note": "Server speaks first! `2xx` = success. `220` = Service ready."
+            },
+            {
+              "line": 3,
+              "note": "A hyphen `-` at index 3 (`250-`) indicates more reply lines follow."
+            },
+            {
+              "line": 6,
+              "note": "A space ` ` at index 3 (`250 `) marks the LAST line of the multi-line reply."
+            },
+            {
+              "line": 12,
+              "note": "`3xx` (`354`) = Intermediate success: go ahead and send the message data."
+            },
+            {
+              "line": 16,
+              "note": "Mandatory blank line (`\\r\\n`) separates RFC 5322 headers from the message body."
+            },
+            {
+              "line": 19,
+              "note": "A lone `.` on a line (`\\r\\n.\\r\\n`) ends the DATA block."
+            },
+            {
+              "line": 26,
+              "note": "`4xx` = temporary failure (retry later); `5xx` (`503`, `550`) = permanent failure."
+            }
+          ]
+        },
+        {
+          "id": "exp-sandbox-crlf-validator",
+          "block_type": "sandbox",
+          "runtime": "python",
+          "title": "Python Sandbox: Detect Missing -C (CRLF) & Multi-line End",
+          "instructions": "Write two helper functions in Python:\n1. `has_valid_data_terminator(raw_bytes: bytes) -> bool`: returns `True` only if `raw_bytes` ends with the exact 5-byte SMTP terminator `b\"\\r\\n.\\r\\n\"` (catching the \"forgot `-C`\" bug where `b\"\\n.\\n\"` was sent).\n2. `is_last_reply_line(line: str) -> bool`: returns `True` if a server reply line is the final line of an SMTP response (length >= 4 and `line[3] == ' '`).\nRun the assertions to verify both functions.",
+          "starter_code": "def has_valid_data_terminator(raw_bytes: bytes) -> bool:\n    # TODO: Check for exact CRLF.CRLF terminator\n    return False\n\ndef is_last_reply_line(line: str) -> bool:\n    # TODO: Check whether index 3 is a space (not '-')\n    return False\n\nprint(has_valid_data_terminator(b\"Hi Bob\\r\\n.\\r\\n\"))\nprint(has_valid_data_terminator(b\"Hi Bob\\n.\\n\"))\nprint(is_last_reply_line(\"250-SIZE 52428800\"))\nprint(is_last_reply_line(\"250 8BITMIME\"))",
+          "expected_output": "True\nFalse\nFalse\nTrue",
+          "solution": "def has_valid_data_terminator(raw_bytes: bytes) -> bool:\n    return raw_bytes.endswith(b\"\\r\\n.\\r\\n\")\n\ndef is_last_reply_line(line: str) -> bool:\n    return len(line) >= 4 and line[3] == ' '\n\nprint(has_valid_data_terminator(b\"Hi Bob\\r\\n.\\r\\n\"))\nprint(has_valid_data_terminator(b\"Hi Bob\\n.\\n\"))\nprint(is_last_reply_line(\"250-SIZE 52428800\"))\nprint(is_last_reply_line(\"250 8BITMIME\"))",
+          "hints": [
+            "Use `raw_bytes.endswith(b\"\\r\\n.\\r\\n\")` to verify strict CRLF framing.",
+            "In SMTP, multi-line continuation lines have `'-'` at index 3 (`\"250-...\"`), whereas the final line has `' '` at index 3 (`\"250 ...\"`)."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-java-smtp-client",
+      "title": "6. Building a Java SMTP Client",
+      "description": "Translate the manual ncat session into a Java Socket client, and avoid the four classic I/O bugs (newLine, missing flush, single readLine, and unstuffed dots).",
+      "blocks": [
+        {
+          "id": "code-java-smtp-client",
+          "block_type": "code",
+          "language": "java",
+          "filename": "SmtpClient.java",
+          "title": "Annotated Java SMTP Client (Socket + BufferedReader/Writer)",
+          "code": "try (Socket socket = new Socket(host, port);\n     BufferedReader in = new BufferedReader(\n         new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));\n     BufferedWriter out = new BufferedWriter(\n         new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8))) {\n\n  expect(in, 220);                 // Server speaks first!\n  send(out, \"EHLO my-laptop.local\");\n  expect(in, 250);\n  // ... MAIL FROM, RCPT TO, DATA (354), headers, body, ., QUIT (221)\n}\n\nprivate static void send(BufferedWriter out, String line) throws IOException {\n  System.out.println(\"C: \" + line);\n  out.write(line + \"\\r\\n\");\n  out.flush();\n}\n\nprivate static void expect(BufferedReader in, int code) throws IOException {\n  String line;\n  do {\n    line = in.readLine();\n    if (line == null) {\n      throw new IOException(\"The server closed the connection\");\n    }\n    System.out.println(\"S: \" + line);\n  } while (line.length() > 3 && line.charAt(3) == '-');\n\n  if (!line.startsWith(code + \"\")) {\n    throw new IOException(\"Expected \" + code + \", received: \" + line);\n  }\n}",
+          "highlight_lines": [3, 5, 7, 15, 16, 27, 29],
+          "annotations": [
+            {
+              "line": 3,
+              "note": "Always specify `StandardCharsets.UTF_8` explicitly—never rely on the OS default charset."
+            },
+            {
+              "line": 7,
+              "note": "Call `expect(in, 220)` BEFORE sending `EHLO` because in SMTP the server sends the 220 greeting first."
+            },
+            {
+              "line": 15,
+              "note": "Write `\"\\r\\n\"` explicitly! `BufferedWriter.newLine()` writes the OS separator (`\\n` on Linux/macOS), which breaks strict SMTP."
+            },
+            {
+              "line": 16,
+              "note": "`flush()` is mandatory! Without it, the command sits in the buffer while both client and server deadlock waiting for each other."
+            },
+            {
+              "line": 27,
+              "note": "Loop while `charAt(3) == '-'` so all lines of a multi-line `250-` reply are consumed before the next command."
+            },
+            {
+              "line": 29,
+              "note": "Check the final line's 3-digit code; throw `IOException` if it does not match (e.g., `550 No such user`)."
+            }
+          ]
+        },
+        {
+          "id": "th-java-four-pitfalls",
+          "block_type": "markdown",
+          "title": "Four Classic Bugs in Java SMTP Clients",
+          "content": "When implementing or debugging `SmtpClient.java`, watch out for these four failure modes:\n\n1. **Using `out.newLine()` instead of `out.write(\"\\r\\n\")`:** `newLine()` uses `System.lineSeparator()`, which is `\\n` on Linux/macOS. That breaks `\\r\\n.\\r\\n` termination.\n2. **Forgetting `out.flush()`:** `BufferedWriter` buffers characters in memory. If you don't flush after each command, the server never receives `EHLO` and your client blocks forever on `in.readLine()`.\n3. **Reading only one line instead of looping on `charAt(3) == '-'`:** If `expect()` calls `readLine()` only once after `EHLO`, it reads `250-a825881dcf8e greets...` and leaves `250-SIZE...` and `250-8BITMIME` sitting in the stream! Every subsequent command reads an *old* reply line, until `DATA` expects `354` and crashes with `Expected 354, received: 250-8BITMIME`.\n4. **Reading a body from a file without dot-stuffing:** A file line containing `.` will prematurely end `DATA`, causing the rest of the file to be interpreted as invalid SMTP commands."
+        },
+        {
+          "id": "exp-sandbox-java-expect",
+          "block_type": "sandbox",
+          "runtime": "java",
+          "title": "Java Sandbox: Implement Multi-Line expect() & Error Handling",
+          "instructions": "Simulate an in-memory SMTP server response stream using `BufferedReader` and `StringReader`.\nComplete `expect(BufferedReader in, int code)` so that:\n1. It reads lines in a `do ... while` loop while `line.length() > 3 && line.charAt(3) == '-'`.\n2. If `readLine()` returns `null`, it throws `IOException(\"The server closed the connection\")`.\n3. On the final line, if `!line.startsWith(code + \"\")`, it throws `IOException(\"Expected \" + code + \", received: \" + line)`.\n4. It returns the final line.\nRun the test cases in `main`.",
+          "starter_code": "import java.io.BufferedReader;\nimport java.io.IOException;\nimport java.io.StringReader;\n\npublic class Main {\n  public static String expect(BufferedReader in, int code) throws IOException {\n    // TODO: Read multi-line SMTP reply until charAt(3) != '-' and validate status code\n    return \"\";\n  }\n\n  public static void main(String[] args) throws IOException {\n    String ehloReply = \"250-mailpit greets client\\r\\n250-SIZE 52428800\\r\\n250 8BITMIME\\r\\n\";\n    BufferedReader okReader = new BufferedReader(new StringReader(ehloReply));\n    System.out.println(\"Final: \" + expect(okReader, 250));\n\n    BufferedReader errReader = new BufferedReader(new StringReader(\"550 No such user\\r\\n\"));\n    try {\n      expect(errReader, 250);\n    } catch (IOException e) {\n      System.out.println(\"Caught: \" + e.getMessage());\n    }\n  }\n}",
+          "expected_output": "Final: 250 8BITMIME\nCaught: Expected 250, received: 550 No such user",
+          "solution": "import java.io.BufferedReader;\nimport java.io.IOException;\nimport java.io.StringReader;\n\npublic class Main {\n  public static String expect(BufferedReader in, int code) throws IOException {\n    String line;\n    do {\n      line = in.readLine();\n      if (line == null) {\n        throw new IOException(\"The server closed the connection\");\n      }\n    } while (line.length() > 3 && line.charAt(3) == '-');\n\n    if (!line.startsWith(code + \"\")) {\n      throw new IOException(\"Expected \" + code + \", received: \" + line);\n    }\n    return line;\n  }\n\n  public static void main(String[] args) throws IOException {\n    String ehloReply = \"250-mailpit greets client\\r\\n250-SIZE 52428800\\r\\n250 8BITMIME\\r\\n\";\n    BufferedReader okReader = new BufferedReader(new StringReader(ehloReply));\n    System.out.println(\"Final: \" + expect(okReader, 250));\n\n    BufferedReader errReader = new BufferedReader(new StringReader(\"550 No such user\\r\\n\"));\n    try {\n      expect(errReader, 250);\n    } catch (IOException e) {\n      System.out.println(\"Caught: \" + e.getMessage());\n    }\n  }\n}",
+          "hints": [
+            "Use a `do { ... } while (line.length() > 3 && line.charAt(3) == '-');` loop.",
+            "Check `if (line == null)` inside the loop before accessing `line.length()`."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-synthesis-retrieval",
+      "title": "7. Synthesis, Reflection & Retrieval Practice",
+      "description": "Solidify your mental model with Feynman articulation, failure-mode reflection, 10 diagnostic quiz questions, and 10 spaced-repetition flashcards.",
+      "blocks": [
+        {
+          "id": "ref-feynman-envelope-spoofing",
+          "block_type": "feynman_prompt",
+          "concept": "SMTP Envelope vs. Message Headers & Email Spoofing",
+          "target_audience": "a non-technical project manager who thinks the From: address in their inbox guarantees who sent the email",
+          "prompt": "Explain the difference between the SMTP envelope and the message headers using a physical mail analogy, why this makes spoofing trivial in base SMTP, and how SPF, DKIM, and DMARC work together to stop it.",
+          "key_points_to_cover": [
+            "Postal envelope (MAIL FROM / RCPT TO) vs. letter inside (From: / To:)",
+            "Servers route using RCPT TO, while the inbox displays From:",
+            "SPF checks the sending server IP against MAIL FROM domain",
+            "DKIM cryptographically signs the message with a DNS public key",
+            "DMARC enforces alignment between the visible From: domain and SPF/DKIM"
+          ]
+        },
+        {
+          "id": "ref-rubric-crlf-desync",
+          "block_type": "reflection_rubric",
+          "title": "Diagnosis: Hanging ncat Sessions & Desynchronized Java Clients",
+          "prompt": "A classmate reports two bugs: (1) When using `ncat localhost 1025`, all SMTP commands work until they type `.` and `QUIT`, after which Mailpit hangs silently for 5 minutes. (2) In their Java client, `EHLO` and `MAIL FROM` succeed, but `DATA` throws `Expected 354, received: 250-8BITMIME`. Diagnose the root cause of both bugs.",
+          "self_check_criteria": [
+            "Identified that `ncat` without `-C` sends `\\n` instead of `\\r\\n`, so `\\n.\\n` is not recognized as the `\\r\\n.\\r\\n` DATA terminator.",
+            "Explained that Mailpit treats `.` and `QUIT` as body text and waits 5 minutes before sending a `421` timeout.",
+            "Identified that the Java client's `expect()` only called `readLine()` once instead of looping while `charAt(3) == '-'`.",
+            "Explained that unread `250-` lines from `EHLO` stayed in the `BufferedReader` stream and shifted every subsequent reply by one or more lines."
+          ],
+          "model_answer": "In Bug 1, omitting `-C` causes `ncat` to send LF (`\\n`) instead of CRLF (`\\r\\n`). While Mailpit tolerates `\\n` for commands, RFC 5321 strictly requires `\\r\\n.\\r\\n` to terminate `DATA`. Thus `.` and `QUIT` are absorbed as ordinary email body lines until Mailpit times out after 5 minutes with `421`. In Bug 2, `expect()` read only the first line of the multi-line `EHLO` response (`250-greets...`) and left `250-SIZE...` and `250-8BITMIME` unread in the buffer. Subsequent `MAIL FROM` and `RCPT TO` calls consumed those leftover `250` lines, so `DATA` read `250-8BITMIME` instead of `354`. Looping until `charAt(3) != '-'` fixes this."
+        },
+        {
+          "id": "qz-smtp-ports-roles",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-smtp-imap-ports",
+          "title": "SMTP Port Selection for MUA vs. MTA",
+          "question": "Which port does a Mail Transfer Agent (MTA) use to relay an email to another domain's MTA, and why can `ncat` without TLS talk to port 587 but not port 465?",
+          "options": [
+            "MTA relay uses port 25; port 587 starts in plaintext before `STARTTLS`, whereas port 465 uses implicit TLS from byte 0.",
+            "MTA relay uses port 587; port 25 uses implicit TLS from byte 0, whereas port 465 starts in plaintext.",
+            "MTA relay uses port 993; port 587 is for POP3 and port 465 is for IMAP.",
+            "MTA relay uses port 25; port 587 is exclusively for local loopback testing like Mailpit."
+          ],
+          "correct_answer": "MTA relay uses port 25; port 587 starts in plaintext before `STARTTLS`, whereas port 465 uses implicit TLS from byte 0.",
+          "explanation": "Server-to-server SMTP relay between MTAs uses port 25. Client submission (MUA to MSA) uses port 587 (plaintext handshake followed by `STARTTLS`) or port 465 (implicit TLS from the first byte).\n\n* Option 2 swaps ports 25 and 587 and mischaracterizes 25 and 465.\n* Option 3 confuses SMTP ports with IMAP (993) and POP3.\n* Option 4 falsely claims 587 is only for local loopback testing (Mailpit uses 1025).",
+          "hints": [
+            "Distinguish between MUA->MSA (submission) and MTA->MTA (relay).",
+            "Recall which submission port upgrades via `STARTTLS` versus which one begins with a TLS handshake immediately."
+          ]
+        },
+        {
+          "id": "qz-mx-preference",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-ip-dns-basics",
+          "title": "Interpreting DNS MX Preference Numbers",
+          "question": "A `dig +short example.org MX` query returns:\n`20 mx2.example.org.`\n`5 mx1.example.org.`\n`10 mx3.example.org.`\nWhich mail server will a sending MTA try first?",
+          "options": [
+            "`mx1.example.org.` (preference 5)",
+            "`mx2.example.org.` (preference 20)",
+            "`mx3.example.org.` (preference 10)",
+            "It picks one at random regardless of the number."
+          ],
+          "correct_answer": "`mx1.example.org.` (preference 5)",
+          "explanation": "In DNS `MX` records, the **lowest** preference number has the **highest** priority. Therefore, the sending MTA tries `mx1.example.org.` (5) first, then `mx3.example.org.` (10), and finally `mx2.example.org.` (20).\n\n* Choosing `20` reverses the rule (higher number = lower priority).\n* Choosing `10` picks the middle value.\n* Random selection only happens when multiple MX records share the *exact same* lowest preference.",
+          "hints": [
+            "Think of MX preference like a race placement: 1st place (lowest number) goes first.",
+            "Lower number = higher priority, so compare 5, 10, and 20."
+          ]
+        },
+        {
+          "id": "qz-envelope-bcc",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-envelope-vs-headers",
+          "title": "How Bcc Works in SMTP",
+          "question": "Bob sends an email to Alice (`To:`) and blind-copies Carol (`Bcc:`). Which statement accurately describes the SMTP transaction?",
+          "options": [
+            "Bob's MUA sends `RCPT TO:` for both Alice and Carol, but omits Carol from the `To:` and `Cc:` headers inside `DATA`.",
+            "Bob's MUA sends `RCPT TO:` only for Alice, and puts `Bcc: carol@example.com` in the headers so the server hides it.",
+            "Bob's MUA opens two separate `DATA` blocks, one encrypted for Alice and one for Carol.",
+            "The receiving MTA reads the `Bcc:` header and deletes it before delivering to Alice."
+          ],
+          "correct_answer": "Bob's MUA sends `RCPT TO:` for both Alice and Carol, but omits Carol from the `To:` and `Cc:` headers inside `DATA`.",
+          "explanation": "Mail servers route strictly according to the SMTP envelope (`RCPT TO:`), never the RFC 5322 headers (`To:`, `Cc:`). To implement Bcc, the MUA includes Carol in `RCPT TO:` so she receives the mail, while leaving her out of the message headers so Alice cannot see her.\n\n* If `RCPT TO:` were sent only for Alice, Carol would never receive the email.\n* Including a `Bcc:` header in `DATA` would risk exposing Carol to other recipients.",
+          "hints": [
+            "Remember the golden rule: servers deliver to the envelope (`RCPT TO`), while MUAs display the headers (`To:`, `Cc:`).",
+            "How does the server know to deliver to Carol without Alice seeing Carol's address in the message headers?"
+          ]
+        },
+        {
+          "id": "qz-ncat-missing-c",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-mailpit-and-ncat",
+          "title": "Diagnosing ncat Without -C",
+          "question": "You connect to Mailpit with `ncat localhost 1025` (forgetting `-C`), type `EHLO`, `MAIL FROM`, `RCPT TO`, `DATA`, your message, `.`, and `QUIT`. Mailpit never answers `250 Ok: queued` or `221`. Why?",
+          "options": [
+            "Without `-C`, `ncat` sends `\\n` instead of `\\r\\n`; Mailpit treats `.` and `QUIT` as body text because `DATA` only ends on `\\r\\n.\\r\\n`.",
+            "Without `-C`, `ncat` opens a UDP socket instead of a TCP socket, so Mailpit drops all packets.",
+            "Without `-C`, `ncat` encrypts the connection with TLS, which port 1025 does not support.",
+            "Mailpit rejects any `EHLO` command that does not use `-C` with a silent disconnect."
+          ],
+          "correct_answer": "Without `-C`, `ncat` sends `\\n` instead of `\\r\\n`; Mailpit treats `.` and `QUIT` as body text because `DATA` only ends on `\\r\\n.\\r\\n`.",
+          "explanation": "Mailpit tolerates `\\n` on individual SMTP commands, so `EHLO`, `MAIL FROM`, `RCPT TO`, and `DATA` appear to work. However, RFC 5321 requires the exact 5-byte sequence `\\r\\n.\\r\\n` to end `DATA`. Without `-C`, `ncat` sends `\\n.\\n`, so Mailpit keeps waiting for the real terminator until its 5-minute timeout (`421`).\n\n* `ncat` uses TCP by default (UDP requires `-u`).\n* TLS requires `--ssl`, not `-C`.",
+          "hints": [
+            "What line ending does your terminal's Enter key produce versus what SMTP requires?",
+            "Recall Exercise 2: why did `QUIT` also receive no response?"
+          ]
+        },
+        {
+          "id": "qz-dmarc-alignment",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 4,
+          "related_block_id": "th-spf-dkim-dmarc",
+          "title": "SPF Pass vs. DMARC Alignment Failure",
+          "question": "An attacker sends an email from their own authorized server (`attacker.com`) using `MAIL FROM:<eve@attacker.com>` and `From: CEO <ceo@heig-vd.ch>` (no DKIM signature). `heig-vd.ch` publishes `_dmarc.heig-vd.ch` with `p=reject`. What happens?",
+          "options": [
+            "SPF passes (for `attacker.com`), but DMARC fails because `From:` (`heig-vd.ch`) is not aligned with `attacker.com`, so the email is rejected.",
+            "SPF fails immediately because `MAIL FROM` does not match `From:`, and DMARC is not even checked.",
+            "Both SPF and DMARC pass because the sending IP is authorized in `attacker.com`'s SPF record.",
+            "DMARC passes because `heig-vd.ch` has an SPF record."
+          ],
+          "correct_answer": "SPF passes (for `attacker.com`), but DMARC fails because `From:` (`heig-vd.ch`) is not aligned with `attacker.com`, so the email is rejected.",
+          "explanation": "SPF only checks the `MAIL FROM` domain (`attacker.com`), which passes because the attacker owns `attacker.com`. That is the exact loophole DMARC closes: DMARC requires **alignment**—the domain in the visible `From:` header (`heig-vd.ch`) must match the domain authenticated by SPF or DKIM. Because neither matches `heig-vd.ch` and `p=reject` is set, the receiving MTA rejects the message.",
+          "hints": [
+            "Which domain does SPF check: `MAIL FROM:` or the `From:` header?",
+            "What extra requirement does DMARC add on top of SPF and DKIM?"
+          ]
+        },
+        {
+          "id": "qz-smtp-protocols-multiselect",
+          "block_type": "quiz_question",
+          "question_type": "multi_select",
+          "difficulty": 2,
+          "related_block_id": "th-email-actors",
+          "title": "SMTP, IMAP, POP3 & Webmail Roles",
+          "question": "Which of the following statements about email protocols are true? (Select all that apply)",
+          "options": [
+            "SMTP is a push protocol that moves email up to the recipient's mailbox, never for reading it.",
+            "IMAP keeps emails on the server and synchronizes read/unread status and folders across multiple devices.",
+            "POP3 is designed to synchronize folders across a phone, laptop, and tablet simultaneously.",
+            "A webmail interface acts as an MUA running on a server that talks HTTP to your browser."
+          ],
+          "correct_answer": [
+            "SMTP is a push protocol that moves email up to the recipient's mailbox, never for reading it.",
+            "IMAP keeps emails on the server and synchronizes read/unread status and folders across multiple devices.",
+            "A webmail interface acts as an MUA running on a server that talks HTTP to your browser."
+          ],
+          "explanation": "SMTP only pushes messages forward to the mailbox. IMAP keeps mail on the server and syncs state across devices. Webmail is a server-side MUA accessed over HTTP/HTTPS.\n\n* POP3 is a simple download-and-(optionally)-delete protocol designed for a single device, *not* multi-device folder synchronization.",
+          "hints": [
+            "Recall the distinction between push (delivery) and pull/sync (reading).",
+            "Which protocol was designed for one device vs. multiple synchronized devices?"
+          ]
+        },
+        {
+          "id": "qz-java-bugs-multiselect",
+          "block_type": "quiz_question",
+          "question_type": "multi_select",
+          "difficulty": 3,
+          "related_block_id": "th-java-four-pitfalls",
+          "title": "Java SMTP Client Pitfalls",
+          "question": "Which practices are essential for a working Java `Socket` SMTP client? (Select all that apply)",
+          "options": [
+            "Appending `\"\\r\\n\"` explicitly instead of calling `BufferedWriter.newLine()`.",
+            "Calling `out.flush()` after sending each SMTP command.",
+            "Looping `in.readLine()` while `line.length() > 3 && line.charAt(3) == '-'`.",
+            "Sending `EHLO` immediately after `new Socket(host, port)` before reading anything from `in`."
+          ],
+          "correct_answer": [
+            "Appending `\"\\r\\n\"` explicitly instead of calling `BufferedWriter.newLine()`.",
+            "Calling `out.flush()` after sending each SMTP command.",
+            "Looping `in.readLine()` while `line.length() > 3 && line.charAt(3) == '-'`."
+          ],
+          "explanation": "Explicit `\"\\r\\n\"` ensures RFC 5321 compliance on Linux/macOS, `flush()` prevents buffer deadlock, and looping on `charAt(3) == '-'` consumes multi-line replies completely.\n\n* Option 4 is **wrong**: in SMTP, the server speaks first (`220` greeting), so the client MUST call `expect(in, 220)` *before* sending `EHLO`.",
+          "hints": [
+            "Who speaks first when a TCP connection opens to an SMTP server?",
+            "What happens on Linux if you use `BufferedWriter.newLine()`?"
+          ]
+        },
+        {
+          "id": "qz-code-output-dot-stuffing",
+          "block_type": "quiz_question",
+          "question_type": "code_output",
+          "difficulty": 2,
+          "related_block_id": "th-crlf-dot-stuffing",
+          "title": "Predict Output: Dot-Stuffing Edge Cases",
+          "question": "What does the following Java snippet print?\n\n```java\nString[] lines = {\".\", \"..\", \"Hello.\", \".world\"};\nfor (String l : lines) {\n  String out = l.startsWith(\".\") ? \".\" + l : l;\n  System.out.print(out + \"|\");\n}\n```",
+          "options": [
+            "`..|...|Hello.|..world|`",
+            "`..|..|Hello.|..world|`",
+            "`..|...|Hello..|.world|`",
+            "`.|..|Hello.|.world|`"
+          ],
+          "correct_answer": "`..|...|Hello.|..world|`",
+          "explanation": "`startsWith(\".\")` matches `\".\"` (becomes `\"..\"`), `\"..\"` (becomes `\"...\"`), and `\".world\"` (becomes `\"..world\"`). It does *not* match `\"Hello.\"` because the period is at the end, not the start.\n\n* Option 2 fails to stuff `\"..\"`.\n* Option 3 stuffs the trailing period of `\"Hello.\"` instead of the leading period of `\".world\"`.",
+          "hints": [
+            "Check each string's *first* character (`startsWith(\".\")`).",
+            "Does `\"Hello.\"` start with a period?"
+          ]
+        },
+        {
+          "id": "qz-code-output-expect-desync",
+          "block_type": "quiz_question",
+          "question_type": "code_output",
+          "difficulty": 4,
+          "related_block_id": "code-java-smtp-client",
+          "title": "Predict Output: Broken Single-Line expect()",
+          "question": "Suppose `expect()` is broken and calls `in.readLine()` only **once** (no `do...while` loop). The server sends:\n1. `220 ready`\n2. After `EHLO`: `250-hello`, `250-SIZE 1000`, `250 8BITMIME`\n3. After `MAIL FROM`: `250 Ok`\n\nWhat does this code print?\n\n```java\nSystem.out.println(in.readLine()); // expect 220\n// client sends EHLO\nSystem.out.println(in.readLine()); // expect 250\n// client sends MAIL FROM\nSystem.out.println(in.readLine()); // expect 250\n```",
+          "options": [
+            "`220 ready`, then `250-hello`, then `250-SIZE 1000`",
+            "`220 ready`, then `250 8BITMIME`, then `250 Ok`",
+            "`220 ready`, then `250-hello`, then `250 Ok`",
+            "`250-hello`, then `250-SIZE 1000`, then `250 8BITMIME`"
+          ],
+          "correct_answer": "`220 ready`, then `250-hello`, then `250-SIZE 1000`",
+          "explanation": "A single `readLine()` after `EHLO` consumes only `250-hello`, leaving `250-SIZE 1000` and `250 8BITMIME` sitting in the input buffer. When the client next sends `MAIL FROM` and calls `readLine()`, it reads the stale `250-SIZE 1000` line instead of `250 Ok`—a classic reply desynchronization bug.",
+          "hints": [
+            "Trace the `BufferedReader` stream line by line in FIFO order.",
+            "How many lines did `EHLO` put into the stream?"
+          ]
+        },
+        {
+          "id": "qz-fill-blank-data-code",
+          "block_type": "quiz_question",
+          "question_type": "fill_in_the_blank",
+          "difficulty": 1,
+          "related_block_id": "code-smtp-wire-transcript",
+          "title": "SMTP DATA Intermediate Reply Code",
+          "question": "When a client sends the `DATA` command, the SMTP server replies with status code `___` (meaning \"Start mail input; end with `<CR><LF>.<CR><LF>`\").",
+          "correct_answer": "354",
+          "explanation": "`354` is the `3xx` intermediate success code telling the client to proceed with sending the RFC 5322 headers, blank line, body, and `\\r\\n.\\r\\n` terminator.",
+          "hints": [
+            "It is a 3-digit code starting with `3` (intermediate \"go ahead\" status).",
+            "Check line 12 of the annotated SMTP wire transcript (`Start mail input`)."
+          ]
+        },
+        {
+          "id": "qz-fill-blank-dmarc-subdomain",
+          "block_type": "quiz_question",
+          "question_type": "fill_in_the_blank",
+          "difficulty": 2,
+          "related_block_id": "code-dns-dig-lookup",
+          "title": "DMARC DNS Record Prefix",
+          "question": "To inspect the DMARC policy of `heig-vd.ch` with `dig`, you query the `TXT` record of `___heig-vd.ch` (include the trailing dot).",
+          "correct_answer": "_dmarc.",
+          "explanation": "DMARC policies are always published as `TXT` records at the `_dmarc.` subdomain of the organizational domain (e.g., `_dmarc.heig-vd.ch`).",
+          "hints": [
+            "Starts with an underscore `_` followed by the acronym.",
+            "Include the trailing dot so it prefixes `heig-vd.ch` cleanly (7 characters total)."
+          ]
+        },
+        {
+          "id": "qz-smtp-status-codes",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "code-smtp-wire-transcript",
+          "title": "SMTP Reply Code First Digit Semantics",
+          "question": "An SMTP server responds to a `RCPT TO:` command with `451 Temporary local error`. What does the leading digit `4` tell the sending MTA?",
+          "options": [
+            "Temporary failure: keep the email queued and try again later.",
+            "Permanent failure: bounce the email immediately and never retry.",
+            "Intermediate success: proceed to send the message body.",
+            "Success: the recipient was accepted."
+          ],
+          "correct_answer": "Temporary failure: keep the email queued and try again later.",
+          "explanation": "In SMTP, the first digit classifies the outcome: `2` = success, `3` = intermediate/go ahead, `4` = temporary failure (retry later), `5` = permanent failure (do not retry, bounce to `MAIL FROM`).",
+          "hints": [
+            "Compare `4xx` vs `5xx` in HTTP and SMTP.",
+            "Notice the message text `Temporary local error`—should the sending MTA give up permanently or queue for retry?"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-flashcards",
+      "title": "8. Spaced Repetition Flashcards",
+      "description": "High-yield definitions, ports, and protocol rules for rapid FSRS review.",
+      "blocks": [
+        {
+          "id": "fc-mua-msa-mta",
+          "block_type": "flashcard",
+          "title": "MUA, MSA, MTA & Mailbox",
+          "front": "What are the 4 software roles in email delivery, and which protocols connect them?",
+          "back": "1. **MUA** (Mail User Agent): User's client (Thunderbird, webmail).\n2. **MSA** (Mail Submission Agent): Accepts authenticated user mail via **SMTP (587 / 465)**.\n3. **MTA** (Mail Transfer Agent): Relays mail server-to-server via **SMTP (25)** using DNS `MX` lookups.\n4. **Mailbox / MDA**: Stores mail until the recipient's MUA fetches it via **IMAP (993)** or **POP3 (995)**.",
+          "hint": "Think: Client -> Outgoing Server -> Relay Server -> Inbox.",
+          "tags": ["smtp", "architecture"]
+        },
+        {
+          "id": "fc-smtp-ports",
+          "block_type": "flashcard",
+          "title": "SMTP Ports: 25 vs 587 vs 465",
+          "front": "Contrast SMTP ports **25**, **587**, and **465**.",
+          "back": "* **25**: Server-to-server MTA relay (starts plaintext).\n* **587**: MUA-to-MSA submission; starts plaintext, then upgrades with `STARTTLS`.\n* **465**: MUA-to-MSA submission with **implicit TLS** from byte 0 (so `ncat` cannot talk plaintext to it).",
+          "hint": "One is for relay; two are for submission (one opportunistic TLS, one implicit TLS).",
+          "tags": ["ports", "tls"]
+        },
+        {
+          "id": "fc-imap-vs-pop3",
+          "block_type": "flashcard",
+          "title": "IMAP vs. POP3",
+          "front": "What is the key difference between **IMAP** (143/993) and **POP3** (110/995)?",
+          "back": "* **POP3** downloads emails to a single device and optionally deletes them from the server.\n* **IMAP** keeps emails and folders on the server and synchronizes state (read/unread, flags) across multiple devices.",
+          "hint": "Single-device download vs. multi-device synchronization.",
+          "tags": ["imap", "pop3"]
+        },
+        {
+          "id": "fc-mx-record",
+          "block_type": "flashcard",
+          "title": "DNS MX Record & Preference",
+          "front": "What does a DNS `MX` record store, and how is its preference number interpreted?",
+          "back": "An `MX` (Mail Exchanger) record lists the mail servers that receive email for a domain. The **lowest preference number** is tried **first** (highest priority).",
+          "hint": "Like 1st place in a race.",
+          "tags": ["dns", "mx"]
+        },
+        {
+          "id": "fc-envelope-vs-headers",
+          "block_type": "flashcard",
+          "title": "SMTP Envelope vs. RFC 5322 Headers",
+          "front": "How does the SMTP **envelope** differ from the **message headers**?",
+          "back": "* **Envelope (`MAIL FROM:`, `RCPT TO:`):** Used by servers for **routing** and bounce return-path (`Return-Path:`).\n* **Headers (`From:`, `To:`, `Cc:`, `Subject:`):** Displayed by the MUA to the user. Servers never route by `To:`/`Cc:` (which is how **Bcc** works).",
+          "hint": "Routing vs. Display.",
+          "tags": ["smtp", "envelope"]
+        },
+        {
+          "id": "fc-dot-stuffing",
+          "block_type": "flashcard",
+          "title": "RFC 5321 Dot-Stuffing",
+          "front": "What is **dot-stuffing** in SMTP and why is it necessary?",
+          "back": "Because `\\r\\n.\\r\\n` terminates `DATA`, any body line starting with `.` must have an extra `.` prepended by the client (`\".\"` $\\rightarrow$ `\"..\"`, `\".Hi\"` $\\rightarrow$ `\"..Hi\"`). The server strips the first `.` on receipt.",
+          "hint": "Preventing premature termination of `DATA`.",
+          "tags": ["smtp", "rfc5321"]
+        },
+        {
+          "id": "fc-spf-dkim-dmarc",
+          "block_type": "flashcard",
+          "title": "SPF, DKIM & DMARC",
+          "front": "What distinct security property does each of **SPF**, **DKIM**, and **DMARC** verify?",
+          "back": "* **SPF (`TXT`):** Checks that the sender's **IP** is authorized for the `MAIL FROM` domain (`-all` fail, `~all` softfail).\n* **DKIM (`TXT`):** Verifies a **cryptographic signature** over headers/body using a DNS public key.\n* **DMARC (`_dmarc.`):** Enforces **alignment** between the visible `From:` header and SPF/DKIM, plus policy (`p=none|quarantine|reject`).",
+          "hint": "IP check, Cryptographic signature, From: alignment.",
+          "tags": ["security", "dns"]
+        },
+        {
+          "id": "fc-ncat-crlf",
+          "block_type": "flashcard",
+          "title": "ncat -C Flag",
+          "front": "What does `-C` do in `ncat -C localhost 1025`, and what breaks if you omit it?",
+          "back": "`-C` converts terminal `\\n` (LF) into `\\r\\n` (CRLF). Without `-C`, the `DATA` terminator is sent as `\\n.\\n` instead of `\\r\\n.\\r\\n`, so the server treats `.` and `QUIT` as body text and hangs until timeout (`421`).",
+          "hint": "CR + LF vs. bare LF.",
+          "tags": ["ncat", "crlf"]
+        },
+        {
+          "id": "fc-smtp-status-codes",
+          "block_type": "flashcard",
+          "title": "SMTP Status Code Categories & Multi-Line Replies",
+          "front": "What do the first digits `2`, `3`, `4`, `5` mean in SMTP, and how do you detect the end of a multi-line reply?",
+          "back": "* `2xx`: Success (`220` ready, `250` Ok, `221` bye)\n* `3xx`: Go ahead (`354` send mail data)\n* `4xx`: Temporary failure (retry later)\n* `5xx`: Permanent failure (`503` bad sequence, `550` no such user)\n\nMulti-line replies have `-` at index 3 (`250-`); the **final line** has a space (`250 `).",
+          "hint": "Check `line.charAt(3)`.",
+          "tags": ["smtp", "status-codes"]
+        },
+        {
+          "id": "fc-java-smtp-flush",
+          "block_type": "flashcard",
+          "title": "Java SMTP Client: CRLF & flush()",
+          "front": "Why must a Java `BufferedWriter` SMTP client write `\"\\r\\n\"` explicitly and call `out.flush()` after every command?",
+          "back": "* `BufferedWriter.newLine()` emits the OS separator (`\\n` on Linux/macOS), violating RFC 5321 CRLF.\n* Without `out.flush()`, commands stay in the memory buffer while the client blocks on `in.readLine()`, causing a mutual deadlock.",
+          "hint": "OS line endings and buffered I/O deadlock.",
+          "tags": ["java", "sockets"]
+        }
+      ]
+    }
+  ]
+}

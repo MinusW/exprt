@@ -1,0 +1,857 @@
+{
+  "id": "sye-te1-complete-study-guide",
+  "title": "SYE TE1 Complete Study Guide: Operating Systems Fundamentals (C1–C8 & E1–E5)",
+  "description": "Comprehensive English exam-preparation guide covering OS architecture, hardware modes & interrupts, system calls, binary images, processes, PCB & context switching, threads & pthreads, file descriptors & pipes, signals, TCP/IP sockets, and CPU scheduling.",
+  "estimated_minutes": 180,
+  "category": "Operating Systems",
+  "track": "SYE - Operating Systems",
+  "track_order": 1,
+  "difficulty_level": "intermediate",
+  "tags": [
+    "operating-systems",
+    "sye",
+    "te1",
+    "so3",
+    "processes",
+    "threads",
+    "ipc",
+    "scheduling",
+    "sockets",
+    "signals"
+  ],
+  "prerequisites": [],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "C1: Introduction to OS & SO3",
+      "url_or_path": "sources/SYE-TE1/20240917_8_SYE_C1_Introduction_OS_SO3.pdf",
+      "notes": "OS characteristics, history, SO3 on QEMU/ARM, byte-addressable memory"
+    },
+    {
+      "title": "C2: Hardware Architectures & OS",
+      "url_or_path": "sources/SYE-TE1/20240922_7_SYE_C2_Hardware_Architectures_OS.pdf",
+      "notes": "MMU, user/kernel modes, hardware/software interrupts, SMP, monolithic vs microkernel"
+    },
+    {
+      "title": "C3: Syscalls, Binary Image & Processes",
+      "url_or_path": "sources/SYE-TE1/20250926_SYE_C3_Syscalls_process.pdf",
+      "notes": "Syscall stubs, ABI, man sections, ELF compilation, process memory sections"
+    },
+    {
+      "title": "C4: Process Syscalls & Context Switch",
+      "url_or_path": "sources/SYE-TE1/20250926_SYE_C4_Process_syscalls_context_switch.pdf",
+      "notes": "PCB, fork, exec, waitpid, exit, context switch mechanics"
+    },
+    {
+      "title": "C5: Process States & POSIX Threads",
+      "url_or_path": "sources/SYE-TE1/261009_SYE_C5_States_threads.pdf",
+      "notes": "5-state model, TCB, pthread_create/join/exit, race conditions"
+    },
+    {
+      "title": "C6: IPC & Pipes",
+      "url_or_path": "sources/SYE-TE1/20251010_SYE_C6_IPC_pipes.pdf",
+      "notes": "File descriptors, global open file table, dup2, anonymous & named pipes"
+    },
+    {
+      "title": "C7: IPC Signals & Network Sockets",
+      "url_or_path": "sources/SYE-TE1/20251010_SYE_C7_IPC_signals_sockets.pdf",
+      "notes": "Signals, kill/signal, TCP/IP BSD sockets, client-server pattern"
+    },
+    {
+      "title": "C8: CPU Scheduling",
+      "url_or_path": "sources/SYE-TE1/20251031_SYE_C8_Scheduling.pdf",
+      "notes": "Preemption, FCFS, SJF/SRTF, exponential averaging, RR, Priority, MLFQ"
+    },
+    {
+      "title": "E1: Address Space Manipulations",
+      "url_or_path": "sources/SYE-TE1/20230929_SYE_E1_Manipulations_adressage.pdf",
+      "notes": "Address ranges, bit widths, SI vs IEC, little-endian C pointers"
+    },
+    {
+      "title": "E2: OS Introduction Exercises",
+      "url_or_path": "sources/SYE-TE1/20230929_SYE_E2_Introduction.pdf",
+      "notes": "Multitasking, microkernel, supervisor mode, syscalls vs stdio, PCB"
+    },
+    {
+      "title": "E4: IPC Pipes & dup2 Exercises",
+      "url_or_path": "sources/SYE-TE1/20241027_SYE_E4_IPCs.pdf",
+      "notes": "Redirecting child stdout to parent via anonymous pipe and dup2"
+    },
+    {
+      "title": "E5: Scheduling Exercises",
+      "url_or_path": "sources/SYE-TE1/20241119_SYE_E5_Ordonnancement.pdf",
+      "notes": "RR (q=2), preemptive SJF, and MLFQ with aging"
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-os-intro-memory",
+      "title": "1. OS Fundamentals, SO3 & Memory Addressing (C1 & E1)",
+      "description": "What an OS kernel does, multitasking vs monotasking, the SO3 environment, byte-addressable memory, SI vs IEC units, and little-endian pointer manipulation in C.",
+      "blocks": [
+        {
+          "id": "th-os-definition",
+          "block_type": "markdown",
+          "title": "What Is an Operating System Kernel?",
+          "content": "An **Operating System (OS)** is the central software layer that mediates between physical hardware and user applications. In this course, we focus on the **kernel**—the privileged core of the OS.\n\n### Two Perspectives\n- **User perspective:** Provides a clean execution environment (abstractions) and enforces protection between programs.\n- **System perspective:** Manages physical & logical resources (CPU, RAM, I/O devices, files) and enforces isolation.\n\n### Core Kernel Subsystems (E2 Q3)\n1. **Process & Thread Management / Scheduler** — Decides which task runs on which CPU core and when.\n2. **Memory Manager** — Allocates RAM, isolates address spaces, and configures the MMU.\n3. **Filesystem (VFS)** — Abstracts storage devices into files, directories, and descriptors.\n4. **Inter-Process Communication (IPC) & Network Stack** — Enables safe communication (pipes, signals, sockets).\n5. **Device Drivers & HAL** — Hardware Abstraction Layer interfacing with controllers.\n\n### Monotasking vs. Multitasking (E2 Q1)\n- **Monotasking:** Only one application resides in RAM at a time. Switching requires slow **swapping** (swap-out / swap-in) to secondary storage.\n- **Multitasking:** Multiple applications reside in RAM simultaneously. CPU switches rapidly between them (**time-sharing**), dramatically increasing CPU utilization. Requires a memory manager (to place programs, often using **relocatable code**) and a **scheduler**.",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-so3-architecture",
+          "block_type": "markdown",
+          "title": "The SO3 Teaching OS & Lab Environment",
+          "content": "**SO3 (Smart Object Oriented OS)** is a lightweight, open-source OS developed at REDS/HEIG-VD (GPLv2), written in **C and ARM assembly** using Linux's **KBuild** system.\n\n- **Target Hardware:** 32-bit ARM Cortex-A15 (emulated via **QEMU `virt32` / vExpress** inside a Linux host VM).\n- **Why SO3?** Small enough to read and modify end-to-end while faithfully modeling modern Unix/Linux kernel subsystems (VFS, pipes, scheduler, MMU, syscalls).\n- **Debugging:** VS Code + `gdb` attached over TCP/IP (`localhost:1234`) to QEMU.",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-byte-addressing",
+          "block_type": "markdown",
+          "title": "Byte-Addressable Memory, Bit Widths & SI vs. IEC Units (C1 & E1)",
+          "content": "A **byte-adressable** system assigns a unique address to every single **byte (8 bits)**—the smallest addressable unit of memory. (Individual bits inside a byte are accessed via bitwise arithmetic/logic instructions, not separate addresses.)\n\n### Address Space Size Formula\nIf CPU address registers are $n$ bits wide, the processor can reference $2^n$ distinct bytes, from `0x0` to $2^n - 1$:\n\n$$\\text{Addressable Bytes} = 2^n \\quad\\Longrightarrow\\quad n = \\log_2(\\text{Bytes})$$\n\n- **32-bit CPU:** $2^{32}\\text{ bytes} = 4\\text{ GiB}$, spanning `0x0000'0000` to `0xffff'ffff`.\n- **Region Size Formula (E1 Q1):** For an inclusive range $[A_{\\text{start}}, A_{\\text{end}}]$:\n\n$$\\text{Size} = A_{\\text{end}} - A_{\\text{start}} + 1$$\n\n> [!WARNING]\n> **Classic Off-by-One Trap (E1 Q1 & Q3):**\n> - Range `0x1000` to `0xf'ffff`: Size $= \\text{0x100000} - \\text{0x1000} = \\text{0xff000} = 1044480\\text{ bytes}$ ($1020\\text{ KiB}$), **not** `0xf'efff`!\n> - An $8\\text{ KiB}$ ($8192 = 2^{13} = \\text{0x2000}$) region starting at `0x0` ends at `0x2000 - 1 = 0x1fff`.\n\n### Binary (IEC) vs. Decimal (SI) Units (E1 Q4)\n| Context | Prefix | Exact Value |\n| :--- | :--- | :--- |\n| **RAM / Address Space** | $1\\text{ KiB}, 1\\text{ MiB}, 1\\text{ GiB}$ | $2^{10} = 1024,\\; 2^{20},\\; 2^{30}$ bytes |\n| **Storage (HDD/SSD marketing)** | $500\\text{ GB}$ (SI) | $500 \\times 10^9$ bytes ($\\approx 465.66\\text{ GiB}$) |\n\nA \"500 GB\" hard drive has $500 \\times 10^9$ bytes, which an OS reporting in binary GiB displays as $\\approx 465.7\\text{ GiB}$ (plus reserved/bad-block sectors).",
+          "bookmarkable": true
+        },
+        {
+          "id": "exp-sim-address-width",
+          "block_type": "simulation",
+          "title": "Address Bus Width to Addressable Memory",
+          "description": "Adjust the address width in bits (n) to compute total addressable memory in MiB (2^n / 2^20). For example, 256 MiB = 2^8 * 2^20 = 2^28 bytes -> 28 bits (E1 Q2).",
+          "formula": "\\text{Memory (MiB)} = 2^{n - 20}",
+          "variables": [
+            {
+              "id": "n",
+              "name": "Address Width n (bits)",
+              "min": 20,
+              "max": 36,
+              "step": 1,
+              "default": 28,
+              "unit": "bits"
+            }
+          ],
+          "compute_expression": "Math.pow(2, n - 20)",
+          "chart_type": "value",
+          "output_label": "Addressable Memory",
+          "output_unit": "MiB",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-endianness-c",
+          "block_type": "code",
+          "title": "E1 Q5: Little-Endian Memory & C Pointer Manipulation",
+          "language": "c",
+          "filename": "e1_memory_ops.c",
+          "code": "#include <stdint.h>\n#include <stdio.h>\n#include <string.h>\n\n/* Suppose memory at 0x000c0000 holds bytes: 04 03 02 01 ... and \"Hello\\0\" at offset 4 */\nvoid inspect_memory(void) {\n    /* a) Read 32-bit integer on a little-endian CPU (least-significant byte at lowest address) */\n    volatile uint32_t *int_ptr = (volatile uint32_t *)0x000c0000;\n    uint32_t val = *int_ptr; /* Bytes [04, 03, 02, 01] -> 0x01020304 in little-endian! */\n    printf(\"32-bit value: 0x%08x\\n\", val);\n\n    /* b) Print null-terminated ASCII string starting at 0x000c0004 */\n    const char *str_ptr = (const char *)0x000c0004;\n    printf(\"String: %s\\n\", str_ptr);\n\n    /* c) Copy 5 lines (e.g., 5 * 16 = 80 bytes) from src starting at byte 0x04 to 0x000c0000 */\n    void *dst = (void *)0x000c0000;\n    const void *src = (const void *)0x000c0010; /* example source */\n    memmove(dst, src, 5 * 16); /* memmove is safe even if regions overlap! */\n}",
+          "highlight_lines": [
+            8,
+            9,
+            13,
+            18
+          ],
+          "annotations": [
+            {
+              "line": 8,
+              "note": "Cast raw hex address to a typed uint32_t pointer."
+            },
+            {
+              "line": 9,
+              "note": "Little-endian stores LSB at the lowest address: [04, 03, 02, 01] becomes 0x01020304."
+            },
+            {
+              "line": 13,
+              "note": "Casting to const char* lets printf(\"%s\") read until the '\\0' terminator."
+            },
+            {
+              "line": 18,
+              "note": "Use memmove (instead of memcpy) whenever source and destination might overlap."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "exp-sandbox-endian",
+          "block_type": "sandbox",
+          "runtime": "javascript",
+          "title": "Practice: Little-Endian 32-Bit Decoder",
+          "instructions": "Given bytes [0x78, 0x56, 0x34, 0x12] at consecutive ascending addresses, compute the 32-bit little-endian integer in hex (e.g., '0x12345678') and print it.",
+          "starter_code": "const bytes = [0x78, 0x56, 0x34, 0x12];\n// TODO: Combine bytes[0..3] into a 32-bit little-endian integer `val`\nconst val = 0;\nconsole.log('0x' + (val >>> 0).toString(16).padStart(8, '0'));",
+          "expected_output": "0x12345678",
+          "solution": "const bytes = [0x78, 0x56, 0x34, 0x12];\nconst val = (bytes[3] << 24) | (bytes[2] << 16) | (bytes[1] << 8) | bytes[0];\nconsole.log('0x' + (val >>> 0).toString(16).padStart(8, '0'));",
+          "hints": [
+            "In little-endian, the lowest address (bytes[0]) holds the least significant byte.",
+            "Shift bytes[3] left by 24 bits, bytes[2] by 16, bytes[1] by 8, and OR them together."
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-hw-modes-interrupts",
+      "title": "2. Hardware Architecture, CPU Modes & Interrupts (C2 & E2)",
+      "description": "Synchronous vs asynchronous hardware requests, MMU address translation, User vs Kernel mode, hardware IRQs vs software traps, SMP multicore, and Monolithic vs Microkernel architectures.",
+      "blocks": [
+        {
+          "id": "th-hw-requests-mmu",
+          "block_type": "markdown",
+          "title": "CPU–Hardware Interaction & the MMU",
+          "content": "From the OS perspective, hardware interaction consists of two request directions:\n1. **CPU $\\rightarrow$ Outside (Synchronous):** Reading/writing RAM, sending commands to device controllers over the bus (PCI, AHB). Initiated by the CPU and executed immediately.\n2. **Outside $\\rightarrow$ CPU (Asynchronous):** **Hardware Interrupts (IRQs)**. A device controller asserts a dedicated electrical line through an Interrupt Controller (e.g., **APIC**) to notify the CPU (e.g., disk read finished, timer tick).\n\n### The Memory Management Unit (MMU)\nModern CPUs do not send raw physical RAM addresses directly when an MMU is active. Instead:\n- The CPU emits **Virtual Addresses** (even during instruction fetch).\n- The **MMU** translates each virtual address into a **Physical Address** in RAM and enforces memory protection (preventing user apps from touching kernel memory or I/O registers).",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-cpu-modes-interrupts",
+          "block_type": "markdown",
+          "title": "User Mode vs. Kernel Mode & Interrupt Types (C2 & E2)",
+          "content": "To protect the OS and other applications, the CPU enforces two primary execution modes:\n\n| Feature | User Mode | Kernel (Supervisor) Mode (E2 Q5) |\n| :--- | :--- | :--- |\n| **Who runs here?** | User applications | OS Kernel, ISRs, (and drivers in monolithic OS) |\n| **Privileged instructions** | **Forbidden** (triggers trap) | **Allowed** (I/O access, status register, MMU, coprocessors) |\n| **Memory access** | Restricted to own virtual space | Full access to kernel & I/O regions |\n\n### Mode Transitions (Critical Exam Topic!)\n- **At boot:** CPU starts in **Kernel Mode**.\n- **Kernel $\\rightarrow$ User:** Kernel modifies the CPU status register (a privileged instruction) and jumps to user code.\n- **User $\\rightarrow$ Kernel:** **Impossible** directly! Can **only** happen via an interrupt:\n  - **Hardware Interrupt (IRQ — Asynchronous):** Timer tick, keyboard, disk DMA completion. Ensures no infinite loop in user space can monopolize the CPU (E2 Q4: the **hardware timer IRQ** preempts it!).\n  - **Software Interrupt / Exception / Trap (Synchronous):** Triggered by executing an instruction—either an error (divide by zero, invalid memory access, bad alignment) or an intentional syscall instruction (`svc`/`swi` on ARM, `int 0x80`/`sysenter` on x86, `syscall` on MIPS).",
+          "bookmarkable": true
+        },
+        {
+          "id": "diag-irq-flow",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "5-Step Hardware Interrupt (IRQ) Handling Flow",
+          "caption": "How an asynchronous device IRQ safely transitions the CPU to Kernel Mode, runs the ISR via the interrupt vector, and resumes the user task.",
+          "source": "flowchart LR\n  Dev[\"1. Device asserts\\nIRQ line\"] --> IC[\"2. Interrupt Controller\\n(APIC) prioritizes &\\nsignals CPU\"]\n  IC --> Save[\"3. CPU finishes current\\ninstruction & switches\\nto Kernel Mode\"]\n  Save --> Vec[\"4. Lookup Interrupt\\nVector -> Run ISR\\nin Kernel Space\"]\n  Vec --> Ret[\"5. Acknowledge IRQ,\\nrestore task & return\\nto User Mode\"]\n\n  classDef hw fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;\n  classDef kern fill:#ede9fe,stroke:#6366f1,stroke-width:2px;\n  classDef ret fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;\n  class Dev,IC hw;\n  class Save,Vec kern;\n  class Ret ret;",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-smp-and-os-arch",
+          "block_type": "markdown",
+          "title": "SMP Multicore & Monolithic vs. Microkernel Architectures (C2 & E2 Q2)",
+          "content": "### Symmetric Multi-Processing (SMP)\n- Multiple CPU cores share the same **RAM** and can all execute kernel or user code.\n- Each core has private **L1/L2/L3 caches** (requiring hardware **cache coherency**) and a **Local APIC** to balance IRQ handling across cores.\n\n### Monolithic vs. Microkernel (E2 Q2)\n| Dimension | Monolithic Kernel (Linux, Windows, SO3) | Microkernel (Minix, QNX, seL4) |\n| :--- | :--- | :--- |\n| **What lives in Kernel Space?** | All subsystems: Scheduler, MMU, VFS, Network, **Drivers**, IPC | **Minimal core only:** Scheduler, MMU, basic IPC, HAL |\n| **Where do Drivers/FS/Net live?** | Kernel Space | **User Space** (as isolated server processes) communication via **Client-Server IPC** |\n| **Performance** | **High** (direct function calls, few layers; great for hard real-time) | **Lower** (frequent user/kernel context switches & IPC messages) |\n| **Security & Fault Isolation** | **Lower** (a buggy driver can crash the entire OS) | **High** (a crashed driver/FS process restarts without crashing the kernel) |\n| **Extensibility** | Harder (kernel recompilation/modules) | **Easy** (add/restart user-space services) |",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-feynman-timer-trap",
+          "block_type": "feynman_prompt",
+          "concept": "CPU Protection & Preempting Infinite Loops",
+          "target_audience": "a first-year computer science student",
+          "prompt": "Explain how the OS prevents a user program stuck in `while(1) {}` from freezing the machine forever, and why the user program cannot simply disable the timer itself.",
+          "key_points_to_cover": [
+            "User mode vs Kernel mode privilege separation",
+            "Privileged instructions (cannot mask interrupts or touch timer/APIC in user mode)",
+            "Hardware timer IRQ is asynchronous and forces CPU into Kernel Mode",
+            "Kernel scheduler regains control and switches to another process"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-syscalls-binaries-process",
+      "title": "3. System Calls, Binary Images & Process Anatomy (C3 & E2)",
+      "description": "How syscalls cross the user/kernel boundary via ABI stubs, why buffered libc functions beat raw syscalls, ELF binary compilation, address types, and process memory layout.",
+      "blocks": [
+        {
+          "id": "th-syscalls-abi",
+          "block_type": "markdown",
+          "title": "System Calls, Stubs & the ABI (C3 & E2 Q6–Q7)",
+          "content": "A **system call (syscall)** is the controlled gateway for user programs to request kernel services (files, memory, processes, IPC).\n\n### Exact Syscall Execution Sequence (E2 Q6)\n1. Application calls a C wrapper (**stub**) in `libc` (e.g., `write(fd, buf, 10)`).\n2. **Stub entry code** places the **syscall number** and **arguments** into specific CPU registers/stack according to the **ABI (Application Binary Interface)**.\n   - *ARM SO3 ABI:* `R7` = syscall number, `R0, R1, R2` = arguments, `R0` = return value.\n3. Stub executes the **software interrupt instruction** (`svc` on ARM, `int 0x80`/`sysenter` on x86, `syscall` on MIPS).\n4. CPU switches to **Kernel Mode** and runs the kernel's syscall handler for that number.\n5. Kernel writes the return value to `R0` (or stack) and returns to **User Mode**; stub exit code returns to caller (setting `errno` on error).\n\n### Syscalls vs. High-Level Library Functions (E2 Q7)\n- Standard APIs: **POSIX** (Unix/Linux), Win32 (Windows). Linux uses `libc` (`glibc`, `uClibc` embedded, `bionic` Android).\n- **Why prefer `fopen()`/`fwrite()` (Section 3) over `open()`/`write()` (Section 2)?** Crossing the user/kernel boundary is **expensive** (mode switch + register/state handling). `stdio` functions use **user-space buffers** to batch many small writes into a single `write()` syscall!\n- **`man` sections:** `man 1` (user commands), `man 2` (**syscalls**, e.g. `man 2 open`), `man 3` (**library functions**, e.g. `man 3 fopen`).",
+          "bookmarkable": true
+        },
+        {
+          "id": "diag-syscall-flow",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "User-to-Kernel Syscall Flow (ARM SO3 ABI)",
+          "caption": "The libc stub marshals arguments into R0–R2 and the syscall number into R7 before triggering svc.",
+          "source": "sequenceDiagram\n  participant App as User App\n  participant Stub as libc Stub (User)\n  participant Kern as Kernel Handler (SVC)\n  App->>Stub: write(fd, buf, 10)\n  Note over Stub: R7=no, R0=fd, R1=buf, R2=10\n  Stub->>Kern: svc (Software Interrupt -> Kernel Mode)\n  Kern->>Kern: Execute sys_write()\n  Kern-->>Stub: Return bytes written in R0 (User Mode)\n  Stub-->>App: return R0",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-binary-compilation",
+          "block_type": "markdown",
+          "title": "Building an Executable Binary & Address Types (C3)",
+          "content": "### Compilation & Linking Pipeline\n1. **Compiler:** Translates `.c` + `.h` into intermediate **object files** (`.o`), containing machine instructions and unresolved jumps (e.g., `bl printf`).\n2. **Linker:** Resolves missing symbols against static/shared libraries (`libc.a`, `libmath.a`), inserts **C runtime (`crt`)** startup code (which calls `main()` and later `exit()`), and emits the final **executable binary image**:\n   - **ELF** (Linux/Unix), **PE / COFF** (Windows), **Mach-O** (macOS).\n\n### Three Address Types in Binaries\n- **Relative address:** Offset from a base or current PC (e.g., `[fp, #-16]`).\n- **Absolute address:** Fixed final memory location (unchanged at load time).\n- **Symbolic address:** Named reference (e.g., `printf`) emitted by the compiler and resolved by the **linker**.",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-process-memory-layout",
+          "block_type": "markdown",
+          "title": "Process Definition & Memory Topography (C3 & E2 Q8, Q10)",
+          "content": "A **process** is a running instance of a program, composed of:\n1. **Binary image** (executable on disk)\n2. **Memory context** (private virtual address space)\n3. **Execution context** (1 or more threads: PC, SP, registers)\n4. **Logical resources** (open file descriptors, IPCs)\n\n*(E2 Q10: An **application** is a user-level software product that may consist of **one or multiple processes**, each containing **one or multiple threads**.)*\n\n### Standard Process Memory Sections (E2 Q8)\nFrom lowest to highest virtual address:\n- **`.text` (Code):** Machine instructions (read-only/executable).\n- **`.data`:** Initialized global/static variables and constants.\n- **`.bss` (Block Started by Symbol):** Uninitialized global/static variables. **Not stored as zeros on disk**—only its size is recorded in ELF, saving disk space until loaded into RAM!\n- **Heap:** Dynamic allocations (`malloc`, `new`). Grows **upward** (toward higher addresses); shared by all threads.\n- **Stack:** Local variables, function arguments, return addresses. Placed at top of address space and grows **downward**; **one stack per thread**.",
+          "bookmarkable": true
+        },
+        {
+          "id": "diag-process-sections",
+          "block_type": "kroki",
+          "diagram_type": "graphviz",
+          "title": "Process Virtual Address Space Layout",
+          "caption": "Heap grows upward from BSS while Stack grows downward from the top of the user address space.",
+          "source": "digraph MemLayout {\n  rankdir=TB;\n  node [fontname=\"Helvetica\", shape=record, style=\"filled\"];\n  Mem [label=\"{Stack (grows DOWN ↓)\\nLocal vars, args, return addr | Free Virtual Space | Heap (grows UP ↑)\\nmalloc() / new | .bss\\nUninitialized statics (0-filled at load) | .data\\nInitialized statics & constants | .text (Code)\\nMachine instructions}\", fillcolor=\"#f8fafc\", color=\"#475569\"];\n}",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-pcb-lifecycle-context-switch",
+      "title": "4. PCB, Process Syscalls (fork, exec, waitpid, exit) & Context Switch (C4)",
+      "description": "The Process Control Block (PCB), process creation/termination lifecycle, orphan and zombie processes, and what makes context switches expensive.",
+      "blocks": [
+        {
+          "id": "th-pcb-structure",
+          "block_type": "markdown",
+          "title": "Process Control Block (PCB) (C4 & E2 Q9)",
+          "content": "The **PCB (Process Control Block)** is the kernel-only data structure (invisible to user space) acting as a process's **ID card**. Every process has a unique PCB allocated at `fork()` and freed only when its parent calls `waitpid()`.\n\n### Contents of a PCB\n- **PID** (Process ID) & **Process State** (`New`, `Ready`, `Running`, `Waiting`, `Zombie`)\n- **Execution Context:** Program Counter (`PC`), CPU registers, Stack Pointer (`SP`), priority\n- **Memory Context:** Address space / MMU page tables, heap pointer\n- **Resources:** Open file descriptor table (`fd_array`), references to child processes, **exit status code**.",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-fork-exec-waitpid-exit",
+          "block_type": "code",
+          "title": "The Unix Process Lifecycle: fork(), execve(), waitpid(), exit()",
+          "language": "c",
+          "filename": "process_lifecycle.c",
+          "code": "#include <stdio.h>\n#include <stdlib.h>\n#include <unistd.h>\n#include <sys/wait.h>\n\nint main(void) {\n    int wstatus;\n    pid_t pid = fork(); /* 1. Duplicate parent -> child gets 0, parent gets child PID */\n\n    if (pid < 0) {\n        perror(\"fork failed\"); /* Check errno on failure (e.g., max processes / OOM) */\n        exit(1);\n    } else if (pid == 0) {\n        /* Child process */\n        char *argv[] = {\"ls\", \"-l\", NULL};\n        execvp(\"ls\", argv); /* 2. Replace binary image; PID & open FDs are preserved! */\n        perror(\"execvp failed\"); /* Only reached if exec fails */\n        exit(127);\n    } else {\n        /* Parent process */\n        waitpid(pid, &wstatus, 0); /* 3. Block until child exits, read status, free child PCB */\n        if (WIFEXITED(wstatus)) {\n            printf(\"Child exited with code %d\\n\", WEXITSTATUS(wstatus));\n        }\n    }\n    return 0; /* C runtime calls exit(0) automatically */\n}",
+          "highlight_lines": [
+            8,
+            16,
+            21
+          ],
+          "annotations": [
+            {
+              "line": 8,
+              "note": "fork() returns 0 in child, child's PID (>0) in parent, or -1 on error."
+            },
+            {
+              "line": 16,
+              "note": "exec*() replaces .text/.data/.bss/stack/heap with new program, keeping PID and open FDs."
+            },
+            {
+              "line": 21,
+              "note": "Without waitpid(), a terminated child remains a ZOMBIE holding its PCB in kernel memory!"
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "th-zombie-orphan",
+          "block_type": "markdown",
+          "title": "Zombie vs. Orphan Processes (C3 & C4)",
+          "content": "- **Zombie Process:** A child that has called `exit()`, so it is no longer schedulable, **but its parent has not yet called `waitpid()`**. Its PCB must remain in the kernel to hold the exit code.\n- **Orphan Process:** A child whose **parent terminated before it**. The kernel reparents the orphan to the root process (`init`/`idle`), which will later call `waitpid()` to clean up its PCB.",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-context-switch",
+          "block_type": "markdown",
+          "title": "Context Switch Mechanics & Cost (C4)",
+          "content": "A **context switch** occurs when the kernel suspends `P0` and resumes `P1`. It is triggered by:\n1. Process termination (`exit()`)\n2. Blocking on I/O or a resource (`Running` $\\rightarrow$ `Waiting`)\n3. Scheduler preemption (e.g., timer IRQ / quantum expired)\n\n### Why Is a Process Context Switch Expensive (~1 ms)?\n1. Save outgoing CPU registers, `PC`, `SP`, and **coprocessors/VFP (floating-point)** into `PCB0`.\n2. Restore incoming registers and state from `PCB1`.\n3. **Synchronize/flush CPU caches (L1/L2/L3)** with RAM.\n4. **Reconfigure the MMU** to point to `P1`'s virtual address space.\n5. Load `P1`'s `PC` and resume execution.",
+          "bookmarkable": true
+        },
+        {
+          "id": "diag-context-switch",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Context Switch Sequence (P0 → Kernel → P1)",
+          "caption": "Saving PCB0, restoring PCB1, reconfiguring the MMU, and loading the new PC.",
+          "source": "sequenceDiagram\n  participant P0 as Process P0\n  participant OS as OS Kernel\n  participant P1 as Process P1\n  Note over P0: Running\n  P0->>OS: Syscall or Timer IRQ\n  OS->>OS: Save P0 state into PCB0\n  OS->>OS: Restore P1 state from PCB1\n  OS->>OS: Reconfigure MMU & sync caches\n  OS->>P1: Load new PC -> Resume P1\n  Note over P1: Running",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-fork-analysis",
+          "block_type": "reflection_rubric",
+          "title": "Analyze a fork() Execution Tree",
+          "prompt": "Suppose `main()` calls `fork()` twice in a row with no `if` conditions: `fork(); fork(); printf(\"Hi\\n\");`. How many total processes exist, how many times is `Hi` printed, and what happens if the parent exits without `waitpid()`?",
+          "self_check_criteria": [
+            "Calculated 2^2 = 4 total processes (1 original parent + 3 descendants).",
+            "Stated that 'Hi' is printed 4 times (once per process).",
+            "Explained that without waitpid(), children become zombies (if they finish first) or orphans reparented to init (if parent finishes first)."
+          ],
+          "model_answer": "Each fork() doubles the number of processes: after 2 consecutive fork() calls, there are 2^2 = 4 processes, so 'Hi' is printed 4 times. If the parent exits before its children, the children become orphans and are adopted by init/root. If children exit before the parent without waitpid(), they remain in the Zombie state until the parent collects their exit status or terminates.",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-states-threads",
+      "title": "5. Process States, Threads & POSIX pthreads (C5)",
+      "description": "The 5-state process lifecycle, TCB vs PCB, why threads are 10x faster than processes, POSIX pthread_create/join/exit, and shared-memory race conditions.",
+      "blocks": [
+        {
+          "id": "th-process-states",
+          "block_type": "markdown",
+          "title": "The 5 Process States & Legal Transitions (C5)",
+          "content": "The kernel maintains a queue per state (except `Running`, which holds at most 1 process per CPU core):\n\n- **`New`:** PCB allocated, structures still initializing (not yet schedulable).\n- **`Ready`:** Initialized and waiting in the ready queue for CPU time.\n- **`Running`:** Currently executing instructions on a CPU core.\n- **`Waiting`:** Blocked on I/O, a pipe, a mutex, etc. *(A **watchdog timer** can detect processes stuck here too long, e.g., deadlocks.)*\n- **`Zombie`:** Terminated via `exit()`, awaiting parent's `waitpid()`.\n\n> [!IMPORTANT]\n> **Crucial Rule:** A process waking up from `Waiting` **NEVER** jumps directly to `Running`! It **must** transition `Waiting -> Ready` so the scheduler retains full control over CPU allocation.",
+          "bookmarkable": true
+        },
+        {
+          "id": "diag-state-machine",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "5-State Process Transition Diagram",
+          "caption": "Notice that Waiting transitions exclusively to Ready, never directly to Running.",
+          "source": "stateDiagram-v2\n  [*] --> New\n  New --> Ready: Initialized\n  Ready --> Running: Dispatched by Scheduler\n  Running --> Ready: Preempted (Timer / Higher Priority)\n  Running --> Waiting: I/O Request / Blocking Syscall\n  Waiting --> Ready: Resource Available / I/O Done\n  Running --> Zombie: exit()\n  Zombie --> [*]: Parent calls waitpid()",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-threads-tcb",
+          "block_type": "markdown",
+          "title": "Threads, TCB & Hyper-Threading (C5)",
+          "content": "Creating a process takes **~250 $\\mu$s**; creating a **thread** (lightweight execution context inside a process) takes **~25 $\\mu$s** (10x faster).\n\n### What Threads Share vs. What Each Thread Owns\n| Shared by All Threads in a Process | Private to Each Thread (in its **TCB**) |\n| :--- | :--- |\n| Virtual Address Space (`.text`, `.data`, `.bss`, **Heap**) | **Stack** (local vars, call frames) |\n| Open File Descriptors (`fd_array`), IPCs | **PC** (Program Counter) & **CPU Registers** |\n| Process ID (PID) & Exit Code | Thread ID, **State**, **Priority**, Stack Pointer (`SP`) |\n\n- **TCB (Thread Control Block):** Much smaller than a PCB because it holds no memory-space or open-file tables.\n- **Hyper-Threading:** Hardware support where 1 physical CPU core exposes 2 logical CPUs (`CPU #0`, `CPU #1`) for fast hardware thread switching.",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-pthreads-code",
+          "block_type": "code",
+          "title": "POSIX Threads (IEEE 1003.1c) & Race Condition Hazard",
+          "language": "c",
+          "filename": "pthreads_race.c",
+          "code": "#include <pthread.h>\n#include <stdio.h>\n\nint count = 0; /* Shared global in .bss/.data! */\n\nvoid *worker(void *arg) {\n    for (int i = 0; i < 100000; i++) {\n        count++; /* NOT atomic: Load -> Increment -> Store can be preempted! */\n    }\n    return NULL; /* Equivalent to pthread_exit(NULL) */\n}\n\nint main(void) {\n    pthread_t t1, t2;\n    pthread_create(&t1, NULL, worker, NULL);\n    pthread_create(&t2, NULL, worker, NULL);\n    pthread_join(t1, NULL); /* Wait for t1 */\n    pthread_join(t2, NULL); /* Wait for t2 (returns immediately if t2 already finished) */\n    printf(\"Final count = %d (expected 200000)\\n\", count);\n    return 0;\n}",
+          "highlight_lines": [
+            4,
+            8,
+            17,
+            18
+          ],
+          "annotations": [
+            {
+              "line": 4,
+              "note": "POSIX pthread functions are user-space library wrappers (not raw syscalls)."
+            },
+            {
+              "line": 8,
+              "note": "count++ compiles to multiple machine instructions (load, add, store). Preemption mid-update causes lost increments (race condition)."
+            },
+            {
+              "line": 17,
+              "note": "Do NOT replace pthread_join() with pthread_exit() here if main() still needs to run printf() afterward!"
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-feynman-process-thread",
+          "block_type": "feynman_prompt",
+          "concept": "Process vs. Thread & Shared-Memory Race Conditions",
+          "target_audience": "a junior software developer",
+          "prompt": "Explain the difference between a process and a thread using a clear analogy, and explain why `count++` in two threads can lose updates even though it is a single line of C.",
+          "key_points_to_cover": [
+            "Process = isolated house/workshop (own memory & resources); Thread = workers inside the same workshop sharing tools (heap/globals) with own clipboard (stack/registers)",
+            "Why thread creation & switching are cheaper than processes",
+            "count++ is 3 machine instructions (read, increment, write) and is non-atomic"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-ipc-fds-pipes",
+      "title": "6. File Descriptors, Redirection (dup2) & Pipes (C6 & E4)",
+      "description": "Per-process fd_array vs. kernel global open file table (VFS), dup2() stream redirection, anonymous vs. named pipes, and the E4 pipe+dup2 coding exercise.",
+      "blocks": [
+        {
+          "id": "th-fd-and-dup2",
+          "block_type": "markdown",
+          "title": "File Descriptors, VFS Open File Table & dup2() (C6)",
+          "content": "A **file descriptor (FD)** is a small integer identifying an open resource (file, pipe, socket) via two kernel tables managed by the **VFS (Virtual File System)**:\n1. **Per-process `fd_array[]`** (inside the PCB): Maps local FD numbers (`0=stdin`, `1=stdout`, `2=stderr`, `3, 4...`) to entries in the global table.\n2. **Global Open File Table (`open_fds`)**: Stores resource attributes, access mode (`RO`, `WO`, `RW`), and current file offset (`pos`).\n\n### Stream Redirection with `dup2(oldfd, newfd)`\n`dup2(oldfd, newfd)` makes `newfd` point to the **same global open file table entry** as `oldfd` (closing `newfd` first if open).\n- Example: `dup2(file_fd, STDOUT_FILENO);` redirects all `printf()` output into the file.\n- **Crucial Property:** `fd_array` redirections are **inherited across `fork()`** and **preserved across `exec()`**! That is how shells implement `ls > out.txt` and `ls | more`.",
+          "bookmarkable": true
+        },
+        {
+          "id": "diag-dup2-tables",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "How dup2(3, 1) Redirects stdout to readme.txt",
+          "caption": "Local fd[1] (stdout) is updated to point to the same global open_fds entry as fd[3].",
+          "source": "flowchart LR\n  subgraph Local [\"Process P0 fd_array\"]\n    fd0[\"0: stdin\"]\n    fd1[\"1: stdout (redirected)\"]\n    fd2[\"2: stderr\"]\n    fd3[\"3: opened file\"]\n  end\n  subgraph Global [\"Kernel Global open_fds\"]\n    g0[\"Console RO\"]\n    g1[\"Console WO\"]\n    g2[\"readme.txt RW / pos\"]\n  end\n  fd0 --> g0\n  fd2 --> g1\n  fd3 --> g2\n  fd1 -. \"dup2(3, 1)\" .-> g2\n\n  classDef redir fill:#d1fae5,stroke:#059669,stroke-width:2px;\n  class fd1,g2 redir;",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-pipes-anon-vs-named",
+          "block_type": "markdown",
+          "title": "IPC Overview & Anonymous vs. Named Pipes (C6)",
+          "content": "Because processes have isolated address spaces, they need kernel **IPC (Inter-Process Communication)**:\n- **Data exchange:** Memory-mapped files, shared memory.\n- **Synchronization:** Locks (mutex), semaphores, monitors, signals.\n- **Both exchange & sync:** **Pipes**, **Network Sockets**, message queues.\n\n### Pipe Properties\n- **Unidirectional FIFO** byte stream with **destructive reads** (reading removes data).\n- **Bounded buffer (~4 KiB):** Reading an empty pipe blocks (`Waiting`); writing a full pipe blocks (`Waiting`).\n- `pipe(int fd[2])`: **`fd[0]` = read end** (like `stdin=0`), **`fd[1]` = write end** (like `stdout=1`).\n\n| Feature | Anonymous Pipe (`pipe()`) | Named Pipe / FIFO (`mkfifo()`) |\n| :--- | :--- | :--- |\n| **Who can use it?** | Related processes (parent/child after `fork()`) | **Any** processes knowing its filesystem path |\n| **Persistence** | Destroyed automatically when all FDs close | **Persistent** in filesystem until `unlink()` |\n| **Connection** | Inherited via `fork()` | `open()` blocks by default until peer opens other end |",
+          "bookmarkable": true
+        },
+        {
+          "id": "exp-e4-pipe-starter",
+          "block_type": "code",
+          "title": "E4 Exercise: Redirect Child stdout to Parent via Pipe & dup2()",
+          "language": "c",
+          "filename": "e4_pipe_dup2_starter.c",
+          "code": "#include <stdio.h>\n#include <stdlib.h>\n#include <unistd.h>\n\nint main(int argc, char **argv) {\n    int fd[2]; /* Pipe descriptors: fd[0] = read, fd[1] = write */\n    int pid;   /* Child PID */\n\n    /* TODO: 1. Create anonymous pipe before fork() */\n    /* TODO: 2. Fork child process */\n    /* TODO: 3. In child: close unused read end, redirect stdout to fd[1] via dup2(), print message */\n    /* TODO: 4. In parent: close unused write end, read from fd[0], print received data, waitpid() */\n\n    exit(0);\n}",
+          "highlight_lines": [
+            9,
+            10,
+            11,
+            12
+          ],
+          "annotations": [
+            {
+              "line": 9,
+              "note": "Create the pipe BEFORE fork() so both processes share the same kernel pipe."
+            },
+            {
+              "line": 11,
+              "note": "Remember: STDOUT_FILENO is 1. Close fd[1] after dup2(fd[1], STDOUT_FILENO)."
+            },
+            {
+              "line": 12,
+              "note": "Parent MUST close fd[1] so read(fd[0], ...) can observe EOF when the child exits."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "th-e4-pipe-solution",
+          "block_type": "reflection_rubric",
+          "title": "Check Your E4 Solution (Pipe + dup2)",
+          "prompt": "Write the C code to complete `e4_pipe_dup2_starter.c` above so that anything written to `stdout` in the child is captured and printed by the parent. Draft your solution before revealing the self-check criteria and model answer.",
+          "self_check_criteria": [
+            "Called pipe(fd) BEFORE fork().",
+            "In child (pid == 0): closed fd[0], called dup2(fd[1], STDOUT_FILENO), closed fd[1], wrote to stdout (e.g. printf + fflush).",
+            "In parent (pid > 0): closed fd[1] (crucial for EOF!), looped read(fd[0], ...) until 0, closed fd[0], and called waitpid(pid, NULL, 0)."
+          ],
+          "model_answer": "pipe(fd); pid = fork(); if (pid == 0) { close(fd[0]); dup2(fd[1], STDOUT_FILENO); close(fd[1]); printf(\"Hello from child!\\n\"); fflush(stdout); exit(0); } else { close(fd[1]); while ((n = read(fd[0], buf, sizeof(buf)-1)) > 0) { buf[n] = '\\0'; printf(\"Parent: %s\", buf); } close(fd[0]); waitpid(pid, NULL, 0); }",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-signals-sockets",
+      "title": "7. Signals & TCP/IP Network Sockets (C7)",
+      "description": "Asynchronous signal delivery, masking vs ignoring, uncatchable signals, essential POSIX signal table, sockaddr_in, byte-order helpers, and TCP client-server syscalls.",
+      "blocks": [
+        {
+          "id": "th-signals-mechanics",
+          "block_type": "markdown",
+          "title": "POSIX Signals: Asynchronous Process Events (C7)",
+          "content": "A **signal** is an asynchronous event delivered to a process by the kernel or another process (`kill(pid, sig)`). When the target process is **`Running`**, the kernel diverts execution to a user-space **signal handler** (callback, analogous to a kernel ISR).\n\n### Three Rules of Signal Delivery\n1. **No Queuing of Duplicates:** At most **one** pending instance of a given signal type is stored in the process's pending set.\n2. **Masking vs. Ignoring:**\n   - **Masked:** Signal stays pending and is delivered as soon as it is unmasked.\n   - **Ignored (`SIG_IGN`):** Signal is discarded immediately.\n   - **Default (`SIG_DFL`):** Restores default OS action.\n3. **Uncatchable/Unignorable Signals:** **`SIGKILL`** (`kill -9`) and **`SIGSTOP`** can **never** be caught, masked, or ignored.\n\n### Essential Signals for TE1\n| Signal | Trigger / Meaning |\n| :--- | :--- |\n| `SIGINT` / `SIGQUIT` | Terminal `Ctrl+C` / `Ctrl+D` |\n| `SIGTSTP` / `SIGCONT` | Terminal suspend `Ctrl+Z` / Resume stopped process |\n| `SIGKILL` / `SIGTERM` | Abrupt kill (`-9`, uncatchable) / Graceful termination request |\n| `SIGSEGV` / `SIGFPE` / `SIGILL` | Invalid memory access (segfault) / Divide by zero / Illegal instruction |\n| `SIGPIPE` | Writing to a pipe or socket with **no open reader** |\n| `SIGCHLD` | Sent to parent when a **child terminates** (triggers `waitpid()`) |\n| `SIGALRM` / `SIGUSR1`, `SIGUSR2` | `alarm()` timer expired / User-defined signals |",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-sockets-tcp",
+          "block_type": "markdown",
+          "title": "TCP/IP BSD Sockets & Data Structures (C7)",
+          "content": "A **socket** is a bidirectional communication endpoint identified by a **socket descriptor** (used with `read()`/`write()`/`close()` or `send()`/`recv()`). Local same-machine communication uses `localhost` (`127.0.0.1`, loopback).\n\n### Addressing (`<sys/socket.h>`, `struct sockaddr_in`)\n- `sin_family`: `AF_INET` (IPv4)\n- `sin_port`: 16-bit port in **network byte order (big-endian)** $\\rightarrow$ convert with **`htons()`** / **`ntohs()`**\n- `sin_addr`: 32-bit IPv4 address $\\rightarrow$ convert string `\"127.0.0.1\"` with **`inet_pton()`** / **`inet_ntop()`**\n\n### Critical `read()`/`recv()` vs. `write()`/`send()` Trap\n- In `write(fd, buf, count)`, `count` is the **exact** number of bytes to send.\n- In `read(fd, buf, maxlen)`, `maxlen` is the **maximum** buffer capacity—`read()` may return **fewer** bytes! On TCP, **`read()`/`recv()` returning `0` means the peer closed the connection** (EOF).",
+          "bookmarkable": true
+        },
+        {
+          "id": "diag-tcp-client-server",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Concurrent TCP Client–Server Syscall Sequence",
+          "caption": "Server binds and listens on a passive socket; accept() returns a new active socket FD (newfd) per client, typically handled in a forked child or thread.",
+          "source": "sequenceDiagram\n  participant C as Client\n  participant S as Server (Master)\n  participant W as Slave (fork/thread)\n  S->>S: fd = socket()\n  S->>S: bind(fd, addr)\n  S->>S: listen(fd, backlog)\n  C->>C: cfd = socket()\n  C->>S: connect(cfd, addr)\n  S->>S: newfd = accept(fd) [blocks]\n  S->>W: fork() / pthread_create()\n  Note over S: Master closes newfd & loops to accept()\n  Note over W: Slave closes passive fd\n  C->>W: send(cfd, data)\n  W->>C: recv(newfd) / send(newfd)\n  C->>W: close(cfd) -> recv returns 0\n  W->>W: close(newfd) & exit()",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-scheduling",
+      "title": "8. CPU Scheduling & Algorithms (C8 & E5)",
+      "description": "Waiting time metric, preemption points, FCFS, SJF/SRTF & exponential averaging, Round Robin quantum trade-offs, Priority scheduling & aging, and Multi-Level Feedback Queues.",
+      "blocks": [
+        {
+          "id": "th-scheduling-metrics",
+          "block_type": "markdown",
+          "title": "Scheduling Metrics & Preemption Points (C8)",
+          "content": "Processes alternate between **CPU bursts** and **I/O bursts**. Because the scheduler only selects from the **`Ready`** queue, the primary performance metric is:\n\n$$\\text{Waiting Time} = \\text{Total time spent in the } \\texttt{Ready} \\text{ state} \\quad (\\text{I/O time excluded})$$\n\nFor a single CPU burst arriving at $t_{\\text{arr}}$ and finishing at $t_{\\text{finish}}$ with burst duration $B$:\n$$W = (t_{\\text{finish}} - t_{\\text{arr}}) - B$$\n\n### Preemption Points\nThe scheduler (`schedule()`) runs at the end of an ISR (e.g., timer IRQ) or syscall:\n- **Mandatory (non-preemptive) switch:** `Running -> Waiting` (I/O) or `Running -> Zombie` (`exit()`).\n- **Preemptive switch:** `Running -> Ready` (quantum expired or higher-priority process arrived).",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-scheduling-policies",
+          "block_type": "markdown",
+          "title": "Core Scheduling Policies Compared (C8)",
+          "content": "### 1. FCFS (First-Come, First-Served)\n- **Non-preemptive FIFO.** Simple, but suffers from the **convoy effect** (short jobs wait behind a long CPU-bound job).\n\n### 2. SJF (Shortest Job First) & SRTF (Preemptive SJF)\n- **Optimal** for minimizing average waiting time.\n- **Non-preemptive SJF:** Picks shortest burst among `Ready` processes when CPU is free.\n- **Preemptive SJF (SRTF):** Compares **remaining** burst time whenever a new process arrives; preempts if the newcomer's burst is strictly shorter.\n- **Limitation 1:** Future burst lengths are unknown $\\rightarrow$ estimated via **Exponential Moving Average**:\n\n$$\\tau_{n+1} = \\alpha\\, t_n + (1 - \\alpha)\\, \\tau_n, \\quad 0 < \\alpha < 1$$\n\n  where $t_n$ is the last measured burst and $\\tau_n$ is the previous estimate. ($\u0007lpha$ near 1 reacts fast to recent changes; $\\alpha$ near 0 smooths over history.)\n- **Limitation 2:** **Starvation** of long processes if short jobs keep arriving.\n\n### 3. Round Robin (RR)\n- **Preemptive FIFO** with a fixed **time quantum $q$** (typically $10\\text{–}200\\text{ ms}$; rule of thumb: **80%** of CPU bursts finish within $q$).\n- $q$ too small $\\rightarrow$ excessive context-switch overhead; $q$ too large $\\rightarrow$ degenerates to FCFS.\n\n### 4. Priority & Multi-Level Feedback Queue (MLFQ)\n- **Priority:** Always picks highest priority (**in SYE: higher number = higher priority**; FIFO tie-breaker). Static priority risks **starvation** $\\rightarrow$ solved by **aging**.\n- **MLFQ (E5 Q3):** Multiple priority queues with different policies (e.g., high = RR $q=8$, medium = RR $q=16$, low = FCFS) and **dynamic priority** (processes waiting too long are promoted to prevent starvation).",
+          "bookmarkable": true
+        },
+        {
+          "id": "exp-sim-sjf-ema",
+          "block_type": "simulation",
+          "title": "SJF Exponential Moving Average Burst Estimator",
+          "description": "Explore how smoothing factor alpha (0 < alpha < 1) weights the latest measured burst t_n = 4 against previous estimate tau_n = 10 (from C8 slide 8).",
+          "formula": "\\tau_{n+1} = \\alpha \\cdot t_n + (1 - \\alpha) \\cdot \\tau_n",
+          "variables": [
+            {
+              "id": "alpha",
+              "name": "Weight alpha",
+              "min": 0.1,
+              "max": 0.9,
+              "step": 0.1,
+              "default": 0.5
+            },
+            {
+              "id": "t_n",
+              "name": "Last measured burst t_n",
+              "min": 1,
+              "max": 20,
+              "step": 1,
+              "default": 4
+            },
+            {
+              "id": "tau_n",
+              "name": "Previous estimate tau_n",
+              "min": 1,
+              "max": 20,
+              "step": 1,
+              "default": 10
+            }
+          ],
+          "compute_expression": "alpha * t_n + (1 - alpha) * tau_n",
+          "chart_type": "gauge",
+          "output_label": "Next Estimate tau_{n+1}",
+          "bookmarkable": true
+        },
+        {
+          "id": "exp-sandbox-rr-avg-wait",
+          "block_type": "sandbox",
+          "runtime": "javascript",
+          "title": "E5 Practice: Compute Average Waiting Time for Preemptive SJF (SRTF)",
+          "instructions": "For the E5 Q2 processes: P1(arr=0, dur=6), P2(arr=2, dur=9), P3(arr=3, dur=2), P4(arr=6, dur=4), complete the SRTF simulator to compute and print the average waiting time (to 2 decimal places).",
+          "starter_code": "const procs = [\n  { id: 'P1', arr: 0, dur: 6, rem: 6 },\n  { id: 'P2', arr: 2, dur: 9, rem: 9 },\n  { id: 'P3', arr: 3, dur: 2, rem: 2 },\n  { id: 'P4', arr: 6, dur: 4, rem: 4 }\n];\nconst total = procs.reduce((s, p) => s + p.dur, 0);\nfor (let t = 0; t < total; t++) {\n  // TODO: Filter processes with arr <= t && rem > 0, pick smallest rem (tie-break by arr)\n  // Decrement cur.rem, and if cur.rem === 0 set cur.finish = t + 1\n}\n// TODO: Compute avgWait = average of (p.finish - p.arr - p.dur)\nconst avgWait = 0;\nconsole.log(avgWait.toFixed(2));",
+          "expected_output": "3.50",
+          "solution": "const procs = [\n  { id: 'P1', arr: 0, dur: 6, rem: 6 },\n  { id: 'P2', arr: 2, dur: 9, rem: 9 },\n  { id: 'P3', arr: 3, dur: 2, rem: 2 },\n  { id: 'P4', arr: 6, dur: 4, rem: 4 }\n];\nconst total = procs.reduce((s, p) => s + p.dur, 0);\nfor (let t = 0; t < total; t++) {\n  const ready = procs.filter(p => p.arr <= t && p.rem > 0).sort((a, b) => a.rem - b.rem || a.arr - b.arr);\n  const cur = ready[0];\n  cur.rem--;\n  if (cur.rem === 0) cur.finish = t + 1;\n}\nconst avgWait = procs.reduce((s, p) => s + (p.finish - p.arr - p.dur), 0) / procs.length;\nconsole.log(avgWait.toFixed(2));",
+          "hints": [
+            "At t=0..3, P1 runs (rem=3). At t=3, P3 arrives with dur=2 < P1's rem=3, so P3 preempts P1!",
+            "Waiting times: P1 = 8-0-6 = 2, P2 = 21-2-9 = 10, P3 = 5-3-2 = 0, P4 = 12-6-4 = 2. Average = (2+10+0+2)/4 = 3.50."
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-e5-rr-gantt",
+          "block_type": "reflection_rubric",
+          "title": "E5 Q1: Trace Round Robin (q = 2) by Hand",
+          "prompt": "Trace Round Robin with quantum q = 2 on: P1(arr=0, dur=6), P2(arr=1, dur=9), P3(arr=3, dur=2), P4(arr=8, dur=4). What is each process's waiting time and the average waiting time? (Note: if a process arrives at the exact moment another's quantum expires, standard convention places the newly arrived process in the ready queue before re-enqueuing the preempted process.)",
+          "self_check_criteria": [
+            "0–2: P1 (P2 arrives at t=1)",
+            "2–4: P2 (P3 arrives at t=3)",
+            "4–6: P1 (runs 4..6, rem=2)",
+            "6–8: P3 (finishes at 8, wait = 8 - 3 - 2 = 3)",
+            "Computed per-process waiting times using W = finish - arrival - duration."
+          ],
+          "model_answer": "Timeline (arrivals queued before preempted task at same tick): [0-2] P1, [2-4] P2, [4-6] P1, [6-8] P3 (done at 8), [8-10] P2 (P4 arrived at 8), [10-12] P1 (done at 12), [12-14] P4, [14-16] P2, [16-18] P4 (done at 18), [18-21] P2 (done at 21). Waiting times: P1 = 12-0-6 = 6, P2 = 21-1-9 = 11, P3 = 8-3-2 = 3, P4 = 18-8-4 = 6. Average = (6+11+3+6)/4 = 6.50.",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-te1-retrieval-exam",
+      "title": "9. TE1 Active Recall Flashcards & Diagnostic Exam",
+      "description": "High-frequency FSRS flashcards and Bloom-calibrated diagnostic questions covering every TE1 chapter and exercise.",
+      "blocks": [
+        {
+          "id": "fc-user-to-kernel",
+          "block_type": "flashcard",
+          "title": "User Mode → Kernel Mode Transitions",
+          "front": "What are the **only** two ways a CPU can transition from **User Mode** to **Kernel Mode**?",
+          "back": "1. **Hardware Interrupt (IRQ)** — asynchronous (e.g., timer tick, disk I/O).\n2. **Software Interrupt / Exception / Trap** — synchronous (e.g., syscall `svc`/`int 0x80`, divide-by-zero, page/seg fault).\n\nA user program can **never** directly modify the CPU status register.",
+          "hint": "Think synchronous vs. asynchronous interrupts.",
+          "tags": [
+            "c2",
+            "cpu-modes",
+            "interrupts"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "fc-fork-exec-wait",
+          "block_type": "flashcard",
+          "title": "fork() Return Values & Zombie/Orphan",
+          "front": "What are the three return values of `fork()`, and what is the difference between a **Zombie** and an **Orphan**?",
+          "back": "- **`fork()` returns:** `0` in child, `> 0` (child PID) in parent, `< 0` on error (`errno`).\n- **Zombie:** Child exited, but parent hasn't called `waitpid()` yet (PCB still held).\n- **Orphan:** Parent exited first; kernel reparents child to `init`/`idle`.",
+          "hint": "Who frees the child's PCB?",
+          "tags": [
+            "c4",
+            "processes",
+            "syscalls"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "fc-pipe-dup2",
+          "block_type": "flashcard",
+          "title": "Pipe Ends & dup2() Semantics",
+          "front": "Which `pipe(fd)` index is read vs. write, and what does `dup2(oldfd, newfd)` do?",
+          "back": "- **`fd[0]`** = read end (like `stdin=0`); **`fd[1]`** = write end (like `stdout=1`).\n- **`dup2(oldfd, newfd)`** makes `newfd` a synonym for `oldfd` in `fd_array[]` (pointing to the same global `open_fds` entry). Preserved across `fork()` and `exec()`.",
+          "hint": "Think 0 = stdin, 1 = stdout.",
+          "tags": [
+            "c6",
+            "ipc",
+            "pipes"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "fc-signals-uncatchable",
+          "block_type": "flashcard",
+          "title": "Signal Rules & Uncatchable Signals",
+          "front": "Which two signals cannot be caught, masked, or ignored, and what triggers `SIGPIPE` and `SIGCHLD`?",
+          "back": "- **Uncatchable:** `SIGKILL` (`kill -9`) and `SIGSTOP`.\n- **`SIGPIPE`:** Writing to a pipe/socket with no open reader.\n- **`SIGCHLD`:** Sent to parent when a child process terminates.",
+          "hint": "One terminates immediately; one pauses execution.",
+          "tags": [
+            "c7",
+            "signals"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-address-range-e1",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-byte-addressing",
+          "title": "E1: Memory Region Size Calculation",
+          "question": "A RAM region spans inclusive byte addresses from `0x1000` to `0xf'ffff`. How many bytes does this region contain?",
+          "options": [
+            "1,044,480 bytes (1020 KiB)",
+            "1,044,479 bytes",
+            "1,048,576 bytes (1 MiB)",
+            "65,536 bytes (64 KiB)"
+          ],
+          "correct_answer": "1,044,480 bytes (1020 KiB)",
+          "explanation": "For an inclusive range [start, end], size = end - start + 1 = 0xFFFFF - 0x1000 + 1 = 0x100000 - 0x1000 = 0xFF000 = 1020 * 1024 = 1,044,480 bytes (1020 KiB).\n\n* '1,044,479 bytes' forgets the +1 for inclusive endpoints.\n* '1,048,576 bytes' ignores the 0x1000 (4 KiB) offset.\n* '65,536 bytes' is 0x10000.",
+          "hints": [
+            "Use the inclusive range formula: Size = End - Start + 1.",
+            "Notice that 0xFFFFF + 1 = 0x100000 (1 MiB = 1024 KiB), and 0x1000 = 4 KiB."
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-cpu-modes-c2",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-cpu-modes-interrupts",
+          "title": "C2: User-to-Kernel Mode Transition",
+          "question": "How can a CPU executing in **User Mode** transition to **Kernel Mode**?",
+          "options": [
+            "Only via a hardware interrupt (IRQ) or a software interrupt / exception (trap)",
+            "By directly executing a privileged instruction to clear the user-mode bit in the status register",
+            "By calling any C library function such as printf() or malloc()",
+            "By jumping to a kernel virtual address using a function pointer"
+          ],
+          "correct_answer": "Only via a hardware interrupt (IRQ) or a software interrupt / exception (trap)",
+          "explanation": "The CPU only enters Kernel Mode through hardware interrupts (IRQ) or synchronous software interrupts/exceptions (such as `svc`/`int 0x80` or a memory fault).\n\n* Modifying the status register is a privileged instruction forbidden in User Mode.\n* Calling `malloc()` or `printf()` stays in User Mode unless it internally invokes a syscall stub.\n* Jumping to a kernel address from User Mode triggers an MMU protection fault (a trap!), not valid execution.",
+          "hints": [
+            "Can user code modify the CPU status register directly?",
+            "Think about the two categories of interrupts discussed in C2."
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-process-sections-c3",
+          "block_type": "quiz_question",
+          "question_type": "multi_select",
+          "difficulty": 3,
+          "related_block_id": "th-process-memory-layout",
+          "title": "C3 & C5: Process Memory Sections & Threads",
+          "question": "Which statements about a multi-threaded process's virtual address space are TRUE? (Select all that apply)",
+          "options": [
+            "Each thread has its own private Stack.",
+            "All threads share the same Heap, .data, .bss, and .text sections.",
+            "The .bss section stores uninitialized global/static variables without reserving their full zero-filled size on disk.",
+            "Each thread has its own independent open file descriptor table (fd_array)."
+          ],
+          "correct_answer": [
+            "Each thread has its own private Stack.",
+            "All threads share the same Heap, .data, .bss, and .text sections.",
+            "The .bss section stores uninitialized global/static variables without reserving their full zero-filled size on disk."
+          ],
+          "explanation": "Threads within the same process share the virtual address space (.text, .data, .bss, Heap) and process-level logical resources like `fd_array[]`. Only execution-context state (Stack, PC, registers, SP, priority) is private per thread in its TCB.",
+          "hints": [
+            "Separate what belongs to the process (PCB) vs. each execution context (TCB).",
+            "Remember why C3 explained that a 1,000-int uninitialized array doesn't bloat the ELF file on disk."
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-process-states-c5",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-process-states",
+          "title": "C5: Legal State Transitions",
+          "question": "When a process in the `Waiting` state receives the I/O data it was waiting for, which state does it transition to?",
+          "options": [
+            "Ready",
+            "Running",
+            "New",
+            "Zombie"
+          ],
+          "correct_answer": "Ready",
+          "explanation": "A waking process ALWAYS transitions `Waiting -> Ready`, never directly to `Running`, so the scheduler remains in control of which process gets the CPU.",
+          "hints": [
+            "Can a waking process bypass the scheduler?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-pipe-eof-c6",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-e4-pipe-solution",
+          "title": "C6 & E4: Pipe Blocking & EOF Bug",
+          "question": "In E4, the parent reads from `fd[0]` in a `while (read(fd[0], ...) > 0)` loop after the child writes and exits. If the parent **forgets** to call `close(fd[1])`, what happens?",
+          "options": [
+            "The parent blocks forever in `read()` because a write end (`fd[1]`) is still open in the parent.",
+            "The child receives `SIGPIPE` and crashes.",
+            "The kernel automatically closes `fd[1]` when the child calls `exit()`.",
+            "`read()` immediately returns `-1` with `errno = EPIPE`."
+          ],
+          "correct_answer": "The parent blocks forever in `read()` because a write end (`fd[1]`) is still open in the parent.",
+          "explanation": "A pipe returns EOF (`read() == 0`) only when **all** write file descriptors referring to that pipe are closed. Even though the child exited and closed its `fd[1]`, the parent still holds its own `fd[1]` open, so `read()` blocks waiting for data that will never arrive.",
+          "hints": [
+            "Remember that fork() duplicated both fd[0] and fd[1] into the parent and child.",
+            "When does read() on a pipe return 0 (EOF)?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-sockets-read-c7",
+          "block_type": "quiz_question",
+          "question_type": "fill_in_the_blank",
+          "difficulty": 2,
+          "related_block_id": "th-sockets-tcp",
+          "title": "C7: TCP Socket Peer Closure",
+          "question": "On a connected TCP socket, when the remote peer closes the connection, a blocking `read()` or `recv()` call returns the integer value ___.",
+          "correct_answer": "0",
+          "explanation": "On a TCP stream socket, `read()`/`recv()` returning `0` signals End-Of-File (peer closed the connection). A positive return value is the number of bytes received (up to `maxlen`), and `-1` indicates an error.",
+          "hints": [
+            "It is the same return value as EOF on a regular file or pipe."
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-sjf-ema-c8",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-scheduling-policies",
+          "title": "C8: SJF Exponential Moving Average",
+          "question": "Using SJF burst estimation $\\tau_{n+1} = \\alpha t_n + (1 - \\alpha)\\tau_n$ with $\\alpha = 0.5$, previous estimate $\\tau_n = 10$, and measured burst $t_n = 4$, what is $\\tau_{n+1}$?",
+          "options": [
+            "7",
+            "6",
+            "8",
+            "5.5"
+          ],
+          "correct_answer": "7",
+          "explanation": "$\\tau_{n+1} = 0.5(4) + 0.5(10) = 2 + 5 = 7$.",
+          "hints": [
+            "Substitute alpha=0.5, t_n=4, tau_n=10 into the formula."
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-c-output-fork",
+          "block_type": "quiz_question",
+          "question_type": "code_output",
+          "difficulty": 3,
+          "related_block_id": "th-fork-exec-waitpid-exit",
+          "title": "C4: Predict fork() + Separate Address Spaces",
+          "question": "Assume `fork()` succeeds and the parent waits for the child before printing:\n\n```c\nint x = 10;\nif (fork() == 0) {\n    x += 5;\n    printf(\"C:%d \", x);\n    exit(0);\n}\nwaitpid(-1, NULL, 0);\nprintf(\"P:%d\\n\", x);\n```\n\nWhat is printed to stdout?",
+          "options": [
+            "C:15 P:10",
+            "C:15 P:15",
+            "C:10 P:15",
+            "P:10 C:15"
+          ],
+          "correct_answer": "C:15 P:10",
+          "explanation": "`fork()` gives the child its own copy of the address space, so `x += 5` only modifies the child's `x` (15), leaving the parent's `x` at 10. Because the parent calls `waitpid()`, `C:15 ` is printed before `P:10`.",
+          "hints": [
+            "Do parent and child share variables after fork()?",
+            "Which process prints first given waitpid()?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    }
+  ]
+}

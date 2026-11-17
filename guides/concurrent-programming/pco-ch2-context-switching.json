@@ -1,0 +1,101 @@
+{
+  "id": "pco-ch2-context-switching",
+  "title": "Chapter 2: Context Switching & Execution Tracing",
+  "description": "Step-by-step mechanics of CPU context switches: current vs. saved Program Counter (PC), preemption, blocking on sleep/I/O, and tracing Ready/Running/Blocked state tables.",
+  "estimated_minutes": 25,
+  "category": "Concurrent Programming",
+  "track": "PCO - Programmation Concurrente (TE1)",
+  "track_order": 2,
+  "difficulty_level": "beginner",
+  "tags": [
+    "pco",
+    "context-switch",
+    "preemption",
+    "scheduler",
+    "tracing"
+  ],
+  "prerequisites": [
+    "pco-ch1-threads-pcothread"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "PCO Chapter 2b: Changement de contexte",
+      "url_or_path": "sources/PCO-TE1/PCO_2b_contexte.pdf",
+      "notes": "Slides 1-30: Animated trace of T1, T2, T3 with PC courant, PC sauvegardé, preemption, and sleep(1)."
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-context-switch-mechanics",
+      "title": "1. What Happens During a Context Switch?",
+      "description": "Tracking the current PC, saved PC, and CPU registers across T1, T2, and T3.",
+      "blocks": [
+        {
+          "id": "th-pc-and-context",
+          "block_type": "markdown",
+          "title": "PC Courant vs. PC Sauvegardé",
+          "bookmarkable": true,
+          "content": "When multiple threads (`T1`, `T2`, `T3`) share a single CPU core, the OS scheduler interleaves their execution via **context switches** (*changements de contexte*).\n\n* **PC Courant (Current Program Counter):** The hardware register pointing to the next instruction of the **currently running (*élue*)** thread.\n* **PC Sauvegardé (Saved Program Counter):** Stored in memory inside each non-running thread's control block (along with its registers and stack pointer `SP`).\n\n### Two Reasons a Running Thread Leaves the CPU\n1. **Preemption (*Préemption*):** The scheduler's time quantum expires (or a higher-priority thread wakes up). The running thread is moved from **élue → prête** (Ready), its `PC` and registers are saved, and another ready thread is restored to **élue**.\n2. **Voluntary Blocking (*Attente / Blocage*):** The running thread calls a blocking operation (e.g., `sleep(1)`, `mutex.lock()`, `sem.acquire()`, `join()`). It moves from **élue → bloquée** (Blocked), freeing the CPU immediately for a ready thread."
+        },
+        {
+          "id": "diag-context-switch-sequence",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Context Switch Trace: T1, T2, and T3 (Single Core)",
+          "caption": "Trace from PCO_2b_contexte.pdf: T1 is preempted by T2, T2 is preempted by T3, T3 blocks on sleep(1), and after 1 second T3 wakes up to 'prête'.",
+          "source": "sequenceDiagram\n  participant T1\n  participant Sched as Scheduler\n  participant T2\n  participant T3\n  Note over T1: T1 élue (PC=line 4)\n  T1->>Sched: Preemption! Save PC=4 (T1 -> prête)\n  Sched->>T2: Restore T2 (T2 -> élue)\n  Note over T2: T2 executes lines 9..11\n  T2->>Sched: Preemption! Save PC=11 (T2 -> prête)\n  Sched->>T3: Restore T3 (T3 -> élue)\n  Note over T3: T3 executes lines 16..19\n  T3->>Sched: sleep(1) called! Save PC=19 (T3 -> bloquée)\n  Sched->>T2: Restore T2 (T2 -> élue)\n  Note over T3: 1 second elapses -> T3 wakes up (bloquée -> prête)",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-tracing-table",
+      "title": "2. Reading & Predicting Thread State Tables",
+      "description": "How to verify invariants on a single-core state table.",
+      "blocks": [
+        {
+          "id": "th-state-table-invariants",
+          "block_type": "markdown",
+          "title": "State Table Invariants (Single Core)",
+          "bookmarkable": true,
+          "content": "At any snapshot in the `PCO_2b_contexte.pdf` trace, every active thread is in **exactly one** of the three columns (`prête`, `élue`, `bloquée`):\n\n| Step | T1 | T2 | T3 | Event |\n| :--- | :--- | :--- | :--- | :--- |\n| Start | **élue** | prête | prête | T1 runs `i = i + 1` |\n| Preempt T1 | prête | **élue** | prête | T1's PC saved at line 4; T2 starts at line 9 |\n| Preempt T2 | prête | prête | **élue** | T2's PC saved at line 11; T3 starts at line 16 |\n| T3 calls `sleep(1)` | prête | **élue** | bloquée | T3 blocks; scheduler picks ready thread T2 |\n| 1s elapses | prête | **élue** | prête | T3 wakes up (`bloquée → prête`), does not immediately run unless preempting T2 |\n\n> [!TIP]\n> **Exam Sanity Check:** On a single-core CPU, **at most one row** can have an `X` in the `élue` column at any time, and **never** two!"
+        },
+        {
+          "id": "ref-ch2-rubric",
+          "block_type": "reflection_rubric",
+          "title": "Tracing a Preemption vs. a Blocking Call",
+          "prompt": "Compare what happens to the state of T1 when it is preempted by the scheduler versus when T3 calls `sleep(1)`. Which state does each enter, and what triggers each thread's return to the CPU?",
+          "self_check_criteria": [
+            "Identified that preemption moves T1 from 'élue' to 'prête' (still eligible to run immediately).",
+            "Identified that `sleep(1)` moves T3 from 'élue' to 'bloquée' (cannot be scheduled until the timer expires).",
+            "Noted that T3's timer expiration moves it to 'prête' (wake-up / réveil), not directly to 'élue'."
+          ],
+          "model_answer": "When T1 is preempted, its PC and registers are saved and T1 moves to 'prête'—it is still ready to run as soon as the scheduler selects it again. When T3 calls `sleep(1)`, it voluntarily yields the CPU and moves to 'bloquée'; the scheduler cannot pick T3 until 1 second elapses, at which point a wake-up (réveil) moves T3 from 'bloquée' to 'prête'.",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch2-wakeup-state",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-state-table-invariants",
+          "question": "In the context-switch trace, when T3's `sleep(1)` timer expires while T2 is currently executing on a single-core CPU, what state transition occurs for T3?",
+          "options": [
+            "bloquée → prête",
+            "bloquée → élue",
+            "prête → élue",
+            "élue → prête"
+          ],
+          "correct_answer": "bloquée → prête",
+          "explanation": "When a blocking event completes (timer expires, mutex unlocked, I/O finishes), the thread undergoes a wake-up (réveil) transition from 'bloquée' to 'prête'. It does not jump directly to 'élue' because T2 is currently occupying the single CPU core.",
+          "hints": [
+            "Can two threads be 'élue' at the same time on a single-core CPU?",
+            "Look at the state diagram: what is the only outgoing arrow from 'bloqué'?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    }
+  ]
+}

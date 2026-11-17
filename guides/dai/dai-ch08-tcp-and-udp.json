@@ -1,0 +1,789 @@
+{
+  "id": "dai-ch08-tcp-and-udp",
+  "title": "Chapter 08: TCP & UDP Programming",
+  "description": "Master Java Socket API programming for TCP (connection-oriented, reliable byte streams) and UDP (connectionless datagrams, unicast, broadcast, and multicast), framing strategies, ncat debugging, messaging patterns, service discovery, and interactive REPLs.",
+  "estimated_minutes": 75,
+  "category": "Internet Applications (DAI)",
+  "track": "DAI - Développement d'Applications Internet (TE1)",
+  "track_order": 8,
+  "difficulty_level": "advanced",
+  "tags": [
+    "java",
+    "networking",
+    "tcp",
+    "udp",
+    "sockets",
+    "multicast",
+    "service-discovery",
+    "repl",
+    "dai"
+  ],
+  "prerequisites": [
+    "dai-ch07-smtp-and-ncat"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "HEIG-VD DAI — Chapter 08: TCP & UDP programming",
+      "url_or_path": "https://heigvd-dai-26.github.io/chapters/08-tcp-and-udp.html",
+      "notes": "Primary course chapter covering Part 1/2 (TCP Socket API) and Part 2/2 (UDP DatagramSocket, Multicast, Service Discovery, REPL)."
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-socket-api-tcp-semantics",
+      "title": "1. The Socket API & TCP Stream Semantics",
+      "description": "Understand how the Berkeley Socket API abstracts network communication in Java and why TCP is a reliable byte stream rather than a message protocol.",
+      "blocks": [
+        {
+          "id": "th-socket-api-intro",
+          "block_type": "markdown",
+          "title": "The Socket API & The File Analogy",
+          "bookmarkable": true,
+          "content": "In Chapter 06 and 07 you designed and tested application protocols using existing tools like `ncat`. Now you will implement your own networked clients and servers in Java using the **Socket API** (`java.net` package in `java.base`).\n\nOriginally developed in C for Unix at UC Berkeley, the Socket API is the universal abstraction for transport-layer communication across operating systems and languages.\n\n### The Concrete Intuition: A Socket is Like a File\nAt its core, a TCP socket behaves almost identically to a file:\n1. **Open** it (connect to a remote IP + port, or accept an incoming connection).\n2. **Read** from its input stream (`InputStream`).\n3. **Write** to its output stream (`OutputStream`).\n4. **Close** it when done.\n\nJust like file I/O from Chapter 04, you decorate raw socket byte streams with `InputStreamReader`, `OutputStreamWriter`, `BufferedReader`, and `BufferedWriter` using `StandardCharsets.UTF_8`."
+        },
+        {
+          "id": "th-tcp-properties",
+          "block_type": "markdown",
+          "title": "TCP Core Semantics: Connection-Oriented, Reliable Byte Stream",
+          "bookmarkable": true,
+          "content": "**TCP (Transmission Control Protocol)** is a transport-layer protocol with four defining properties:\n\n* **Connection-oriented (Phone Call Analogy):** Before exchanging a single byte of application data, the two endpoints must establish a connection. Once connected, data flows bidirectionally.\n* **Unicast only:** A TCP connection links **exactly two** applications. To talk to 5 servers, a client must open 5 separate TCP connections.\n* **Reliable & Ordered:** TCP splits your byte stream into segments, numbers each segment with a **sequence number**, and sends each inside an IP packet. Lost segments are automatically retransmitted, and out-of-order segments are reassembled before your application sees them. If the connection breaks, Java throws an `IOException`.\n* **Stream-oriented (NOT Message-Oriented):** This is the #1 mental trap in TCP programming.\n\n> [!WARNING]\n> **Non-Example — Why `write()` != `read()`:**\n> Suppose a client calls `out.write(\"HELLO\")` and then `out.write(\"WORLD\")`.\n> TCP does **not** preserve those two boundaries. The server's `read()` might receive:\n> - `\"HELLOWORLD\"` in a single read (coalesced),\n> - `\"HEL\"`, `\"LOWO\"`, `\"RLD\"` across three reads (fragmented), or\n> - `\"HELLOWORLD\"` byte-by-byte.\n> \n> Because TCP is an **unstructured stream of bytes**, your application protocol *must* define message boundaries (e.g., a `\\n` delimiter or a length prefix)."
+        },
+        {
+          "id": "diag-tcp-stream-vs-udp-datagram",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "TCP Byte Stream vs UDP Datagram Boundaries",
+          "caption": "TCP treats data as a continuous byte stream requiring application-level framing (such as \\n), whereas UDP preserves discrete datagram boundaries.",
+          "bookmarkable": true,
+          "source": "flowchart LR\n  subgraph TCP [\"TCP: Continuous Byte Stream\"]\n    TW1[\"write('HI\\\\n')\"] --> TStream[\"Byte Stream: H I \\\\n B Y E \\\\n\"]\n    TW2[\"write('BYE\\\\n')\"] --> TStream\n    TStream --> TR1[\"read() -> 'HI\\\\nBY'\"]\n    TStream --> TR2[\"read() -> 'E\\\\n'\"]\n    TR1 --> TFrame[\"App Framing (readLine) reconstructs 'HI' & 'BYE'\"]\n    TR2 --> TFrame\n  end\n\n  subgraph UDP [\"UDP: Discrete Datagrams\"]\n    UW1[\"send('HI')\"] --> UD1[\"Datagram 1: 'HI'\"]\n    UW2[\"send('BYE')\"] --> UD2[\"Datagram 2: 'BYE'\"]\n    UD1 --> UR1[\"receive() -> 'HI'\"]\n    UD2 --> UR2[\"receive() -> 'BYE'\"]\n  end\n\n  classDef tcpNode fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px;\n  classDef udpNode fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;\n  class TW1,TW2,TStream,TR1,TR2,TFrame tcpNode;\n  class UW1,UW2,UD1,UD2,UR1,UR2 udpNode;"
+        },
+        {
+          "id": "th-tcp-serversocket-socket",
+          "block_type": "markdown",
+          "title": "ServerSocket vs Socket & The OS Backlog Queue",
+          "bookmarkable": true,
+          "content": "Java separates the roles of listening for connections and communicating over an established connection into two classes:\n\n| Class | Role | Key Behavior & Failure Modes |\n| :--- | :--- | :--- |\n| `ServerSocket(port)` | **Server listener** | Binds to `port` and starts listening immediately. Throws `BindException: Address already in use` if another process already holds that port. |\n| `serverSocket.accept()` | **Accepts one client** | **Blocks** until a client connects, then returns a new `Socket` dedicated to that client. `serverSocket` stays open to accept future clients. |\n| `new Socket(host, port)` | **Client connector** | Initiates the TCP connection (blocking). The OS picks an ephemeral local port for the client. Throws `ConnectException: Connection refused` if no server is listening. |\n\n### Crucial Subtlety: What Happens Before `accept()`?\nAs soon as `new ServerSocket(6430)` runs, the **operating system** begins accepting incoming TCP handshakes into a **pending connection queue** (whose size is controlled by the `backlog` parameter).\n\nThat means a client's `new Socket(\"localhost\", 6430)` can succeed *even while the server is still busy serving a previous client and hasn't called `accept()` yet*! The client's sent bytes are buffered by the server's OS kernel until the server finally calls `accept()` and reads from the newly returned `Socket`.\n\n### Detecting Connection Closure\nWhen the client calls `socket.close()`, TCP sends a FIN segment. On the server side, `BufferedReader.readLine()` returns **`null`** (end-of-stream / EOF). The server then closes its client `Socket` and loops back to `accept()`."
+        },
+        {
+          "id": "diag-tcp-lifecycle-seq",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "TCP Client/Server Lifecycle Sequence",
+          "caption": "Complete lifecycle from ServerSocket binding and OS backlog queueing to accept(), framed line exchange, and graceful EOF closure.",
+          "bookmarkable": true,
+          "source": "sequenceDiagram\n  participant S as Server App\n  participant OS as Server OS Kernel\n  participant C as Client App\n\n  S->>OS: new ServerSocket(6430)\n  Note over OS: Listening on port 6430\n  S->>OS: serverSocket.accept() [BLOCKS]\n  C->>OS: new Socket(\"localhost\", 6430)\n  OS-->>C: TCP Handshake Complete\n  OS-->>S: Returns dedicated client Socket\n  C->>S: write(\"Hello\\\\n\") + flush()\n  S->>C: readLine() -> \"Hello\" -> write(\"Hello\\\\n\") + flush()\n  C->>OS: socket.close() [FIN]\n  OS-->>S: readLine() returns null (EOF)\n  S->>S: clientSocket.close(), loop to accept()\n  S->>OS: serverSocket.close()"
+        }
+      ]
+    },
+    {
+      "id": "sec-tcp-streams-echo-ncat",
+      "title": "2. Processing TCP Streams, Echo Server & ncat Debugging",
+      "description": "Decorate socket streams with UTF-8 buffered readers/writers, avoid the missing-flush and missing-newline traps, and debug protocols using ncat.",
+      "blocks": [
+        {
+          "id": "th-tcp-stream-decoration",
+          "block_type": "markdown",
+          "title": "Decorating Streams, Flushing, and Variable-Length Framing",
+          "bookmarkable": true,
+          "content": "Raw `socket.getInputStream()` and `socket.getOutputStream()` only read and write `byte`s. For text protocols, always decorate them with explicit UTF-8 encoding and buffering:\n\n```java\nBufferedReader in = new BufferedReader(\n    new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));\nBufferedWriter out = new BufferedWriter(\n    new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));\n```\n\n### Two Golden Rules for Text Protocols\n1. **Always terminate messages with `\\n`:** `BufferedReader.readLine()` blocks until it sees a line terminator (`\\n` or `\\r\\n`) or EOF. If you send `out.write(\"Hello\")` without `\\n`, the peer's `readLine()` will **hang forever**.\n2. **Always call `out.flush()`:** `BufferedWriter` holds characters in memory until its internal buffer (typically 8 KB) fills up or the stream is closed. Without `out.flush()`, small messages sit in RAM and never reach the network.\n\n### Framing Variable-Length Data\nWhen messages can span multiple lines or arbitrary lengths, two standard framing strategies are used:\n* **Explicit Delimiter:** Read lines until a sentinel like End-of-Transmission (`String EOT = \"\\u0004\";`) is encountered.\n* **Length Prefix:** Send a header line first (e.g., `DATA_LENGTH 42\\n`), parse the integer `42`, then read exactly `42` characters via `in.read()`."
+        },
+        {
+          "id": "code-tcp-echo-server",
+          "block_type": "code",
+          "language": "java",
+          "filename": "EchoServer.java",
+          "title": "Annotated TCP Echo Server",
+          "bookmarkable": true,
+          "code": "import java.io.*;\nimport java.net.*;\nimport java.nio.charset.StandardCharsets;\n\npublic class EchoServer {\n  public static void main(String[] args) throws IOException {\n    try (ServerSocket serverSocket = new ServerSocket(6430)) {\n      while (true) {\n        try (Socket socket = serverSocket.accept();\n            BufferedReader in = new BufferedReader(new InputStreamReader(\n                socket.getInputStream(), StandardCharsets.UTF_8));\n            BufferedWriter out = new BufferedWriter(new OutputStreamWriter(\n                socket.getOutputStream(), StandardCharsets.UTF_8))) {\n          String line;\n          while ((line = in.readLine()) != null) {\n            out.write(line + \"\\n\");\n            out.flush();\n          }\n        } catch (IOException e) {\n          System.out.println(\"Error with this client: \" + e.getMessage());\n        }\n      }\n    }\n  }\n}",
+          "highlight_lines": [7, 9, 15, 16, 17],
+          "annotations": [
+            {
+              "line": 7,
+              "note": "try-with-resources ensures ServerSocket is closed on fatal error; binds port 6430."
+            },
+            {
+              "line": 9,
+              "note": "Blocks until a client connects, then wraps the client Socket and its UTF-8 streams in try-with-resources."
+            },
+            {
+              "line": 15,
+              "note": "Loops until the client closes the connection, at which point readLine() returns null."
+            },
+            {
+              "line": 16,
+              "note": "readLine() strips the trailing \\n, so we must re-append \\n before writing back!"
+            },
+            {
+              "line": 17,
+              "note": "flush() pushes the buffered bytes out to the TCP socket immediately."
+            }
+          ]
+        },
+        {
+          "id": "code-tcp-echo-client",
+          "block_type": "code",
+          "language": "java",
+          "filename": "EchoClient.java",
+          "title": "Annotated TCP Echo Client",
+          "bookmarkable": true,
+          "code": "import java.io.*;\nimport java.net.*;\nimport java.nio.charset.StandardCharsets;\n\npublic class EchoClient {\n  public static void main(String[] args) throws IOException {\n    try (Socket socket = new Socket(\"localhost\", 6430);\n        BufferedReader in = new BufferedReader(new InputStreamReader(\n            socket.getInputStream(), StandardCharsets.UTF_8));\n        BufferedWriter out = new BufferedWriter(new OutputStreamWriter(\n            socket.getOutputStream(), StandardCharsets.UTF_8))) {\n      for (int i = 1; i <= 3; i++) {\n        out.write(\"Hello \" + i + \"\\n\");\n        out.flush();\n        System.out.println(\"Received: \" + in.readLine());\n      }\n    }\n  }\n}",
+          "highlight_lines": [7, 13, 14, 15],
+          "annotations": [
+            {
+              "line": 7,
+              "note": "Initiates TCP connection to localhost:6430 using an OS-assigned ephemeral source port."
+            },
+            {
+              "line": 13,
+              "note": "Appends \\n so the server's readLine() knows where the message ends."
+            },
+            {
+              "line": 14,
+              "note": "Flushes immediately before blocking on in.readLine()—forgetting this causes a deadlock!"
+            },
+            {
+              "line": 15,
+              "note": "Blocks until the server echoes the line back with a trailing \\n."
+            }
+          ]
+        },
+        {
+          "id": "th-ncat-debugging",
+          "block_type": "markdown",
+          "title": "Debugging Broken Protocols with ncat",
+          "bookmarkable": true,
+          "content": "When a TCP client and server hang, both sides might be waiting on `readLine()`. `ncat` (from Chapter 07) isolates which side is at fault by replacing either peer:\n\n```bash\n# Replace the client: type lines manually and watch the server\nncat localhost 6430\n\n# Replace the server: inspect raw bytes sent by the client\nncat -l 6430\n```\n\n### Diagnosing the Classic `BrokenEcho` Bug\nSuppose `BrokenEchoClient` and `BrokenEchoServer` both omit `\"\\n\"` and `out.flush()`:\n1. **Client vs `ncat -l 6430`:** Nothing appears in `ncat` while the client runs! Only when the client exits and `try-with-resources` closes `out` does the buffer flush, printing `Hello 1Hello 2Hello 3` glued onto a single line.\n2. **`ncat localhost 6430` vs Server:** The server prints `Received: ...` for each line you type, but `ncat` receives nothing back until you press `Ctrl+D` (EOF). Closing the server's `out` flushes all echoed lines glued together.\n\n**Fix on both sides:** Change `out.write(line)` to `out.write(line + \"\\n\")` followed by `out.flush()`."
+        },
+        {
+          "id": "sbx-tcp-framing-partial-reads",
+          "block_type": "sandbox",
+          "runtime": "java",
+          "title": "Sandbox: Reassemble Framing Across Arbitrary TCP Read Chunks",
+          "bookmarkable": true,
+          "instructions": "Remember that TCP is a byte stream: a single `read()` call can return half a message or two messages glued together. Below, `chunks` simulates 3 `read()` calls arriving over a TCP socket (`\"HEL\"`, `\"LO\\nWOR\"`, `\"LD\\nPING\\n\"`). Complete the loop in `Main` to accumulate bytes/characters until each `'\\n'` delimiter and print each complete frame as `Frame N: <message>`.",
+          "starter_code": "import java.util.*;\n\npublic class Main {\n  public static void main(String[] args) {\n    List<String> chunks = List.of(\"HEL\", \"LO\\nWOR\", \"LD\\nPING\\n\");\n    StringBuilder buffer = new StringBuilder();\n    int frameCount = 0;\n\n    for (String chunk : chunks) {\n      buffer.append(chunk);\n      // TODO: While buffer contains '\\n', extract everything before '\\n',\n      // delete it (including '\\n') from buffer, increment frameCount,\n      // and print: \"Frame \" + frameCount + \": \" + frame\n    }\n  }\n}",
+          "expected_output": "Frame 1: HELLO\nFrame 2: WORLD\nFrame 3: PING",
+          "solution": "import java.util.*;\n\npublic class Main {\n  public static void main(String[] args) {\n    List<String> chunks = List.of(\"HEL\", \"LO\\nWOR\", \"LD\\nPING\\n\");\n    StringBuilder buffer = new StringBuilder();\n    int frameCount = 0;\n\n    for (String chunk : chunks) {\n      buffer.append(chunk);\n      int nl;\n      while ((nl = buffer.indexOf(\"\\n\")) != -1) {\n        String frame = buffer.substring(0, nl);\n        buffer.delete(0, nl + 1);\n        frameCount++;\n        System.out.println(\"Frame \" + frameCount + \": \" + frame);\n      }\n    }\n  }\n}",
+          "hints": [
+            "Use `buffer.indexOf(\"\\n\")` inside a `while` loop—a single chunk like `\"LD\\nPING\\n\"` can complete two frames!",
+            "Extract the message with `buffer.substring(0, nl)` and remove it plus the newline using `buffer.delete(0, nl + 1)`."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-udp-datagrams-reliability",
+      "title": "3. UDP Datagrams & Reliability Trade-offs",
+      "description": "Contrast TCP streams with connectionless UDP datagrams, understand IPv4 payload limits and fragmentation, and explore when applications tolerate or rebuild reliability.",
+      "blocks": [
+        {
+          "id": "th-udp-fundamentals",
+          "block_type": "markdown",
+          "title": "UDP Datagrams: The Postcard Analogy",
+          "bookmarkable": true,
+          "content": "**UDP (User Datagram Protocol)** is a minimalist, **connectionless** transport protocol. Think of it like sending **postcards**:\n* You write a destination address and message on each postcard and drop it in the mailbox—no handshake or connection setup.\n* Postcards travel independently: one may arrive out of order, or get lost entirely, with no automatic retransmission.\n\n### Datagram Structure & The 65,507-Byte Limit\nEach UDP **datagram** is a self-contained chunk with a header (source port, destination port, length, checksum) and a payload:\n\n$$\\text{Max UDP Payload} = 65{,}535\\text{ B (16-bit IPv4 length)} - 20\\text{ B (IPv4 header)} - 8\\text{ B (UDP header)} = 65{,}507\\text{ bytes}$$\n\n> [!WARNING]\n> **Fragmentation & Silent Truncation Pitfalls:**\n> 1. **All-or-Nothing IP Fragmentation:** If a datagram exceeds the network MTU (typically 1500 bytes), IP splits it into fragments. If *even one* fragment is lost, IP discards the entire datagram.\n> 2. **Undersized Receive Buffer:** If your Java `byte[] buffer` is smaller than the incoming datagram, `DatagramSocket.receive()` **silently truncates** the extra bytes! Always size your buffer from the application protocol specification (e.g., 256 bytes for Temperature Monitoring)."
+        },
+        {
+          "id": "th-udp-reliability-usecases",
+          "block_type": "markdown",
+          "title": "When to Use UDP & How Applications Handle Loss",
+          "bookmarkable": true,
+          "content": "Why would anyone choose an unreliable protocol?\n\n1. **Loss-Tolerant Real-Time Streams:** In live video/audio (e.g., Jitsi via WebRTC), waiting for TCP to retransmit a lost packet stalls the entire stream. With UDP, a few lost datagrams cause a brief glitch while newer frames keep playing.\n2. **Custom Reliability Layers:** Multiplayer games like **Factorio** use UDP exclusively and build their own lightweight reliability layer (acknowledgements, timeouts, sequence/message IDs for deduplication and reordering—concepts known as **ARQ: Automatic Repeat reQuest**).\n\n### Limiting Blocking with `setSoTimeout()`\nBy default, `socket.receive(packet)` blocks forever if a datagram or reply is lost. Calling `socket.setSoTimeout(2000)` limits the wait to 2 seconds and throws `SocketTimeoutException` so the client can retry or give up:\n\n```java\nsocket.setSoTimeout(2000);\ntry {\n  socket.receive(responsePacket);\n} catch (SocketTimeoutException e) {\n  System.out.println(\"[Client] No response within 2 seconds\");\n}\n```"
+        },
+        {
+          "id": "sim-tcp-vs-udp-loss",
+          "block_type": "simulation",
+          "title": "Interactive Simulation: IP Fragmentation & UDP Datagram Survival Rate",
+          "description": "Because IP delivers a fragmented UDP datagram on an all-or-nothing basis, losing a single IP fragment destroys the entire datagram. Adjust the number of IP fragments N and per-fragment network loss probability p (%) to observe how datagram survival collapses for oversized UDP payloads.",
+          "formula": "P(\\text{intact}) = (1 - p)^N \\times 100\\%",
+          "variables": [
+            {
+              "id": "fragments",
+              "name": "IP Fragments per Datagram (N)",
+              "min": 1,
+              "max": 45,
+              "step": 1,
+              "default": 10,
+              "unit": "fragments"
+            },
+            {
+              "id": "loss_pct",
+              "name": "Per-Fragment Loss Rate (p)",
+              "min": 0,
+              "max": 20,
+              "step": 0.5,
+              "default": 5,
+              "unit": "%"
+            }
+          ],
+          "compute_expression": "Math.pow(1 - loss_pct / 100, fragments) * 100",
+          "chart_type": "gauge",
+          "output_label": "Datagram Survival Probability",
+          "output_unit": "%",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-udp-unicast-broadcast-multicast",
+      "title": "4. Unicast, Broadcast & Multicast Topologies",
+      "description": "Compare one-to-one, one-to-all, and one-to-many UDP delivery, compute subnet broadcast addresses, and implement MulticastSocket receivers.",
+      "blocks": [
+        {
+          "id": "th-unicast-broadcast-multicast",
+          "block_type": "markdown",
+          "title": "Unicast vs Broadcast vs Multicast",
+          "bookmarkable": true,
+          "content": "Unlike TCP (which only supports unicast), UDP supports three communication modes:\n\n| Feature | Unicast (1-to-1) | Broadcast (1-to-All) | Multicast (1-to-Many) |\n| :--- | :--- | :--- | :--- |\n| **Analogy** | Private conversation | Public PA announcement | Radio / Discord channel |\n| **Receivers** | One specific host | All hosts on local subnet | Only hosts that joined the group |\n| **Destination IP** | Receiver's IP | `255.255.255.255` or subnet broadcast | `224.0.0.0`–`239.255.255.255` (use `239.x.x.x` locally; IPv6 `ff00::/8`) |\n| **Receiver Setup** | Bound to port | Bound to port | Bound to port **+** `joinGroup()` |\n| **Crosses Routers?** | Yes | No (local network only) | Only with multicast routing; almost never on public Internet |\n| **Supported by TCP?** | Yes | No | No |\n\n### Computing a Subnet Broadcast Address\nTo compute a subnet's broadcast address, take the **bitwise OR** of the network address and the **bitwise NOT** of the subnet mask. For `172.16.0.0/12`:\n1. **Network IP:** `172.16.0.0` (`10101100.00010000.00000000.00000000`)\n2. **Mask `/12`:** `255.240.0.0` (`11111111.11110000.00000000.00000000`)\n3. **Bitwise NOT Mask:** `0.15.255.255` (`00000000.00001111.11111111.11111111`)\n4. **Broadcast Address (OR):** `172.31.255.255` (`10101100.00011111.11111111.11111111`)\n\nFor local-network-wide broadcast regardless of subnet, use `255.255.255.255` (note: firewalls/routers may still block broadcast). For local multicast apps, RFC 2365 reserves the Administratively Scoped Block **`239.0.0.0` to `239.255.255.255`**."
+        },
+        {
+          "id": "diag-unicast-broadcast-multicast",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "UDP Delivery Modes: Unicast, Broadcast, and Multicast",
+          "caption": "Unicast targets a single host, Broadcast reaches every host on the LAN, and Multicast delivers only to hosts subscribed to the group.",
+          "bookmarkable": true,
+          "source": "flowchart LR\n  subgraph Uni [\"Unicast (1-to-1)\"]\n    UE[\"Emitter\"] -->|\"To 10.0.0.2\"| UH1[\"Host A (10.0.0.2)\"]\n    UE -.->|\"Not sent\"| UH2[\"Host B (10.0.0.3)\"]\n  end\n\n  subgraph Broad [\"Broadcast (1-to-All)\"]\n    BE[\"Emitter\"] -->|\"To 255.255.255.255\"| BH1[\"Host A\"]\n    BE -->|\"To 255.255.255.255\"| BH2[\"Host B\"]\n    BE -->|\"To 255.255.255.255\"| BH3[\"Host C\"]\n  end\n\n  subgraph Multi [\"Multicast (1-to-Group)\"]\n    ME[\"Emitter\"] -->|\"To 239.0.0.0\"| MH1[\"Host A (Joined)\"]\n    ME -->|\"To 239.0.0.0\"| MH2[\"Host B (Joined)\"]\n    ME -.->|\"Ignored\"| MH3[\"Host C (Not Joined)\"]\n  end\n\n  classDef emitter fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px;\n  classDef recv fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;\n  classDef skip fill:#f1f5f9,stroke:#94a3b8,stroke-dasharray: 4 4;\n  class UE,BE,ME emitter;\n  class UH1,BH1,BH2,BH3,MH1,MH2 recv;\n  class UH2,MH3 skip;"
+        },
+        {
+          "id": "th-udp-socket-api",
+          "block_type": "markdown",
+          "title": "UDP in Java's Socket API: DatagramSocket, DatagramPacket & MulticastSocket",
+          "bookmarkable": true,
+          "content": "UDP replaces `ServerSocket`/`Socket` with three classes:\n\n* **`DatagramSocket`:** Used by both emitters and receivers. Receivers bind a known port (`new DatagramSocket(4445)`); emitters can let the OS choose an ephemeral port (`new DatagramSocket()`).\n* **`DatagramPacket`:** Wraps a `byte[]` payload. When **sending**, you also pass the destination `InetAddress` and `port`. When **receiving**, you pass an empty `byte[]` buffer and its length.\n* **`MulticastSocket`:** Subclass of `DatagramSocket` for receivers that need to call `joinGroup(group, netIf)` and `leaveGroup(group, netIf)` on a specific `NetworkInterface` (e.g., `eth0`, `en0`).\n\n> [!IMPORTANT]\n> **Key Operational Differences from TCP:**\n> - There is **no `accept()`** and **no connection state**.\n> - `socket.send(packet)` **returns immediately**, even if no receiver is listening.\n> - `socket.close()` sends **nothing** over the network—the peer is never notified.\n> - For broadcast, Java enables `SO_BROADCAST` by default, though calling `socket.setBroadcast(true)` explicitly states intent."
+        },
+        {
+          "id": "diag-udp-send-receive-flow",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "UDP Unicast Client/Server Workflow",
+          "caption": "No handshake or accept(): the receiver blocks on receive() while the emitter sends a self-addressed DatagramPacket and can close immediately.",
+          "bookmarkable": true,
+          "source": "sequenceDiagram\n  participant R as Receiver (Server)\n  participant C as Emitter (Client)\n\n  R->>R: new DatagramSocket(4445)\n  R->>R: socket.receive(packet) [BLOCKS]\n  C->>C: new DatagramSocket()\n  C->>C: new DatagramPacket(payload, len, host, 4445)\n  C->>R: socket.send(packet) [returns immediately]\n  C->>C: socket.close()\n  R->>R: Extract String(data, 0, packet.getLength(), UTF_8)\n  R->>R: socket.close() [no FIN sent]"
+        },
+        {
+          "id": "code-udp-multicast",
+          "block_type": "code",
+          "language": "java",
+          "filename": "MulticastExample.java",
+          "title": "Annotated UDP Multicast Emitter & Receiver",
+          "bookmarkable": true,
+          "code": "// --- EMITTER ---\ntry (DatagramSocket socket = new DatagramSocket()) {\n  byte[] payload = \"Temp: 21.5C\".getBytes(StandardCharsets.UTF_8);\n  InetAddress group = InetAddress.getByName(\"239.0.0.0\");\n  DatagramPacket packet = new DatagramPacket(payload, payload.length, group, 4446);\n  socket.send(packet);\n}\n\n// --- RECEIVER ---\ntry (MulticastSocket socket = new MulticastSocket(4446)) {\n  InetSocketAddress group = new InetSocketAddress(\"239.0.0.0\", 4446);\n  NetworkInterface netIf = NetworkInterface.getByName(\"eth0\");\n  socket.joinGroup(group, netIf);\n\n  byte[] buffer = new byte[1024];\n  DatagramPacket packet = new DatagramPacket(buffer, buffer.length);\n  socket.receive(packet);\n  String msg = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);\n  System.out.println(\"Multicast received: \" + msg);\n\n  socket.leaveGroup(group, netIf);\n}",
+          "highlight_lines": [2, 4, 10, 12, 13, 17, 18],
+          "annotations": [
+            {
+              "line": 2,
+              "note": "The emitter only needs an ordinary DatagramSocket—it does NOT need to join the multicast group."
+            },
+            {
+              "line": 4,
+              "note": "Targets the local administratively scoped multicast address 239.0.0.0 on port 4446."
+            },
+            {
+              "line": 10,
+              "note": "The receiver binds a MulticastSocket to port 4446."
+            },
+            {
+              "line": 12,
+              "note": "Selects the specific network interface (e.g., eth0 in Docker or en0 on macOS) for multicast."
+            },
+            {
+              "line": 13,
+              "note": "Subscribes this socket to the multicast group via IGMP."
+            },
+            {
+              "line": 17,
+              "note": "Always pass packet.getLength() to String(...) so trailing zero-bytes from the 1024-byte buffer are excluded."
+            }
+          ]
+        },
+        {
+          "id": "sbx-udp-packet-length-pitfall",
+          "block_type": "sandbox",
+          "runtime": "java",
+          "title": "Sandbox: Fix the DatagramPacket.setLength() Reuse Bug",
+          "bookmarkable": true,
+          "instructions": "When reusing a single `DatagramPacket` across multiple `receive()` calls, Java's `receive()` mutates `packet.length` down to the size of the *previous* datagram! Without resetting `packet.setLength(buffer.length)` before each receive, subsequent longer datagrams get silently truncated. Run the starter code to observe the bug (`\"TEMPERATURE 22.5\"` truncated to 2 bytes `\"TE\"`), then fix it in `Main`.",
+          "starter_code": "import java.net.DatagramPacket;\nimport java.nio.charset.StandardCharsets;\n\npublic class Main {\n  // Simulates JVM DatagramSocket.receive(packet) truncating to packet.getLength()\n  static void simulateReceive(DatagramPacket packet, String incoming) {\n    byte[] src = incoming.getBytes(StandardCharsets.UTF_8);\n    int count = Math.min(src.length, packet.getLength());\n    System.arraycopy(src, 0, packet.getData(), 0, count);\n    packet.setLength(count);\n  }\n\n  public static void main(String[] args) {\n    byte[] buffer = new byte[64];\n    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);\n    String[] incomingDatagrams = {\"HI\", \"TEMPERATURE 22.5\", \"OK\"};\n\n    for (String msg : incomingDatagrams) {\n      // TODO: Reset packet length to buffer.length before receiving!\n      simulateReceive(packet, msg);\n      String decoded = new String(\n          packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);\n      System.out.println(\"Received [\" + packet.getLength() + \"]: \" + decoded);\n    }\n  }\n}",
+          "expected_output": "Received [2]: HI\nReceived [16]: TEMPERATURE 22.5\nReceived [2]: OK",
+          "solution": "import java.net.DatagramPacket;\nimport java.nio.charset.StandardCharsets;\n\npublic class Main {\n  static void simulateReceive(DatagramPacket packet, String incoming) {\n    byte[] src = incoming.getBytes(StandardCharsets.UTF_8);\n    int count = Math.min(src.length, packet.getLength());\n    System.arraycopy(src, 0, packet.getData(), 0, count);\n    packet.setLength(count);\n  }\n\n  public static void main(String[] args) {\n    byte[] buffer = new byte[64];\n    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);\n    String[] incomingDatagrams = {\"HI\", \"TEMPERATURE 22.5\", \"OK\"};\n\n    for (String msg : incomingDatagrams) {\n      packet.setLength(buffer.length);\n      simulateReceive(packet, msg);\n      String decoded = new String(\n          packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);\n      System.out.println(\"Received [\" + packet.getLength() + \"]: \" + decoded);\n    }\n  }\n}",
+          "hints": [
+            "Look at `packet.getLength()` inside `simulateReceive`: after `\"HI\"` arrives, `packet.getLength()` is `2`.",
+            "Call `packet.setLength(buffer.length);` right before `simulateReceive(packet, msg);` (or create a fresh `DatagramPacket` each iteration)."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-messaging-discovery-repl",
+      "title": "5. Messaging Patterns, Service Discovery & Interactive REPLs",
+      "description": "Design fire-and-forget vs request-response exchanges, bootstrap unknown server IPs with UDP service discovery, and keep connections alive with a REPL.",
+      "blocks": [
+        {
+          "id": "th-messaging-patterns",
+          "block_type": "markdown",
+          "title": "UDP Messaging Patterns & Multi-Emitter Behavior",
+          "bookmarkable": true,
+          "content": "Because UDP has no built-in session model, your application defines its messaging pattern:\n\n1. **Fire-and-Forget:** One-way communication. An emitter sends a datagram and never expects an acknowledgement or reply (e.g., periodic sensor readings).\n2. **Request-Response (Request-Reply):** Two-way communication. Every received `DatagramPacket` carries the sender's IP (`packet.getAddress()`) and port (`packet.getPort()`). The receiver extracts these to send a **unicast** reply back to the exact requester.\n\n### Single-Threaded TCP vs UDP Concurrency (Exercises 8 & 9)\n* **TCP Server:** A single-threaded TCP server loops inside `while ((line = in.readLine()) != null)` for Client 1. Until Client 1 disconnects, the server never returns to `accept()`, so Client 2 sits waiting in the OS backlog queue (Chapter 09 solves this with threads).\n* **UDP Receiver:** A single `DatagramSocket` has **no connection state**. Every `receive()` simply returns the next incoming datagram regardless of which emitter sent it—so multiple UDP emitters work out of the box with one receiver socket!"
+        },
+        {
+          "id": "th-service-discovery",
+          "block_type": "markdown",
+          "title": "Service Discovery Protocols: Advertisement vs Query",
+          "bookmarkable": true,
+          "content": "How can a client connect to a server if it doesn't know the server's IP address in advance? Unicast cannot help—but **broadcast** and **multicast** only require a pre-agreed port (and group address) known to all participants.\n\nService discovery uses broadcast/multicast for the **first** message, then switches to **unicast** (UDP or TCP) using the discovered IP and port:\n\n| Pattern | Who Speaks First? | Mechanism | Best For |\n| :--- | :--- | :--- | :--- |\n| **Advertisement** (Passive) | **Service Provider** (Server) | Periodically broadcasts/multicasts its service info (name, IP, port). Consumers listen passively. | Discovering all available services & detecting when one goes offline. |\n| **Query** (Active) | **Service Consumer** (Client) | Broadcasts/multicasts a discovery query. Matching providers reply in **unicast** (request-response). | On-demand lookup without constant background network chatter. |"
+        },
+        {
+          "id": "code-tcp-repl",
+          "block_type": "code",
+          "language": "java",
+          "filename": "ReplLoop.java",
+          "title": "Annotated Interactive REPL Server Loop",
+          "bookmarkable": true,
+          "code": "String line;\nwhile ((line = in.readLine()) != null) {\n  String[] parts = line.trim().split(\"\\\\s+\");\n  String cmd = parts[0].toUpperCase();\n\n  if (\"QUIT\".equals(cmd)) {\n    out.write(\"BYE\\n\");\n    out.flush();\n    break;\n  } else if (\"PING\".equals(cmd)) {\n    out.write(\"PONG\\n\");\n    out.flush();\n  } else {\n    out.write(\"ERROR unknown command\\n\");\n    out.flush();\n  }\n}",
+          "highlight_lines": [2, 6, 9, 11, 12],
+          "annotations": [
+            {
+              "line": 2,
+              "note": "Keeps the TCP connection open across multiple commands until the client disconnects (null) or sends QUIT."
+            },
+            {
+              "line": 6,
+              "note": "Explicit exit command lets the client or server terminate the REPL cleanly."
+            },
+            {
+              "line": 9,
+              "note": "Breaks out of the REPL loop so try-with-resources can close the socket and return to accept()."
+            },
+            {
+              "line": 11,
+              "note": "Always end every REPL response with \\n and flush() so the client's readLine() unblocks."
+            }
+          ]
+        },
+        {
+          "id": "sbx-repl-command-parser",
+          "block_type": "sandbox",
+          "runtime": "java",
+          "title": "Sandbox: Implement a Stateful Temperature REPL Processor",
+          "bookmarkable": true,
+          "instructions": "Complete the `processCommand` method in `Main` to power a stateful Temperature Monitoring REPL supporting `SET <room> <temp>`, `GET <room>`, `AVG`, and `QUIT` (with `Locale.US` formatting to 2 decimal places for `AVG`).",
+          "starter_code": "import java.util.*;\n\npublic class Main {\n  static String processCommand(String line, Map<String, Double> temps) {\n    String[] parts = line.trim().split(\"\\\\s+\");\n    String cmd = parts[0].toUpperCase();\n    switch (cmd) {\n      case \"SET\":\n        // TODO: store Double.parseDouble(parts[2]) for room parts[1]\n        // return \"OK \" + parts[1] + \"=\" + parts[2]\n        return \"\";\n      case \"GET\":\n        // TODO: return \"TEMP \" + parts[1] + \"=\" + temps.get(parts[1])\n        return \"\";\n      case \"AVG\":\n        // TODO: compute average across temps.values() and format with\n        // String.format(Locale.US, \"AVG %.2f\", avg)\n        return \"\";\n      case \"QUIT\":\n        return \"BYE\";\n      default:\n        return \"ERR\";\n    }\n  }\n\n  public static void main(String[] args) {\n    Map<String, Double> temps = new LinkedHashMap<>();\n    List<String> session = List.of(\n        \"SET kitchen 21.5\", \"SET living 19.0\", \"GET kitchen\", \"AVG\", \"QUIT\");\n    for (String cmd : session) {\n      String reply = processCommand(cmd, temps);\n      System.out.println(reply);\n      if (\"BYE\".equals(reply)) break;\n    }\n  }\n}",
+          "expected_output": "OK kitchen=21.5\nOK living=19.0\nTEMP kitchen=21.5\nAVG 20.25\nBYE",
+          "solution": "import java.util.*;\n\npublic class Main {\n  static String processCommand(String line, Map<String, Double> temps) {\n    String[] parts = line.trim().split(\"\\\\s+\");\n    String cmd = parts[0].toUpperCase();\n    switch (cmd) {\n      case \"SET\":\n        double val = Double.parseDouble(parts[2]);\n        temps.put(parts[1], val);\n        return \"OK \" + parts[1] + \"=\" + val;\n      case \"GET\":\n        return \"TEMP \" + parts[1] + \"=\" + temps.get(parts[1]);\n      case \"AVG\":\n        double sum = 0;\n        for (double v : temps.values()) sum += v;\n        double avg = temps.isEmpty() ? 0.0 : sum / temps.size();\n        return String.format(Locale.US, \"AVG %.2f\", avg);\n      case \"QUIT\":\n        return \"BYE\";\n      default:\n        return \"ERR\";\n    }\n  }\n\n  public static void main(String[] args) {\n    Map<String, Double> temps = new LinkedHashMap<>();\n    List<String> session = List.of(\n        \"SET kitchen 21.5\", \"SET living 19.0\", \"GET kitchen\", \"AVG\", \"QUIT\");\n    for (String cmd : session) {\n      String reply = processCommand(cmd, temps);\n      System.out.println(reply);\n      if (\"BYE\".equals(reply)) break;\n    }\n  }\n}",
+          "hints": [
+            "In `SET`, parse `parts[2]` with `Double.parseDouble(parts[2])` and store it in `temps.put(parts[1], val)`.",
+            "In `AVG`, sum all values in `temps.values()`, divide by `temps.size()`, and format with `String.format(Locale.US, \"AVG %.2f\", avg)`."
+          ]
+        },
+        {
+          "id": "th-tcp-vs-udp-comparison",
+          "block_type": "markdown",
+          "title": "Complete TCP vs UDP Comparison",
+          "bookmarkable": true,
+          "content": "| Dimension | TCP | UDP |\n| :--- | :--- | :--- |\n| **Connection model** | Connection-oriented (`ServerSocket` / `Socket`) | Connectionless (`DatagramSocket` / `DatagramPacket`) |\n| **Reliability** | Reliable (retransmission, ordering, error on drop) | Unreliable (may drop, duplicate, or reorder) |\n| **Data abstraction** | Continuous **byte stream** (needs framing) | Discrete **datagrams** (max 65,507 B IPv4 payload) |\n| **Communication modes** | Unicast only | Unicast, Broadcast, and Multicast |\n| **Messaging patterns** | Typically Request-Response / REPL | Fire-and-Forget, Request-Response |\n| **Service discovery** | Not suitable directly | Ideal (Broadcast / Multicast Advertisement & Query) |\n| **Typical protocols** | HTTP, SMTP, FTP, SSH | DNS, live streaming, multiplayer gaming (e.g. Factorio) |"
+        }
+      ]
+    },
+    {
+      "id": "sec-metacognitive-synthesis",
+      "title": "6. Metacognitive Synthesis & Feynman Articulation",
+      "description": "Consolidate your mental models by diagnosing stream/datagram pitfalls in your own words and explaining service discovery without jargon.",
+      "blocks": [
+        {
+          "id": "ref-tcp-stream-vs-udp-datagram",
+          "block_type": "reflection_rubric",
+          "title": "Synthesis: Stream Buffering vs Datagram Reuse",
+          "bookmarkable": true,
+          "prompt": "Compare two classic Java networking bugs: (1) calling `out.write(\"Hello\")` on a TCP `BufferedWriter` without `\\n` or `flush()`, and (2) reusing a UDP `DatagramPacket` in a `receive()` loop without calling `packet.setLength(buffer.length)`. Explain what symptom each bug produces and why.",
+          "self_check_criteria": [
+            "Explained that BufferedWriter holds bytes in an in-memory buffer until full, flushed, or closed—causing the peer to hang.",
+            "Explained that BufferedReader.readLine() blocks until a newline delimiter (\\n) or EOF arrives.",
+            "Explained that DatagramSocket.receive() overwrites packet.length with the received datagram's byte count, silently truncating any larger subsequent datagram unless reset."
+          ],
+          "model_answer": "In the TCP bug, omitting flush() traps 'Hello' inside BufferedWriter's RAM buffer so no bytes hit the wire until the stream closes; even if flushed, omitting '\\n' leaves the peer's readLine() blocking forever waiting for a line delimiter. In the UDP bug, receive() mutates the DatagramPacket's internal length field to match the incoming datagram size (e.g., 2 bytes). On the next loop iteration, receive() only allows up to 2 bytes into the buffer, silently truncating longer messages unless packet.setLength(buffer.length) resets the capacity."
+        },
+        {
+          "id": "feynman-service-discovery",
+          "block_type": "feynman_prompt",
+          "concept": "UDP Service Discovery (Advertisement vs Query)",
+          "target_audience": "a junior developer who thinks you always need a hardcoded IP address or DNS to connect",
+          "bookmarkable": true,
+          "prompt": "Explain how two programs on a local network can find each other using UDP broadcast or multicast without knowing each other's IP address beforehand, contrasting Advertisement and Query patterns.",
+          "key_points_to_cover": [
+            "Pre-agreed well-known port (and multicast group address) instead of a known server IP",
+            "Advertisement (provider periodically announces itself) vs Query (consumer asks, provider replies unicast)",
+            "Extracting sender IP/port from the DatagramPacket to switch to unicast or TCP afterward"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-diagnostic-quiz",
+      "title": "7. Diagnostic Knowledge Check",
+      "description": "Test your understanding of TCP stream semantics, Socket API mechanics, UDP datagrams, subnet broadcast math, multicast, and service discovery.",
+      "blocks": [
+        {
+          "id": "qz-tcp-stream-boundaries",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-tcp-properties",
+          "title": "TCP Message Boundaries",
+          "question": "A TCP client calls `out.write(\"PING\")` followed immediately by `out.write(\"PONG\")` (and flushes). What is guaranteed when the server calls `in.read()`?",
+          "options": [
+            "The server is guaranteed to receive the bytes `P-I-N-G-P-O-N-G` in order, though they may arrive in one read or split across multiple reads.",
+            "The server's first `read()` is guaranteed to return `\"PING\"` and its second `read()` is guaranteed to return `\"PONG\"`.",
+            "The server will drop `\"PONG\"` if it arrives before the first `read()` completes.",
+            "The server must call `ServerSocket.accept()` twice—once for `\"PING\"` and once for `\"PONG\"`."
+          ],
+          "correct_answer": "The server is guaranteed to receive the bytes `P-I-N-G-P-O-N-G` in order, though they may arrive in one read or split across multiple reads.",
+          "explanation": "TCP is a reliable, ordered **byte stream**, not a message-oriented protocol. It guarantees all bytes arrive in order without loss, but it does NOT preserve `write()` boundaries—your application must add framing (such as `\\n`).\n\n* Claiming two `read()` calls return `\"PING\"` and `\"PONG\"` confuses TCP with UDP datagrams.\n* TCP never silently drops bytes on a healthy connection.\n* `accept()` is called once per client connection, not once per message.",
+          "hints": [
+            "Does TCP preserve application `write()` boundaries, or does it treat data as a continuous stream?",
+            "Think about how TCP sequence numbers reassemble bytes rather than messages."
+          ]
+        },
+        {
+          "id": "qz-tcp-backlog-behavior",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-tcp-serversocket-socket",
+          "title": "Client Connecting Before accept()",
+          "question": "A single-threaded TCP server is busy inside a `while` loop serving Client A. Meanwhile, Client B runs `new Socket(\"localhost\", 6430)` and sends `\"Hello\\n\"`. What happens immediately on Client B?",
+          "options": [
+            "The OS kernel accepts the TCP handshake into the server's backlog queue, so `new Socket(...)` succeeds and `\"Hello\\n\"` is buffered by the server's OS until `accept()` is called.",
+            "Client B immediately throws `ConnectException: Connection refused` because the server is not currently inside `accept()`.",
+            "Client B's `new Socket(...)` throws `BindException: Address already in use`.",
+            "Client B's `\"Hello\\n\"` is delivered directly into Client A's `BufferedReader`."
+          ],
+          "correct_answer": "The OS kernel accepts the TCP handshake into the server's backlog queue, so `new Socket(...)` succeeds and `\"Hello\\n\"` is buffered by the server's OS until `accept()` is called.",
+          "explanation": "As soon as `new ServerSocket(6430)` is created, the OS listens and queues incoming connections up to the `backlog` limit. Client B's handshake completes at the OS level and its data is buffered until the server calls `accept()`.\n\n* `Connection refused` only happens if no `ServerSocket` is bound to port 6430.\n* `Address already in use` occurs when binding a `ServerSocket` to an occupied port.\n* Each client gets its own `Socket` instance; data never leaks into Client A's stream.",
+          "hints": [
+            "Who actually performs the TCP 3-way handshake when `ServerSocket` is listening—your Java loop or the OS kernel?",
+            "Remember the `backlog` queue parameter on `ServerSocket`."
+          ]
+        },
+        {
+          "id": "qz-broken-echo-ncat",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-ncat-debugging",
+          "title": "Diagnosing `BrokenEchoClient` with `ncat -l 6430`",
+          "question": "You run `BrokenEchoClient` (which calls `out.write(\"Hello \" + i)` without `\\n` or `flush()`) against `ncat -l 6430`. What does `ncat` display while the client is running and right as it exits?",
+          "options": [
+            "Nothing appears while the client runs; when the client closes its streams on exit, `ncat` prints `Hello 1Hello 2Hello 3` on a single line.",
+            "`ncat` prints `Hello 1`, `Hello 2`, and `Hello 3` on three separate lines immediately.",
+            "`ncat` prints `Hello 1` immediately, then hangs on `Hello 2`.",
+            "`ncat` throws `SocketTimeoutException` after 2 seconds."
+          ],
+          "correct_answer": "Nothing appears while the client runs; when the client closes its streams on exit, `ncat` prints `Hello 1Hello 2Hello 3` on a single line.",
+          "explanation": "Without `flush()`, `BufferedWriter` buffers all three writes in RAM. When the client exits its `try-with-resources` block, closing the `BufferedWriter` flushes the buffer—and because no `\\n` was written, all three strings appear glued together as `Hello 1Hello 2Hello 3`.\n\n* Immediate printing only happens if `flush()` is called.\n* `ncat` does not have a 2-second `SocketTimeoutException` by default.",
+          "hints": [
+            "Where do the characters live after `BufferedWriter.write(...)` if `flush()` is not called?",
+            "What happens to a `BufferedWriter` when `try-with-resources` closes it?"
+          ]
+        },
+        {
+          "id": "qz-tcp-eof-fill",
+          "block_type": "quiz_question",
+          "question_type": "fill_in_the_blank",
+          "difficulty": 1,
+          "related_block_id": "th-tcp-serversocket-socket",
+          "title": "Detecting Client Disconnection",
+          "question": "In a Java TCP server using `BufferedReader in`, when the remote client closes its socket, `in.readLine()` returns `___`.",
+          "correct_answer": "null",
+          "explanation": "Closing a TCP socket sends a FIN segment signaling end-of-stream (EOF). `BufferedReader.readLine()` returns `null` when EOF is reached, which is why servers loop with `while ((line = in.readLine()) != null)`.",
+          "hints": [
+            "Look at the `while` condition in `EchoServer.java`.",
+            "It is a 4-letter Java keyword representing no object."
+          ]
+        },
+        {
+          "id": "qz-udp-max-payload",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-udp-fundamentals",
+          "title": "Maximum IPv4 UDP Payload Size",
+          "question": "An IPv4 packet has a maximum total length of 65,535 bytes (16-bit field). Given a 20-byte IPv4 header and an 8-byte UDP header, what is the maximum UDP payload size?",
+          "options": [
+            "65,507 bytes",
+            "65,527 bytes",
+            "65,515 bytes",
+            "1,500 bytes"
+          ],
+          "correct_answer": "65,507 bytes",
+          "explanation": "Subtract both headers from the 65,535-byte IPv4 limit: $65{,}535 - 20 - 8 = 65{,}507$ bytes.\n\n* `65,527` forgets to subtract the 20-byte IPv4 header.\n* `65,515` forgets to subtract the 8-byte UDP header.\n* `1,500` is a typical Ethernet MTU, above which IP *fragments* the packet rather than forbidding it.",
+          "hints": [
+            "Start from 65,535 and subtract both the IPv4 header (20 B) and UDP header (8 B).",
+            "65,535 - 28 = ?"
+          ]
+        },
+        {
+          "id": "qz-udp-buffer-truncation",
+          "block_type": "quiz_question",
+          "question_type": "code_output",
+          "difficulty": 4,
+          "related_block_id": "sbx-udp-packet-length-pitfall",
+          "title": "Predict Output: Reused DatagramPacket Without Reset",
+          "question": "Suppose `simulateReceive` behaves like `DatagramSocket.receive()` (copying at most `packet.getLength()` bytes and updating `packet.setLength(copied)`). What does this code print?\n\n```java\nbyte[] buf = new byte[32];\nDatagramPacket p = new DatagramPacket(buf, buf.length);\nsimulateReceive(p, \"OK\");\nsimulateReceive(p, \"HELLO\");\nSystem.out.println(new String(p.getData(), 0, p.getLength(), StandardCharsets.UTF_8));\n```",
+          "options": [
+            "HE",
+            "HELLO",
+            "OK",
+            "HEO"
+          ],
+          "correct_answer": "HE",
+          "explanation": "The first call `simulateReceive(p, \"OK\")` sets `p.length` to `2`. Because `p.setLength(buf.length)` is NOT called before the second receive, `p.getLength()` is still `2`, so `\"HELLO\"` is silently truncated to its first 2 bytes: `\"HE\"`.\n\n* `HELLO` would only print if `p.setLength(buf.length)` were called.\n* `OK` is overwritten by the first 2 bytes of `HELLO`.",
+          "hints": [
+            "What is `p.getLength()` after the first `simulateReceive(p, \"OK\")` completes?",
+            "How many bytes will the second `simulateReceive` accept if `p.length` is not reset?"
+          ]
+        },
+        {
+          "id": "qz-subnet-broadcast-calc",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-unicast-broadcast-multicast",
+          "title": "Computing a Subnet Broadcast Address",
+          "question": "What is the broadcast address for the IPv4 subnet `192.168.10.0/24` (subnet mask `255.255.255.0`)?",
+          "options": [
+            "192.168.10.255",
+            "192.168.255.255",
+            "192.168.10.0",
+            "192.168.10.1"
+          ],
+          "correct_answer": "192.168.10.255",
+          "explanation": "The `/24` mask (`255.255.255.0`) has a bitwise NOT of `0.0.0.255`. Taking the bitwise OR with `192.168.10.0` sets all 8 host bits to `1`, yielding `192.168.10.255`.\n\n* `192.168.255.255` corresponds to a `/16` mask.\n* `192.168.10.0` is the network address itself.\n* `192.168.10.1` is typically the default gateway.",
+          "hints": [
+            "With `/24`, the first 3 octets are fixed as the network prefix and the last octet (8 bits) is the host suffix.",
+            "Set all host bits to `1` (255)."
+          ]
+        },
+        {
+          "id": "qz-multicast-properties",
+          "block_type": "quiz_question",
+          "question_type": "multi_select",
+          "difficulty": 3,
+          "related_block_id": "th-unicast-broadcast-multicast",
+          "title": "Multicast Characteristics",
+          "question": "Which of the following statements about IPv4 UDP Multicast are true? (Select all that apply)",
+          "options": [
+            "Addresses in `239.0.0.0` to `239.255.255.255` are reserved for local administratively scoped applications.",
+            "A multicast receiver must use `MulticastSocket` and call `joinGroup(group, netIf)` to receive datagrams sent to the group.",
+            "Multicast works reliably across the public Internet without any VPN or special router configuration.",
+            "A multicast emitter can send to the group using a standard `DatagramSocket` without joining the group."
+          ],
+          "correct_answer": [
+            "Addresses in `239.0.0.0` to `239.255.255.255` are reserved for local administratively scoped applications.",
+            "A multicast receiver must use `MulticastSocket` and call `joinGroup(group, netIf)` to receive datagrams sent to the group.",
+            "A multicast emitter can send to the group using a standard `DatagramSocket` without joining the group."
+          ],
+          "explanation": "RFC 2365 reserves `239.0.0.0/8` for local multicast apps. Receivers use `MulticastSocket.joinGroup(...)` on a `NetworkInterface`, while emitters just send `DatagramPacket`s to the group address. Multicast is almost never routed across the public Internet without a tunnel/VPN.",
+          "hints": [
+            "Recall RFC 2365 for local multicast addressing.",
+            "Does an emitter need to subscribe to a radio channel to broadcast on it, or only the listeners?"
+          ]
+        },
+        {
+          "id": "qz-udp-send-no-listener",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-udp-socket-api",
+          "title": "Sending UDP When No Server Is Listening",
+          "question": "A UDP client creates a `DatagramSocket` and calls `socket.send(packet)` targeting port 4445, where no receiver is running. What happens?",
+          "options": [
+            "`socket.send(packet)` returns immediately without throwing an exception.",
+            "`socket.send(packet)` throws `ConnectException: Connection refused`.",
+            "`socket.send(packet)` blocks until a receiver starts on port 4445.",
+            "The client's `DatagramSocket` automatically switches to broadcast mode."
+          ],
+          "correct_answer": "`socket.send(packet)` returns immediately without throwing an exception.",
+          "explanation": "UDP is connectionless and fire-and-forget at the transport layer: `send()` simply hands the datagram to the OS network stack and returns immediately, even if nobody is listening.\n\n* `Connection refused` on connect is a TCP behavior.\n* `receive()` blocks, not `send()`.",
+          "hints": [
+            "Does UDP perform a handshake before `send()`?",
+            "Think of dropping a postcard into a mailbox—does the mailbox check if anyone is home?"
+          ]
+        },
+        {
+          "id": "qz-service-discovery-patterns",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-service-discovery",
+          "title": "Advertisement vs Query Service Discovery",
+          "question": "In an **active (Query)** service discovery protocol, what is the sequence of communication?",
+          "options": [
+            "The consumer broadcasts/multicasts a query to a pre-agreed port/group, and available providers reply in unicast with their connection details.",
+            "The provider periodically broadcasts its presence while consumers listen passively.",
+            "The consumer opens a TCP connection to `255.255.255.255` and calls `accept()`.",
+            "The provider sends a unicast packet to every IP on the Internet."
+          ],
+          "correct_answer": "The consumer broadcasts/multicasts a query to a pre-agreed port/group, and available providers reply in unicast with their connection details.",
+          "explanation": "In a **Query** (active) pattern, the consumer speaks first via broadcast or multicast to a known port/group. Providers listening there extract the consumer's IP and port from the `DatagramPacket` and reply in unicast.\n\n* Periodic announcements by the provider describe the **Advertisement** (passive) pattern.\n* TCP does not support broadcast.",
+          "hints": [
+            "Who speaks first in an *active* (Query) protocol—the consumer or the provider?",
+            "How does the provider respond once it receives the query?"
+          ]
+        },
+        {
+          "id": "qz-tcp-vs-udp-multi-emitter",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 4,
+          "related_block_id": "th-messaging-patterns",
+          "title": "Single-Threaded TCP Server vs UDP Receiver with Multiple Clients",
+          "question": "Why can a single-threaded UDP receiver (`while (true) socket.receive(p)`) immediately process messages from 5 concurrent emitters, whereas a single-threaded TCP REPL server blocks Client 2 until Client 1 disconnects?",
+          "options": [
+            "UDP has no connection state and reads all incoming datagrams from one `DatagramSocket`; the single-threaded TCP server stays trapped in Client 1's `readLine()` loop before it can call `accept()` again.",
+            "UDP automatically spawns a new Java thread per emitter inside `DatagramSocket`.",
+            "TCP limits `ServerSocket` to a maximum of 1 connection for the lifetime of the JVM.",
+            "UDP packets bypass the operating system kernel."
+          ],
+          "correct_answer": "UDP has no connection state and reads all incoming datagrams from one `DatagramSocket`; the single-threaded TCP server stays trapped in Client 1's `readLine()` loop before it can call `accept()` again.",
+          "explanation": "A UDP receiver uses a single connectionless `DatagramSocket`—every `receive()` returns the next datagram from any emitter. A single-threaded TCP server has one `Socket` per client and stays inside Client 1's loop until EOF (`null`), starving Client 2 in the backlog queue until `accept()` is called again.",
+          "hints": [
+            "Compare how many sockets are involved on the server/receiver side in TCP vs UDP.",
+            "What prevents the single-threaded TCP server from reaching `serverSocket.accept()`?"
+          ]
+        },
+        {
+          "id": "qz-repl-purpose",
+          "block_type": "quiz_question",
+          "question_type": "fill_in_the_blank",
+          "difficulty": 2,
+          "related_block_id": "code-tcp-repl",
+          "title": "Read-Eval-Print Loop (REPL)",
+          "question": "A ___ lets a client send multiple sequential commands over a single persistent TCP connection and receive each result without closing and reopening the socket.",
+          "correct_answer": "REPL",
+          "explanation": "A **REPL (Read-Eval-Print Loop)** reads a command, evaluates it, prints/sends the result, and loops until an exit command (like `QUIT`) or EOF, avoiding repeated connection setup overhead.",
+          "hints": [
+            "It stands for Read-Eval-Print Loop.",
+            "4-letter acronym."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-spaced-repetition-cards",
+      "title": "8. Spaced Repetition Flashcards",
+      "description": "Lock in key Socket API classes, framing rules, UDP limits, multicast ranges, and protocol trade-offs for long-term retention.",
+      "blocks": [
+        {
+          "id": "fc-tcp-stream-vs-message",
+          "block_type": "flashcard",
+          "title": "TCP Stream Semantics",
+          "front": "Why can't you assume one `out.write()` in TCP equals one `in.read()` on the receiver?",
+          "back": "TCP is a **byte stream**, not message-oriented. It may coalesce multiple writes into one read or split one write across multiple reads. The application must define framing (e.g., `\\n` or a length prefix).",
+          "hint": "Think byte stream vs discrete datagrams.",
+          "tags": ["tcp", "framing"]
+        },
+        {
+          "id": "fc-serversocket-vs-socket",
+          "block_type": "flashcard",
+          "title": "`ServerSocket` vs `Socket`",
+          "front": "What is the difference between `ServerSocket` and `Socket` in Java?",
+          "back": "`ServerSocket` binds a port and listens for incoming connections; `accept()` blocks and returns a dedicated `Socket` for each client. `Socket` represents a connected endpoint (used by both the client and the server's accepted client handler).",
+          "hint": "One listens for connections; the other carries data.",
+          "tags": ["tcp", "socket-api"]
+        },
+        {
+          "id": "fc-os-backlog-queue",
+          "block_type": "flashcard",
+          "title": "OS Connection Backlog",
+          "front": "Why can a TCP client's `new Socket(host, port)` succeed even if the server hasn't called `accept()` yet?",
+          "back": "Once `ServerSocket` is created, the **OS kernel** accepts incoming TCP handshakes into a pending **backlog queue** and buffers sent data until the server application calls `accept()`.",
+          "hint": "Who handles the handshake before `accept()` runs?",
+          "tags": ["tcp", "os"]
+        },
+        {
+          "id": "fc-flush-and-newline",
+          "block_type": "flashcard",
+          "title": "The Two `BufferedWriter` Rules",
+          "front": "What two things must you remember when sending text lines to a peer using `BufferedReader.readLine()`?",
+          "back": "1. Append `\"\\n\"` (since `readLine()` blocks until a line terminator).\n2. Call `out.flush()` (since `BufferedWriter` buffers bytes in RAM until full or closed).",
+          "hint": "Delimiter + pushing bytes out of RAM.",
+          "tags": ["tcp", "streams"]
+        },
+        {
+          "id": "fc-ncat-debugging",
+          "block_type": "flashcard",
+          "title": "Debugging with `ncat`",
+          "front": "What `ncat` commands replace (a) a TCP client and (b) a TCP server on port `6430`?",
+          "back": "- Replace client: `ncat localhost 6430`\n- Replace server: `ncat -l 6430`",
+          "hint": "`-l` stands for listen.",
+          "tags": ["ncat", "debugging"]
+        },
+        {
+          "id": "fc-udp-max-payload",
+          "block_type": "flashcard",
+          "title": "Max IPv4 UDP Payload",
+          "front": "What is the maximum payload size of an IPv4 UDP datagram, and why?",
+          "back": "**65,507 bytes** = 65,535 B (16-bit IPv4 total length) − 20 B (IPv4 header) − 8 B (UDP header).",
+          "hint": "65,535 minus IPv4 and UDP headers.",
+          "tags": ["udp", "datagrams"]
+        },
+        {
+          "id": "fc-datagrampacket-reset",
+          "block_type": "flashcard",
+          "title": "`DatagramPacket.setLength()` Pitfall",
+          "front": "What bug occurs when reusing a `DatagramPacket` in a `receive()` loop without calling `packet.setLength(buffer.length)`?",
+          "back": "`receive()` overwrites `packet.length` with the previous datagram's size. Subsequent larger datagrams are **silently truncated** to that smaller length.",
+          "hint": "Each `receive()` mutates the packet's length field.",
+          "tags": ["udp", "pitfalls"]
+        },
+        {
+          "id": "fc-udp-sotimeout",
+          "block_type": "flashcard",
+          "title": "Preventing Infinite `receive()` Blocking",
+          "front": "How do you prevent `DatagramSocket.receive()` from blocking forever when a UDP packet or reply is lost?",
+          "back": "Call `socket.setSoTimeout(ms)` (e.g., `2000` ms) and catch `SocketTimeoutException` to retry or abort.",
+          "hint": "`setSoTimeout(...)`",
+          "tags": ["udp", "timeouts"]
+        },
+        {
+          "id": "fc-broadcast-addresses",
+          "block_type": "flashcard",
+          "title": "Broadcast Addressing",
+          "front": "What is the universal local broadcast IP, and how do you compute a specific subnet's broadcast address?",
+          "back": "Universal local broadcast: `255.255.255.255`.\nSubnet broadcast: `network_IP | (~subnet_mask)` (bitwise OR of network address with bitwise NOT of mask).",
+          "hint": "All host bits set to 1.",
+          "tags": ["udp", "broadcast"]
+        },
+        {
+          "id": "fc-multicast-range-api",
+          "block_type": "flashcard",
+          "title": "Multicast Range & Java API",
+          "front": "Which IPv4 range is reserved for local multicast applications (RFC 2365), and which Java class/methods do receivers use?",
+          "back": "Range: `239.0.0.0` to `239.255.255.255` (within `224.0.0.0/4`).\nReceivers use `MulticastSocket` and call `joinGroup(group, netIf)` / `leaveGroup(group, netIf)`.",
+          "hint": "Administratively Scoped Block `239.x.x.x`.",
+          "tags": ["udp", "multicast"]
+        },
+        {
+          "id": "fc-service-discovery-types",
+          "block_type": "flashcard",
+          "title": "Service Discovery Patterns",
+          "front": "Contrast **Advertisement** vs **Query** service discovery patterns.",
+          "back": "- **Advertisement (Passive):** Provider periodically broadcasts/multicasts its presence; consumers listen.\n- **Query (Active):** Consumer broadcasts/multicasts a request; providers reply in **unicast**.",
+          "hint": "Who speaks first?",
+          "tags": ["udp", "service-discovery"]
+        },
+        {
+          "id": "fc-repl-definition",
+          "block_type": "flashcard",
+          "title": "REPL in Networked Apps",
+          "front": "What is a **REPL** in a TCP client/server application?",
+          "back": "A **Read-Eval-Print Loop**: the server reads commands, evaluates them, and writes/flushes responses in a loop over a **single persistent connection** until the user exits (e.g., `QUIT`).",
+          "hint": "Read-Eval-Print Loop.",
+          "tags": ["tcp", "repl"]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,648 @@
+{
+  "id": "dai-ch02-git-github-markdown",
+  "title": "Chapter 02: Git, GitHub & Markdown",
+  "description": "Master distributed version control with Git (the Three Areas, SHA hashes, branching, merging, rebasing, conflict resolution, and .gitignore), collaborate on GitHub with SSH authentication, signed commits, issues, and pull requests, and author diffable technical documentation in GitHub Flavored Markdown.",
+  "estimated_minutes": 65,
+  "category": "Internet Applications (DAI)",
+  "track": "DAI - Développement d'Applications Internet (TE1)",
+  "track_order": 2,
+  "difficulty_level": "beginner",
+  "tags": [
+    "git",
+    "github",
+    "version-control",
+    "markdown",
+    "gfm",
+    "ssh",
+    "pull-requests",
+    "dai"
+  ],
+  "prerequisites": [
+    "dai-ch01-introduction-setup"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "HEIG-VD DAI Chapter 02: Git, GitHub & Markdown",
+      "url_or_path": "https://heigvd-dai-26.github.io/chapters/02-git-github.html",
+      "notes": "Primary course chapter covering Git internals, team workflows, SSH commit signing, and Markdown/GFM."
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-git-foundations",
+      "title": "1. Git Core: Repositories, Commits & The Three Areas",
+      "description": "Understand how Git stores snapshots instead of file-by-file diffs, why commit hashes make history tamper-evident, and how changes flow across the Three Areas.",
+      "blocks": [
+        {
+          "id": "th-git-distributed-vcs",
+          "block_type": "markdown",
+          "title": "Distributed Version Control: Repositories & Clones",
+          "content": "Before Git (created by Linus Torvalds in 2005 for the Linux kernel), many teams used **centralized** version control systems where only a single server held the full project history. If the server went offline, you could not commit or inspect past versions.\n\nGit is a **distributed version control system (DVCS)**:\n\n* **Every clone is a complete repository:** When you run `git clone <url>`, you download the project files **and** the entire commit history. You can commit, create branches, and inspect `git log` completely offline.\n* **Local vs. Remote (`origin`):** By convention, the shared copy hosted on GitHub is named `origin` (your **remote**), while the copy on your machine is your **local repository**.\n* **CLI First:** Learning Git from the command line means your skills work identically on your laptop, inside a Docker container, or over SSH on a headless Linux server.\n\n> [!NOTE]\n> **Non-Example (The \"Final_v2_REAL.zip\" Trap):** Manually copying project folders (`project-v1`, `project-v2-fixed`) does not record *who* changed *what*, *why* they changed it, or how to cleanly combine two teammates' edits. Git replaces ad-hoc folder copies with an immutable, cryptographically linked history."
+        },
+        {
+          "id": "th-commits-hashes-tags",
+          "block_type": "markdown",
+          "title": "Commits, SHA Hashes & Tags",
+          "content": "A **commit** is not a list of line-by-line patches—it is a **snapshot** of the entire tracked project at a specific point in time, linked to its parent commit(s).\n\n### Why Commit Hashes Make History Tamper-Evident\nEvery commit is identified by a unique cryptographic **SHA hash** (e.g., `2ea9f1c4d5ef42ee3cf1b0d3849a0445ad8d2683`), computed from:\n1. The exact snapshot content (files and directories)\n2. Its parent commit hash(es)\n3. The author and committer metadata (name, email, timestamp)\n4. The commit message\n\nBecause all four inputs feed into the hash, **commits are immutable**: if you change a single character in a file, parent, author, or message, Git does not edit the existing commit—it creates a **brand-new commit with a different hash**, leaving the old one behind. Commands like `git commit --amend` and `git rebase` actually create new commits rather than mutating old ones.\n\n### Human-Friendly Labels: Tags & Signatures\n* **Tags (`git tag v1.0.0`):** A tag attaches a memorable, fixed name to one specific commit—typically a software release or milestone submission.\n* **Signed Commits:** Cryptographically signing a commit with your SSH key proves *who created the commit* (earning a **Verified** badge on GitHub), preventing anyone from spoofing your `user.name` and `user.email`."
+        },
+        {
+          "id": "th-three-areas",
+          "block_type": "markdown",
+          "title": "The Three Areas: Working Directory, Staging Area & Repository",
+          "content": "Why doesn't Git save changes straight from your text editor into permanent history? Because while coding, you often edit three files at once—two for a new feature and one quick typo fix. You want to commit them as **two separate, logical snapshots**, not one messy bundle.\n\nGit solves this with **three distinct areas** on your machine:\n\n| Area | Role | Primary Commands |\n| :--- | :--- | :--- |\n| **1. Working Directory** | The actual files on your disk that you edit in your IDE/editor. | Edit files, `git diff` (shows unstaged changes) |\n| **2. Staging Area (Index)** | A draft \"loading dock\" holding the exact changes queued for the *next* commit. | `git add <file>`, `git status` |\n| **3. Local Repository (`.git`)** | The permanent, committed snapshot history stored locally. | `git commit -m \"...\"`, `git log` |\n\n> [!TIP]\n> **Diagnostic Reflex:** Whenever you feel lost in Git, run `git status`. It tells you which branch `HEAD` is on, which files are modified in the **working directory**, which are staged in the **index**, and whether your local branch is ahead of or behind `origin/main`."
+        },
+        {
+          "id": "diag-three-areas",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Dataflow Across Git's Three Areas and Remote",
+          "caption": "Changes move forward from Working Directory to Staging Area to Local Repository, and synchronize with the Remote via push/fetch/pull.",
+          "source": "flowchart LR\n  WD[\"1. Working Directory\\n(Files on Disk)\"] -->|\"git add file\"| SA[\"2. Staging Area / Index\\n(Next Commit Draft)\"]\n  SA -->|\"git commit -m '...'\"| LR[\"3. Local Repository\\n(Immutable History)\"]\n  LR -->|\"git push\"| RM[\"4. Remote Repository\\n(origin on GitHub)\"]\n  RM -->|\"git fetch\"| LR\n  RM -->|\"git pull (fetch + integrate)\"| WD\n\n  classDef work fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;\n  classDef stage fill:#ede9fe,stroke:#6366f1,stroke-width:1.5px;\n  classDef repo fill:#ecfdf5,stroke:#059669,stroke-width:2px;\n  classDef remote fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px;\n\n  class WD work;\n  class SA stage;\n  class LR repo;\n  class RM remote;"
+        },
+        {
+          "id": "code-git-cheatsheet",
+          "block_type": "code",
+          "language": "bash",
+          "filename": "git-essentials.sh",
+          "title": "Annotated Git Command Cheat Sheet",
+          "code": "git clone git@github.com:org/repo.git   # Copy remote repo + full history\ngit status                              # Inspect working dir vs staging vs HEAD\ngit diff                                # Show unstaged line-by-line changes\ngit add README.md                       # Move changes into Staging Area\ngit commit -m \"Add project README\"      # Record permanent snapshot in Local Repo\ngit log                                 # View commit history (press q to quit)\ngit tag v1.0.0                          # Label the current commit as v1.0.0\ngit push                                # Upload local commits to origin",
+          "highlight_lines": [2, 4, 5],
+          "annotations": [
+            {
+              "line": 2,
+              "note": "Always check `git status` before committing to verify no unintended files are staged."
+            },
+            {
+              "line": 4,
+              "note": "`git add` stages a snapshot of the file as it exists *right now*. Further edits require another `git add`."
+            },
+            {
+              "line": 5,
+              "note": "Commits only what is in the Staging Area—unstaged edits in the Working Directory remain untouched."
+            }
+          ]
+        },
+        {
+          "id": "sbx-git-three-areas-sim",
+          "block_type": "sandbox",
+          "runtime": "python",
+          "title": "Simulate Git's Three Areas (Working -> Staging -> Commit)",
+          "instructions": "Complete `git_add(repo, filename)` and `git_commit(repo, message)` to model how Git moves file snapshots from `working` to `staging` and into `commits`.\n- `git_add` should copy `repo['working'][filename]` into `repo['staging'][filename]`.\n- `git_commit` should append a dictionary `{'message': message, 'snapshot': dict(repo['staging'])}` to `repo['commits']`.\nRun the code to verify that unstaged edits after `git_add` do NOT sneak into the commit!",
+          "starter_code": "repo = {\n    'working': {'README.md': 'v1'},\n    'staging': {},\n    'commits': []\n}\n\ndef git_add(r, filename):\n    # TODO: copy the file content from working to staging\n    pass\n\ndef git_commit(r, message):\n    # TODO: append {'message': message, 'snapshot': dict(r['staging'])} to r['commits']\n    pass\n\ngit_add(repo, 'README.md')\nrepo['working']['README.md'] = 'v2-draft'  # Edited AFTER git add!\ngit_commit(repo, 'Add README v1')\n\nprint('Committed:', repo['commits'][0]['snapshot']['README.md'])\nprint('Working:', repo['working']['README.md'])",
+          "expected_output": "Committed: v1\nWorking: v2-draft",
+          "solution": "repo = {\n    'working': {'README.md': 'v1'},\n    'staging': {},\n    'commits': []\n}\n\ndef git_add(r, filename):\n    r['staging'][filename] = r['working'][filename]\n\ndef git_commit(r, message):\n    r['commits'].append({'message': message, 'snapshot': dict(r['staging'])})\n\ngit_add(repo, 'README.md')\nrepo['working']['README.md'] = 'v2-draft'  # Edited AFTER git add!\ngit_commit(repo, 'Add README v1')\n\nprint('Committed:', repo['commits'][0]['snapshot']['README.md'])\nprint('Working:', repo['working']['README.md'])",
+          "hints": [
+            "In `git_add`, assign `r['staging'][filename] = r['working'][filename]`.",
+            "In `git_commit`, use `r['commits'].append({'message': message, 'snapshot': dict(r['staging'])})` so the commit stores an independent copy of the staged snapshot."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-branches-merging-conflicts",
+      "title": "2. Branches, Merging, Rebasing & Resolving Conflicts",
+      "description": "See why branches are lightweight pointers, compare Merge vs. Rebase vs. Squash, and learn to resolve merge conflicts cleanly.",
+      "blocks": [
+        {
+          "id": "th-branches-pointers",
+          "block_type": "markdown",
+          "title": "Branches & HEAD: Just Movable Pointers",
+          "content": "A common misconception is that creating a Git branch duplicates your entire project folder. In reality, **a branch is simply a lightweight, movable pointer to a single commit** (a tiny 41-byte file containing a 40-character SHA hash plus a newline).\n\n* **`main`:** The conventional name for the primary, stable branch.\n* **`HEAD`:** A special pointer indicating **where you currently are** (usually pointing to a branch name like `HEAD -> main`, which in turn points to a commit).\n* **Why branching is instantaneous:** Running `git checkout -b feature-login` creates a new pointer at the current commit and moves `HEAD` to it. As you make commits on `feature-login`, `feature-login` advances automatically while `main` stays safely behind.\n\n> [!NOTE]\n> **Reading `git log`:**\n> * `commit 2ea9f1c... (HEAD -> main)` means your local `main` is on `2ea9f1c` and you are currently checked out on `main`.\n> * `commit 20f8741... (origin/main, origin/HEAD)` means the remote server is still one commit behind at `20f8741`."
+        },
+        {
+          "id": "th-merge-rebase-squash",
+          "block_type": "markdown",
+          "title": "Integrating Branches: Merge vs. Rebase vs. Squash",
+          "content": "Once your feature branch is ready, you bring its work back into `main` using one of three strategies:\n\n| Strategy | How It Works | Resulting History | Best Used When |\n| :--- | :--- | :--- | :--- |\n| **Merge (Default)** | Combines both branches. If `main` has moved, creates a **3-way merge commit** with two parents; if `main` has not moved, performs a **fast-forward** (simply slides the `main` pointer forward). | Preserves exact branching topology and timestamps. | Merging Pull Requests in team repositories so everyone sees what entered `main`. |\n| **Rebase** | Replays your branch's commits one by one on top of the latest `main`, generating **new commit hashes**. | Perfectly linear history with no merge commits. | Updating your local unpushed branch or cleaning up before pushing (`git pull --rebase`). |\n| **Squash** | Collapses all commits on the feature branch into a **single commit** before merging into `main`. | One clean commit per feature on `main`. | Feature branches with lots of noisy `\"WIP\"` or `\"fix typo\"` commits. |\n\n> [!WARNING]\n> **Golden Rule of Rebasing:** Never rebase commits that have already been pushed to a shared branch that teammates are using! Because rebase rewrites commit hashes, teammates' histories will diverge from yours."
+        },
+        {
+          "id": "diag-branch-merge-rebase",
+          "block_type": "kroki",
+          "diagram_type": "graphviz",
+          "title": "Commit DAG: 3-Way Merge vs. Linear Rebase",
+          "caption": "A 3-way merge joins two diverged branches with a two-parent merge commit (M). Rebase replays feature commits (F1', F2') linearly on top of C2.",
+          "source": "digraph GitDAG {\n  rankdir=LR;\n  node [fontname=\"Helvetica\", shape=circle, style=filled, fillcolor=\"#f1f5f9\", color=\"#475569\", width=0.6];\n  edge [fontname=\"Helvetica\", fontsize=10];\n\n  subgraph cluster_merge {\n    label=\"3-Way Merge (Preserves Branch Topology)\";\n    style=rounded;\n    color=\"#cbd5e1\";\n    C1 -> C2;\n    C1 -> F1;\n    F1 -> F2;\n    C2 -> M;\n    F2 -> M;\n    M [fillcolor=\"#d1fae5\", color=\"#059669\", label=\"M\\n(merge)\"];\n    F1 [fillcolor=\"#e0e7ff\", color=\"#4f46e5\"];\n    F2 [fillcolor=\"#e0e7ff\", color=\"#4f46e5\"];\n  }\n\n  subgraph cluster_rebase {\n    label=\"Rebase (Linear History, New Hashes)\";\n    style=rounded;\n    color=\"#cbd5e1\";\n    R1 [label=\"C1\"];\n    R2 [label=\"C2\"];\n    RF1 [label=\"F1'\", fillcolor=\"#ede9fe\", color=\"#7c3aed\"];\n    RF2 [label=\"F2'\", fillcolor=\"#ede9fe\", color=\"#7c3aed\"];\n    R1 -> R2 -> RF1 -> RF2;\n  }\n}"
+        },
+        {
+          "id": "th-merge-conflicts",
+          "block_type": "markdown",
+          "title": "Merge Conflicts & Conflict Markers",
+          "content": "Git automatically merges changes when two branches edit different files—or even different lines of the same file. However, when two branches edit the **same lines** of the same file (or one deletes/renames a file the other modified), Git pauses the merge and asks a human to decide.\n\nGit marks the disputed region directly inside the file using three markers:\n\n1. `<<<<<<< HEAD`: Start of **your** current branch's version.\n2. `=======`: Divider between the two conflicting versions.\n3. `>>>>>>> other-branch`: End of the **incoming** branch's version.\n\n### The 4-Step Conflict Resolution Ritual\n1. Open the conflicted file in your editor.\n2. Decide what the final text should be (keep `HEAD`, keep `other-branch`, or combine both) and **delete all three marker lines** (`<<<<<<<`, `=======`, `>>>>>>>`).\n3. Stage the resolved file: `git add <file>`.\n4. Conclude the operation: `git commit` (for a merge) or `git rebase --continue` (for a rebase)."
+        },
+        {
+          "id": "code-conflict-markers",
+          "block_type": "code",
+          "language": "markdown",
+          "filename": "README.md (during conflict)",
+          "title": "Anatomy of a Git Merge Conflict",
+          "code": "# Project Title\n\n<<<<<<< HEAD\nBuilt for HEIG-VD DAI (2026) using Java 21.\n=======\nBuilt for HEIG-VD DAI using Java 21 and Docker.\n>>>>>>> feature-docker\n\n## Installation",
+          "highlight_lines": [3, 5, 7],
+          "annotations": [
+            {
+              "line": 3,
+              "note": "Start marker: everything between `<<<<<<< HEAD` and `=======` is what exists on your current branch."
+            },
+            {
+              "line": 5,
+              "note": "Separator between the two competing versions."
+            },
+            {
+              "line": 7,
+              "note": "End marker: everything between `=======` and `>>>>>>> feature-docker` comes from the incoming branch. Delete all 3 markers when resolving!"
+            }
+          ]
+        },
+        {
+          "id": "sbx-conflict-resolver",
+          "block_type": "sandbox",
+          "runtime": "javascript",
+          "title": "Parse & Resolve Git Conflict Markers",
+          "instructions": "Implement `resolveConflict(text, strategy)` to parse a conflicted file containing `<<<<<<< HEAD`, `=======`, and `>>>>>>> feature` markers.\n- Extract `ours` (lines between `<<<<<<<` and `=======`) and `theirs` (lines between `=======` and `>>>>>>>`).\n- If `strategy === 'ours'`, return `ours`; if `'theirs'`, return `theirs`; if `'both'`, return `ours + '\\n' + theirs`.\nEnsure no conflict markers remain in the output!",
+          "starter_code": "const conflicted = [\n  '<<<<<<< HEAD',\n  'Port: 8080',\n  '=======',\n  'Port: 9090',\n  '>>>>>>> feature-port'\n].join('\\n');\n\nfunction resolveConflict(text, strategy) {\n  const lines = text.split('\\n');\n  // TODO: find marker indices and return the resolved string\n  return '';\n}\n\nconsole.log('OURS:', resolveConflict(conflicted, 'ours'));\nconsole.log('THEIRS:', resolveConflict(conflicted, 'theirs'));\nconsole.log('BOTH:', resolveConflict(conflicted, 'both'));",
+          "expected_output": "OURS: Port: 8080\nTHEIRS: Port: 9090\nBOTH: Port: 8080\nPort: 9090",
+          "solution": "const conflicted = [\n  '<<<<<<< HEAD',\n  'Port: 8080',\n  '=======',\n  'Port: 9090',\n  '>>>>>>> feature-port'\n].join('\\n');\n\nfunction resolveConflict(text, strategy) {\n  const lines = text.split('\\n');\n  const start = lines.findIndex(l => l.startsWith('<<<<<<<'));\n  const mid = lines.findIndex(l => l.startsWith('======='));\n  const end = lines.findIndex(l => l.startsWith('>>>>>>>'));\n  const ours = lines.slice(start + 1, mid).join('\\n');\n  const theirs = lines.slice(mid + 1, end).join('\\n');\n  if (strategy === 'ours') return ours;\n  if (strategy === 'theirs') return theirs;\n  return ours + '\\n' + theirs;\n}\n\nconsole.log('OURS:', resolveConflict(conflicted, 'ours'));\nconsole.log('THEIRS:', resolveConflict(conflicted, 'theirs'));\nconsole.log('BOTH:', resolveConflict(conflicted, 'both'));",
+          "hints": [
+            "Use `lines.findIndex(l => l.startsWith('<<<<<<<'))` (and similarly for `=======` and `>>>>>>>`) to locate the three marker lines.",
+            "Slice between `start + 1` and `mid` for `ours`, and between `mid + 1` and `end` for `theirs`."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-gitignore-hygiene",
+      "title": "3. Repository Hygiene: .gitignore Patterns & Negation",
+      "description": "Keep build artifacts, IDE settings, and secrets out of Git history using .gitignore rules, root anchoring, and negation (!).",
+      "blocks": [
+        {
+          "id": "th-gitignore-rules",
+          "block_type": "markdown",
+          "title": "What Belongs in Git (and What Does Not)",
+          "content": "A `.gitignore` file at the root of your repository tells Git which untracked files to ignore so they never clutter `git status` or accidentally get committed.\n\n### The Golden Rule of Repository Hygiene\n> **Commit what a human wrote or chose; never commit what the build produces.**\n\n| Commit (Track in Git) | Ignore (Add to `.gitignore`) |\n| :--- | :--- |\n| Source code (`.java`, `.py`, `.js`), `pom.xml`, `Dockerfile` | Build outputs (`target/`, `dist/`, `*.class`, `*.jar`) |\n| Documentation (`README.md`) & small README images | IDE config (`.idea/`, `.vscode/`, `*.iml`) |\n| Small example/input files needed to run demos | Secrets & credentials (`.env`, private SSH keys, API tokens) |\n\n### Pattern Syntax & Negation (`!`)\n* `*.txt` — matches any `.txt` file at any depth.\n* `/target/` — the leading slash anchors the pattern to the **repository root** only (so `src/target/` would not be ignored), and the trailing slash matches directories.\n* `!examples/**/*_input.txt` — the leading `!` **negates** a previous ignore rule, re-including matching files as exceptions.\n\n> [!CAUTION]\n> **Already-Tracked Files:** `.gitignore` only prevents *untracked* files from being staged. If a file was already committed before you added it to `.gitignore`, Git will keep tracking it until you remove it from the index with `git rm --cached <file>`."
+        },
+        {
+          "id": "code-gitignore-patterns",
+          "block_type": "code",
+          "language": "gitignore",
+          "filename": ".gitignore",
+          "title": "Annotated .gitignore Example",
+          "code": "# Ignore all text files...\n*.txt\n\n# ...except the input files of the examples\n!examples/**/*_input.txt\n\n# Ignore the target directory at the root only\n/target/\n\n# IDE and OS clutter\n.idea/\n.DS_Store",
+          "highlight_lines": [2, 5, 8],
+          "annotations": [
+            {
+              "line": 2,
+              "note": "Wildcard extension match: ignores every `.txt` file anywhere in the repo."
+            },
+            {
+              "line": 5,
+              "note": "Negation (`!`): overrides line 2 for files ending in `_input.txt` inside `examples/`."
+            },
+            {
+              "line": 8,
+              "note": "Leading `/` anchors to repo root; trailing `/` ensures it only matches a directory named `target`."
+            }
+          ]
+        },
+        {
+          "id": "sbx-gitignore-matcher",
+          "block_type": "sandbox",
+          "runtime": "python",
+          "title": "Evaluate .gitignore Patterns with Negation (!)",
+          "instructions": "Implement `is_ignored(path, rules)` where `rules` are evaluated top-to-bottom (last matching rule wins):\n- Ignore blank lines or lines starting with `#`.\n- If a rule starts with `!`, it is a negation (`negated = True`, strip `!`).\n- Support `*.ext` (matches `path.endswith(ext)`), `/dir/` (matches `path.startswith(dir + '/')`), and `fnmatch` glob patterns.\nTest your function against `notes.txt`, `examples/lab1_input.txt`, `target/App.class`, and `src/Main.java`.",
+          "starter_code": "import fnmatch\n\nrules = [\n    '# Ignore all text files',\n    '*.txt',\n    '!examples/*_input.txt',\n    '/target/'\n]\n\ndef is_ignored(path, rules):\n    ignored = False\n    for raw in rules:\n        rule = raw.strip()\n        if not rule or rule.startswith('#'):\n            continue\n        # TODO: handle '!' negation, '/dir/' root-anchored dirs, and fnmatch patterns\n    return ignored\n\nfiles = ['notes.txt', 'examples/lab1_input.txt', 'target/App.class', 'src/Main.java']\nfor f in files:\n    print(f'{f}: {\"IGNORED\" if is_ignored(f, rules) else \"TRACKED\"}')",
+          "expected_output": "notes.txt: IGNORED\nexamples/lab1_input.txt: TRACKED\ntarget/App.class: IGNORED\nsrc/Main.java: TRACKED",
+          "solution": "import fnmatch\n\nrules = [\n    '# Ignore all text files',\n    '*.txt',\n    '!examples/*_input.txt',\n    '/target/'\n]\n\ndef is_ignored(path, rules):\n    ignored = False\n    for raw in rules:\n        rule = raw.strip()\n        if not rule or rule.startswith('#'):\n            continue\n        negated = rule.startswith('!')\n        pattern = rule[1:] if negated else rule\n        matched = False\n        if pattern.startswith('/') and pattern.endswith('/'):\n            matched = path.startswith(pattern.strip('/') + '/')\n        else:\n            matched = fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(path.split('/')[-1], pattern)\n        if matched:\n            ignored = not negated\n    return ignored\n\nfiles = ['notes.txt', 'examples/lab1_input.txt', 'target/App.class', 'src/Main.java']\nfor f in files:\n    print(f'{f}: {\"IGNORED\" if is_ignored(f, rules) else \"TRACKED\"}')",
+          "hints": [
+            "Check `negated = rule.startswith('!')` and strip the `!` before matching.",
+            "When a rule matches, set `ignored = not negated` so later `!` rules can un-ignore a file."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-github-auth-workflows",
+      "title": "4. GitHub, SSH Authentication & Team Workflows",
+      "description": "Configure passwordless SSH authentication and commit signing, collaborate via Issues and Pull Requests, and recover from rejected pushes.",
+      "blocks": [
+        {
+          "id": "th-github-entities",
+          "block_type": "markdown",
+          "title": "GitHub Collaboration: Users, Orgs, Issues, PRs & Forks",
+          "content": "While **Git** is the distributed version control tool running on your machine, **GitHub** is the cloud platform hosting your remote repositories and adding social collaboration tools on top:\n\n* **Users vs. Organizations:** A repository belongs either to a personal user account (e.g., your profile README repo `<username>/<username>`) or to an **Organization** shared by a team (such as your DAI practical work team).\n* **Issues:** Track bugs, tasks, and feature ideas with assignees, labels, and discussion threads. Opening an issue *before* coding prevents duplicated or unwanted work.\n* **Pull Requests (PRs):** Propose merging commits from a feature branch into `main`. Teammates review the diff, leave line-by-line comments, request changes, or approve before merging.\n* **Forks:** Your own server-side copy of *someone else's* repository—the standard way to contribute to open-source projects where you do not have direct write access."
+        },
+        {
+          "id": "th-ssh-and-signing",
+          "block_type": "markdown",
+          "title": "SSH Authentication & Signed Commits (Verified Badge)",
+          "content": "Typing passwords on every `git push` is tedious and insecure. Instead, you authenticate using an **SSH key pair** (`~/.ssh/id_ed25519` and `id_ed25519.pub`):\n\n* **Authentication Key:** You upload the **public key** (`.pub`) to GitHub under *SSH keys (Authentication)*. Your **private key** never leaves your machine! Testing with `ssh -T git@github.com` replies `Hi <username>! You've successfully authenticated, but GitHub does not provide shell access.` (a non-zero exit code is normal here).\n* **Signing Key (Git >= 2.34):** Anyone can configure `git config user.name \"Linus Torvalds\"`. To prove *you* actually created a commit, you add the same `.pub` key to GitHub as a **Signing key** and enable SSH signing:\n\n```bash\ngit config --global gpg.format ssh\ngit config --global user.signingkey ~/.ssh/id_ed25519.pub\ngit config --global commit.gpgSign true\n```\n\n> [!IMPORTANT]\n> **What the \"Verified\" Badge Proves (and What It Doesn't):**\n> A GitHub **Verified** badge cryptographically proves that the commit was signed by the holder of that registered SSH key. It proves **who made the commit**—it does *not* prove who originally wrote the code inside it (for example, if you copy-pasted code from a teammate or AI)."
+        },
+        {
+          "id": "th-team-workflows",
+          "block_type": "markdown",
+          "title": "Team Workflows: Pull-Request Workflow vs. Centralized Workflow",
+          "content": "When your whole team has write access to a shared repository, two workflows exist:\n\n### 1. Pull-Request Workflow (Recommended)\n1. Open an **Issue** describing the task.\n2. Create a **feature branch** off `main` (`git checkout -b fix-port-parsing`).\n3. Commit and push to the branch (`git push -u origin fix-port-parsing`).\n4. Open a **Pull Request** (use a *Draft PR* if it is not ready for review yet).\n5. A teammate (not the author) reviews the diff and merges the PR.\n6. Delete the remote branch, then locally run `git checkout main`, `git pull`, and `git branch -d fix-port-parsing`.\n\n### 2. Centralized Workflow & The Rejected Push\nIf teammates push directly to `main` (or two PRs merge into `main` back-to-back), you will eventually hit:\n\n```text\n! [rejected]        main -> main (fetch first)\nerror: failed to push some refs to 'https://github.com/...'\nhint: Updates were rejected because the remote contains work that you do not have locally.\n```\n\nNothing is broken—a teammate pushed to `main` before you. Configure Git once with `git config --global pull.rebase true`, then run `git pull` (replaying your local commits on top of theirs) and `git push`. If a conflict occurs during `git pull`, resolve the markers, run `git add <file>`, `git rebase --continue`, and `git push`."
+        },
+        {
+          "id": "diag-pr-workflow",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Recommended Team Pull-Request Workflow",
+          "caption": "End-to-end collaboration cycle: Issue -> Branch -> Push -> Peer Review -> Merge -> Local Sync.",
+          "source": "sequenceDiagram\n  autonumber\n  actor Dev as Developer\n  participant Git as Local Repo\n  participant GH as GitHub (origin)\n  actor Rev as Teammate (Reviewer)\n\n  Dev->>GH: Open Issue describing task\n  Dev->>Git: git checkout -b feat-login\n  Dev->>Git: git add & git commit (signed)\n  Dev->>GH: git push -u origin feat-login\n  Dev->>GH: Open Pull Request\n  Rev->>GH: Review diff & Approve\n  Rev->>GH: Merge PR into main & delete branch\n  Dev->>Git: git checkout main && git pull\n  Dev->>Git: git branch -d feat-login"
+        },
+        {
+          "id": "diag-rejected-push-recovery",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Recovering from a Rejected Push (git pull --rebase)",
+          "caption": "Decision flow when `git push` is rejected because `origin/main` has newer commits.",
+          "source": "flowchart TD\n  Push[\"git push\"] -->|\"! [rejected] (fetch first)\"| Pull[\"git pull (with pull.rebase = true)\"]\n  Pull --> Conflict{\"Merge conflict?\"}\n  Conflict -->|\"No\"| PushOK[\"git push (succeeds)\"]\n  Conflict -->|\"Yes\"| Edit[\"Edit file & remove <<< === >>> markers\"]\n  Edit --> Add[\"git add resolved-file\"]\n  Add --> Cont[\"git rebase --continue\"]\n  Cont --> Conflict\n\n  classDef err fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px;\n  classDef act fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;\n  classDef ok fill:#ecfdf5,stroke:#059669,stroke-width:2px;\n\n  class Push err;\n  class Pull,Edit,Add,Cont act;\n  class PushOK ok;"
+        }
+      ]
+    },
+    {
+      "id": "sec-markdown-gfm",
+      "title": "5. Documentation as Code: Markdown & GFM",
+      "description": "Write clean, diffable, portable technical documentation in CommonMark and GitHub Flavored Markdown (GFM).",
+      "blocks": [
+        {
+          "id": "th-markdown-why-and-syntax",
+          "block_type": "markdown",
+          "title": "Why Markdown? Diffable, Portable & GFM",
+          "content": "Code is only half of your deliverable—the other half (READMEs, protocol specs, PW reports) is written in **Markdown** (created by John Gruber and Aaron Swartz in 2004).\n\nWhy use Markdown instead of `.docx` inside a Git repository?\n1. **Diffable:** Because Markdown is plain text, `git diff` shows the exact sentence you changed. A `.docx` file is a binary ZIP archive—Git cannot show meaningful line diffs or merge two teammates' edits.\n2. **Portable:** The same `.md` file renders natively on GitHub, converts to HTML/PDF/slides via Pandoc or Quarto, and remains readable in any plain-text editor.\n\n### CommonMark vs. GitHub Flavored Markdown (GFM)\n* **CommonMark:** The strict, unambiguous baseline specification.\n* **GFM:** CommonMark *plus* **tables**, **task lists** (`- [ ]`), **strikethrough** (`~~text~~`), and **autolinks**—the dialect GitHub renders in READMEs, Issues, and PRs.\n\n### Two Classic Pitfalls to Avoid\n1. **Missing blank lines:** A blank line separates blocks. A list glued immediately below a paragraph with no blank line may fail to render as a list.\n2. **Single line breaks in `.md` files vs. GitHub Issues:** In `.md` files, a single newline inside a paragraph is ignored (so wrapping at 80 chars still renders as one paragraph). In GitHub Issues/PRs, however, GitHub turns every newline into a visible `<br>` line break."
+        },
+        {
+          "id": "code-markdown-gfm",
+          "block_type": "code",
+          "language": "markdown",
+          "filename": "README.md",
+          "title": "Annotated Markdown & GFM Reference",
+          "code": "# Project Title\n## Features\n\n**Bold**, _italic_, ~~deprecated~~, and `inline code`.\n\n- [x] Configure SSH signing\n- [ ] Open first Pull Request\n\n| Command | Purpose |\n| ------- | ------: |\n| `git status` | Inspect state |\n\n```java\nSystem.out.println(\"Hello, DAI!\");\n```",
+          "highlight_lines": [6, 9, 13],
+          "annotations": [
+            {
+              "line": 6,
+              "note": "GFM task list syntax (`- [x]` checked, `- [ ]` unchecked) — renders interactive checkboxes in GitHub Issues and PRs."
+            },
+            {
+              "line": 9,
+              "note": "GFM table: `------:` right-aligns the second column."
+            },
+            {
+              "line": 13,
+              "note": "Always specify the language (`java`, `bash`, `python`) after the opening triple backticks for syntax highlighting."
+            }
+          ]
+        },
+        {
+          "id": "sbx-markdown-linter",
+          "block_type": "sandbox",
+          "runtime": "python",
+          "title": "Build a Mini Markdown / GFM Linter",
+          "instructions": "Write `lint_markdown(md)` to catch two common Markdown mistakes from Chapter 02:\n1. **Bare code fence:** An opening ` ``` ` line with no language tag (e.g., `line.strip() == '```'` when not currently inside a code block).\n2. **Glued list:** A list item (`- ` or `* `) immediately following a non-empty non-list line without a blank line in between.\nPrint each warning found.",
+          "starter_code": "sample_md = \"\"\"# Report\nHere are the steps:\n- Step 1\n- Step 2\n\n```\necho hello\n```\n\"\"\"\n\ndef lint_markdown(md):\n    warnings = []\n    lines = md.splitlines()\n    in_code = False\n    for i, line in enumerate(lines):\n        stripped = line.strip()\n        # TODO: toggle in_code on ``` and warn if opening fence has no language\n        # TODO: warn if not in_code, line starts with '- ', and previous line is non-empty text (not a list)\n    return warnings\n\nfor w in lint_markdown(sample_md):\n    print(w)",
+          "expected_output": "Line 3: Missing blank line before list\nLine 6: Code fence missing language tag",
+          "solution": "sample_md = \"\"\"# Report\nHere are the steps:\n- Step 1\n- Step 2\n\n```\necho hello\n```\n\"\"\"\n\ndef lint_markdown(md):\n    warnings = []\n    lines = md.splitlines()\n    in_code = False\n    for i, line in enumerate(lines):\n        stripped = line.strip()\n        if stripped.startswith('```'):\n            if not in_code and stripped == '```':\n                warnings.append(f'Line {i + 1}: Code fence missing language tag')\n            in_code = not in_code\n            continue\n        if not in_code and stripped.startswith('- ') and i > 0:\n            prev = lines[i - 1].strip()\n            if prev and not prev.startswith('- '):\n                warnings.append(f'Line {i + 1}: Missing blank line before list')\n    return warnings\n\nfor w in lint_markdown(sample_md):\n    print(w)",
+          "hints": [
+            "Track `in_code = not in_code` whenever `stripped.startswith('```')`. Before flipping `in_code`, if `not in_code and stripped == '```'`, record a missing-language warning.",
+            "For glued lists, check `not in_code and stripped.startswith('- ') and i > 0` and verify `lines[i - 1].strip()` is non-empty and does not start with `'- '`."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sec-synthesis-retrieval",
+      "title": "6. Synthesis, Diagnostic Quiz & Spaced Repetition",
+      "description": "Articulate the Git mental model in plain language, test your diagnostic reflexes on real scenarios, and lock in key concepts with flashcards.",
+      "blocks": [
+        {
+          "id": "ref-feynman-git-model",
+          "block_type": "feynman_prompt",
+          "concept": "Git's Snapshot Model, Commit Hashes & Branches",
+          "target_audience": "a first-year CS student who thinks Git works like Google Docs Track Changes",
+          "prompt": "Explain why Git is not just a folder-backup or 'Track Changes' diff tool. Cover: (1) why a commit is a snapshot with a tamper-evident hash, (2) why creating a branch is instantaneous, and (3) why the Staging Area exists between your editor and the repository.",
+          "key_points_to_cover": [
+            "Commits are project snapshots linked to parent hashes (immutable)",
+            "Changing anything produces a new commit hash rather than mutating the old one",
+            "Branches are tiny movable pointers to a commit, not folder copies",
+            "Staging Area lets you craft clean, logical commits from messy working-directory edits"
+          ]
+        },
+        {
+          "id": "ref-merge-vs-rebase-rubric",
+          "block_type": "reflection_rubric",
+          "title": "Synthesis: Team Collaboration, Rejected Pushes & Commit Verification",
+          "prompt": "Your teammate pushed commits directly to `main`, and now your `git push` is rejected. Explain: (1) why it happened, (2) how `git pull --rebase` resolves it (including if a conflict occurs), and (3) what GitHub's 'Verified' badge guarantees—and does not guarantee—about your commits.",
+          "self_check_criteria": [
+            "Explained that `origin/main` advanced ahead of local `main`, so Git refuses a non-fast-forward push to prevent overwriting teammate work.",
+            "Described `git pull --rebase` (replaying local commits on top of remote commits) and the conflict loop (`edit markers -> git add -> git rebase --continue -> git push`).",
+            "Distinguished that the Verified badge proves who signed/created the commit with a registered key, NOT who originally authored the code inside it."
+          ],
+          "model_answer": "A rejected push (`fetch first`) happens because `origin/main` contains commits your local repository does not have yet; pushing directly would overwrite them. Running `git pull` with `pull.rebase = true` fetches the remote commits and replays your local commits on top of them. If both touched the same lines, Git pauses at the conflict: you remove the `<<<<<<<`, `=======`, and `>>>>>>>` markers, run `git add <file>`, `git rebase --continue`, and finally `git push`. Meanwhile, GitHub's Verified badge cryptographically proves that the commit was signed by the holder of the registered SSH signing key (preventing `user.name`/`user.email` spoofing), but it does not prove who originally wrote the code."
+        },
+        {
+          "id": "qz-staging-vs-commit",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-three-areas",
+          "title": "The Three Areas: Staging vs. Working Directory",
+          "question": "You edit `App.java`, run `git add App.java`, and then make one more edit to `App.java` **without** running `git add` again. Next, you run `git commit -m \"Update App\"`. What gets committed?",
+          "options": [
+            "Only the version of `App.java` from the moment you ran `git add App.java`.",
+            "The latest version of `App.java` currently saved on disk in the working directory.",
+            "Nothing—Git aborts the commit because `App.java` has unstaged modifications.",
+            "Both versions are committed as two separate commits automatically."
+          ],
+          "correct_answer": "Only the version of `App.java` from the moment you ran `git add App.java`.",
+          "explanation": "`git commit` always records a snapshot of the **Staging Area (Index)**, not the Working Directory. When you ran `git add App.java`, Git copied the file's content at that moment into the Staging Area. Your subsequent edit only modified the Working Directory.\n\n* 'The latest version on disk' confuses the Working Directory with the Staging Area.\n* 'Git aborts the commit' is false—Git happily commits what is staged while leaving the newer edit unstaged (`Changes not staged for commit`).\n* 'Two separate commits' never happens automatically.",
+          "hints": [
+            "Recall the three areas: Working Directory, Staging Area, and Local Repository.",
+            "Which area does `git commit` actually read from?"
+          ]
+        },
+        {
+          "id": "qz-commit-hash-immutability",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-commits-hashes-tags",
+          "title": "Commit Hash Immutability",
+          "question": "You run `git commit --amend -m \"Fix typo in message\"` to change only the commit message of your latest commit (without changing any files). What happens to the commit's SHA hash?",
+          "options": [
+            "Git creates a brand-new commit with a different SHA hash, leaving the old commit behind.",
+            "Git edits the message in place and keeps the exact same SHA hash because no files changed.",
+            "Git keeps the same SHA hash unless you also ran `git add`.",
+            "Git appends `-amended` to the existing SHA hash."
+          ],
+          "correct_answer": "Git creates a brand-new commit with a different SHA hash, leaving the old commit behind.",
+          "explanation": "A commit's SHA hash is computed from its content, parent(s), author/committer metadata, **and** commit message. Changing any of these inputs produces a completely different hash. Therefore, `git commit --amend` creates a new commit object and moves the branch pointer to it.\n\n* Editing in place with the same hash is impossible in Git's content-addressed model.\n* File changes are not required to change the hash—message changes alone change it.\n* SHA hashes are fixed-length hexadecimal digests, never suffixed with `-amended`.",
+          "hints": [
+            "List the four inputs used to compute a Git commit's SHA hash.",
+            "If one of those inputs changes, can the cryptographic hash stay the same?"
+          ]
+        },
+        {
+          "id": "qz-branch-physical",
+          "block_type": "quiz_question",
+          "question_type": "fill_in_the_blank",
+          "difficulty": 1,
+          "related_block_id": "th-branches-pointers",
+          "title": "What a Branch Is, Physically",
+          "question": "Physically, a Git branch is not a copy of your project directory; it is simply a lightweight, movable ___ to a single commit.",
+          "correct_answer": "pointer",
+          "explanation": "In Git, a branch is just a movable **pointer** (a tiny file storing a 40-character commit SHA hash). That is why creating or switching branches is instantaneous regardless of project size.",
+          "hints": [
+            "Think about why `git checkout -b feature` takes milliseconds even on a massive repository like the Linux kernel.",
+            "The word also describes `HEAD`."
+          ]
+        },
+        {
+          "id": "qz-merge-rebase-squash",
+          "block_type": "quiz_question",
+          "question_type": "multi_select",
+          "difficulty": 3,
+          "related_block_id": "th-merge-rebase-squash",
+          "title": "Comparing Merge, Rebase & Squash",
+          "question": "Which of the following statements about `merge`, `rebase`, and `squash` are accurate? (Select all that apply)",
+          "options": [
+            "A 3-way merge creates a new merge commit with two parent commits.",
+            "Rebasing replays your branch's commits onto the target branch, creating a linear history with new commit hashes.",
+            "Squashing collapses all commits from a feature branch into a single commit before merging.",
+            "Rebasing commits that have already been pushed to a shared team branch is safe and recommended."
+          ],
+          "correct_answer": [
+            "A 3-way merge creates a new merge commit with two parent commits.",
+            "Rebasing replays your branch's commits onto the target branch, creating a linear history with new commit hashes.",
+            "Squashing collapses all commits from a feature branch into a single commit before merging."
+          ],
+          "explanation": "3-way merges tie two diverged histories together via a two-parent merge commit. Rebasing replays commits on top of another base, producing a linear history with brand-new SHA hashes. Squashing condenses noisy feature-branch commits into one clean commit. However, **rebasing already-pushed shared commits is dangerous** because rewriting hashes causes teammates' local histories to diverge.",
+          "hints": [
+            "Check each strategy's effect on commit hashes and parent pointers.",
+            "Remember the Golden Rule of Rebasing regarding shared branches."
+          ]
+        },
+        {
+          "id": "qz-conflict-markers",
+          "block_type": "quiz_question",
+          "question_type": "code_output",
+          "difficulty": 3,
+          "related_block_id": "th-merge-conflicts",
+          "title": "Reading Merge Conflict Markers",
+          "question": "You are on branch `main` and run `git merge feature-timeout`. Git reports a conflict in `config.txt`:\n\n```text\n<<<<<<< HEAD\ntimeout = 30\n=======\ntimeout = 60\n>>>>>>> feature-timeout\n```\n\nIf you want to keep `feature-timeout`'s value and properly resolve the conflict, what should `config.txt` contain before you run `git add config.txt`?",
+          "options": [
+            "timeout = 60",
+            "timeout = 30",
+            "=======\ntimeout = 60\n>>>>>>> feature-timeout",
+            "<<<<<<< HEAD\ntimeout = 60\n>>>>>>> feature-timeout"
+          ],
+          "correct_answer": "timeout = 60",
+          "explanation": "In a conflict block, `<<<<<<< HEAD` through `=======` shows your current branch (`main`), while `=======` through `>>>>>>> feature-timeout` shows the incoming branch (`feature-timeout`). To resolve the conflict, you keep the desired line (`timeout = 60`) and **delete all three conflict marker lines** (`<<<<<<<`, `=======`, `>>>>>>>`).\n\n* `timeout = 30` keeps `HEAD` instead of `feature-timeout`.\n* The other two options leave Git's conflict markers in the file, which breaks configuration parsing.",
+          "hints": [
+            "Which section represents the incoming `feature-timeout` branch: above or below `=======`?",
+            "What must you always do with the `<<<<<<<`, `=======`, and `>>>>>>>` lines?"
+          ]
+        },
+        {
+          "id": "qz-gitignore-negation",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-gitignore-rules",
+          "title": "Evaluating .gitignore Rules & Negation",
+          "question": "Given this `.gitignore`:\n\n```gitignore\n*.txt\n!examples/**/*_input.txt\n/target/\n```\n\nWhich file will **NOT** be ignored (i.e., will remain trackable by Git)?",
+          "options": [
+            "examples/lab1/demo_input.txt",
+            "notes.txt",
+            "target/classes/Main.class",
+            "examples/lab1/readme.txt"
+          ],
+          "correct_answer": "examples/lab1/demo_input.txt",
+          "explanation": "Rule 1 (`*.txt`) initially ignores all `.txt` files. Rule 2 (`!examples/**/*_input.txt`) negates that rule for any file ending in `_input.txt` under `examples/`, so `examples/lab1/demo_input.txt` is tracked.\n\n* `notes.txt` matches `*.txt` and is not rescued by `!`.\n* `target/classes/Main.class` is inside `/target/` at the repo root, so it is ignored.\n* `examples/lab1/readme.txt` does not end with `_input.txt`, so it stays ignored.",
+          "hints": [
+            "Remember that `.gitignore` rules are evaluated top-to-bottom, and `!` negates a previous match.",
+            "Check the exact filename suffix required by `!examples/**/*_input.txt`."
+          ]
+        },
+        {
+          "id": "qz-rejected-push",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-team-workflows",
+          "title": "Diagnosing a Rejected Push",
+          "question": "You run `git push` on `main` and see `! [rejected] main -> main (fetch first)`. What is the recommended recovery sequence if `pull.rebase` is set to `true`?",
+          "options": [
+            "Run `git pull` to replay your commits on top of the remote's, resolve any conflicts if they occur, then run `git push`.",
+            "Run `git push --force` to overwrite the remote `main` with your local commits.",
+            "Delete your local repository and re-clone from GitHub.",
+            "Run `git commit --amend` and immediately try `git push` again."
+          ],
+          "correct_answer": "Run `git pull` to replay your commits on top of the remote's, resolve any conflicts if they occur, then run `git push`.",
+          "explanation": "A rejected push means `origin/main` has commits you don't have locally yet (e.g., a teammate pushed before you). With `pull.rebase = true`, `git pull` fetches the remote commits and replays your local commits cleanly on top of them, after which `git push` succeeds.\n\n* `git push --force` destroys your teammate's commits on the remote!\n* Re-cloning discards or complicates your local unpushed work unnecessarily.\n* `git commit --amend` only changes your local commit hash; it does not fetch the missing remote commits.",
+          "hints": [
+            "Why did Git reject the push? Look at the hint: `(fetch first)`.",
+            "How do you integrate your teammate's commits before pushing yours?"
+          ]
+        },
+        {
+          "id": "qz-ssh-verified-badge",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-ssh-and-signing",
+          "title": "What the GitHub Verified Badge Proves",
+          "question": "Your teammate's commit on GitHub displays a green **Verified** badge. What does this badge cryptographically prove?",
+          "options": [
+            "The commit was created by the holder of the SSH/GPG signing key registered to that GitHub account.",
+            "The code inside the commit has been unit-tested and contains no bugs.",
+            "Every line of code in the commit was typed personally by that teammate without AI or copy-paste.",
+            "The commit was pushed over HTTPS rather than SSH."
+          ],
+          "correct_answer": "The commit was created by the holder of the SSH/GPG signing key registered to that GitHub account.",
+          "explanation": "Commit signing proves **who created the commit** by verifying a cryptographic signature against a public signing key registered on the user's GitHub account. This prevents `user.name` / `user.email` impersonation.\n\n* It says nothing about code quality or tests (that's CI/CD's job).\n* It cannot verify how the code inside the files was authored.\n* SSH commit signing (`gpg.format = ssh`) works regardless of whether you push via SSH or HTTPS.",
+          "hints": [
+            "Distinguish between *who created the Git commit* and *how the code was written or tested*.",
+            "What can someone spoof if commits are *not* signed?"
+          ]
+        },
+        {
+          "id": "qz-markdown-vs-word",
+          "block_type": "quiz_question",
+          "question_type": "multi_select",
+          "difficulty": 2,
+          "related_block_id": "th-markdown-why-and-syntax",
+          "title": "Why Markdown Beats .docx in Git",
+          "question": "Why is Markdown a much better fit than a Word (`.docx`) document inside a Git repository? (Select all that apply)",
+          "options": [
+            "Markdown is plain text, so `git diff` shows exact line-by-line sentence changes.",
+            "Teammates can cleanly merge concurrent edits to different sections of a Markdown file.",
+            "Markdown is portable: the same source renders on GitHub and converts to PDF/HTML via tools like Pandoc.",
+            "Markdown automatically compiles Java code embedded inside fenced code blocks."
+          ],
+          "correct_answer": [
+            "Markdown is plain text, so `git diff` shows exact line-by-line sentence changes.",
+            "Teammates can cleanly merge concurrent edits to different sections of a Markdown file.",
+            "Markdown is portable: the same source renders on GitHub and converts to PDF/HTML via tools like Pandoc."
+          ],
+          "explanation": "Because Markdown is plain text, it is **diffable** (Git shows exact changed lines and can merge non-overlapping edits) and **portable** (readable anywhere, rendered by GitHub, and convertible to PDF/HTML/DOCX). Fenced code blocks (` ```java `) provide syntax highlighting for readers, not automatic compilation.",
+          "hints": [
+            "Recall the two core properties highlighted in the chapter: *diffable* and *portable*.",
+            "Does Markdown execute or compile code blocks?"
+          ]
+        },
+        {
+          "id": "qz-pr-workflow-order",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-team-workflows",
+          "title": "Standard Team Pull-Request Cycle",
+          "question": "In the recommended team Pull-Request workflow, who should review and merge a Pull Request?",
+          "options": [
+            "A teammate other than the PR author.",
+            "The PR author immediately after pushing, without waiting for anyone else.",
+            "GitHub's automated bot before any human reads the diff.",
+            "Only the course professor."
+          ],
+          "correct_answer": "A teammate other than the PR author.",
+          "explanation": "In a team Pull-Request workflow, **a teammate (not the author)** reviews the diff, leaves feedback or approves, and merges the PR. This catches bugs early, spreads knowledge across the team, and keeps `main` clean.\n\n* Self-merging without review defeats the purpose of a PR.\n* Bots cannot judge architectural or logic correctness on their own.",
+          "hints": [
+            "Think about why Pull Requests exist in a team of developers.",
+            "Who catches blind spots best—the author who just wrote the code, or a fresh pair of eyes?"
+          ]
+        },
+        {
+          "id": "fc-three-areas",
+          "block_type": "flashcard",
+          "title": "Git's Three Areas",
+          "front": "Name the **Three Areas** in Git between your editor and permanent history, and the command that moves changes between each.",
+          "back": "1. **Working Directory** (files on disk you edit) — inspect with `git diff`\n2. **Staging Area / Index** (draft for next commit) — stage with `git add <file>`\n3. **Local Repository** (`.git` committed history) — record with `git commit -m \"...\"`",
+          "hint": "Edit -> Stage -> Commit.",
+          "tags": ["git", "three-areas"]
+        },
+        {
+          "id": "fc-branch-and-head",
+          "block_type": "flashcard",
+          "title": "Branch vs. HEAD",
+          "front": "What is a **branch** in Git physically, and what is **`HEAD`**?",
+          "back": "* A **branch** is a lightweight, movable pointer to a single commit (a 40-char SHA hash).\n* **`HEAD`** is a special pointer indicating where you currently are (normally pointing to the active branch, e.g., `HEAD -> main`).",
+          "hint": "Neither one is a copy of your folder.",
+          "tags": ["git", "branches"]
+        },
+        {
+          "id": "fc-commit-hash",
+          "block_type": "flashcard",
+          "title": "Commit Hash Immutability",
+          "front": "What four things determine a Git commit's **SHA hash**, and why does `git commit --amend` change the hash?",
+          "back": "A commit hash is computed from its **content**, **parent(s)**, **author/committer**, and **message**. Changing any of them creates a **new commit with a new hash**, leaving the old one behind.",
+          "hint": "Content-addressed snapshots cannot be edited in place.",
+          "tags": ["git", "commits"]
+        },
+        {
+          "id": "fc-merge-rebase-squash",
+          "block_type": "flashcard",
+          "title": "Merge vs. Rebase vs. Squash",
+          "front": "Compare **Merge**, **Rebase**, and **Squash** when integrating a feature branch into `main`.",
+          "back": "* **Merge:** Combines both branches (creating a 2-parent merge commit if diverged, or fast-forwarding if not).\n* **Rebase:** Replays your commits on top of the target branch (linear history, new hashes).\n* **Squash:** Collapses all feature commits into a single commit before merging.",
+          "hint": "Topology vs. Linear vs. Single-commit.",
+          "tags": ["git", "merging"]
+        },
+        {
+          "id": "fc-conflict-markers",
+          "block_type": "flashcard",
+          "title": "Conflict Markers & Resolution",
+          "front": "What do `<<<<<<< HEAD`, `=======`, and `>>>>>>> branch` mean, and what are the steps to resolve a conflict?",
+          "back": "* Between `<<<<<<< HEAD` and `=======`: your current branch's version.\n* Between `=======` and `>>>>>>> branch`: incoming branch's version.\n* **Fix:** Edit the file to keep what stays, **delete all 3 marker lines**, then `git add <file>` and `git commit` (or `git rebase --continue`).",
+          "hint": "Edit, delete markers, `git add`, conclude.",
+          "tags": ["git", "conflicts"]
+        },
+        {
+          "id": "fc-gitignore-syntax",
+          "block_type": "flashcard",
+          "title": ".gitignore Root & Negation",
+          "front": "In `.gitignore`, what do a leading `/` (e.g., `/target/`) and a leading `!` (e.g., `!examples/*_input.txt`) mean?",
+          "back": "* Leading `/` anchors the match to the **repository root only**.\n* Leading `!` **negates** a previous ignore pattern, re-including matching files as exceptions.",
+          "hint": "Root anchor vs. exception.",
+          "tags": ["git", "gitignore"]
+        },
+        {
+          "id": "fc-ssh-signing",
+          "block_type": "flashcard",
+          "title": "SSH Auth vs. Commit Signing",
+          "front": "What is the difference between adding your SSH `.pub` key to GitHub as an **Authentication key** vs. a **Signing key**?",
+          "back": "* **Authentication key:** Lets you `git push`/`git pull` without typing passwords (`ssh -T git@github.com`).\n* **Signing key:** Signs commits (`commit.gpgSign = true`, Git >= 2.34) so GitHub displays the **Verified** badge proving *who created the commit*.",
+          "hint": "Transport authentication vs. commit authorship proof.",
+          "tags": ["github", "ssh", "security"]
+        },
+        {
+          "id": "fc-rejected-push",
+          "block_type": "flashcard",
+          "title": "Recovering from a Rejected Push",
+          "front": "Why does `! [rejected] main -> main (fetch first)` happen, and what is the recovery sequence?",
+          "back": "A teammate pushed commits to `origin/main` before you. With `git config --global pull.rebase true`, run:\n1. `git pull` (replays your commits on top of theirs)\n2. If a conflict occurs: resolve markers, `git add <file>`, `git rebase --continue`\n3. `git push`",
+          "hint": "Fetch and replay your commits on top of the remote's.",
+          "tags": ["git", "workflows"]
+        },
+        {
+          "id": "fc-fork-vs-branch",
+          "block_type": "flashcard",
+          "title": "Fork vs. Branch on GitHub",
+          "front": "When do you use a **branch** vs. a **fork** to contribute on GitHub?",
+          "back": "* **Branch:** When you have **write access** to the repository (e.g., your PW team repo).\n* **Fork:** Your own copy of someone else's repo, used when you have **no write access** (e.g., open-source contributions).",
+          "hint": "Write access vs. no write access.",
+          "tags": ["github", "workflows"]
+        },
+        {
+          "id": "fc-gfm-pitfalls",
+          "block_type": "flashcard",
+          "title": "GFM & Markdown Pitfalls",
+          "front": "What does **GFM** add to CommonMark, and what are the two common newline/spacing pitfalls?",
+          "back": "* **GFM adds:** Tables, task lists (`- [ ]`), strikethrough (`~~`), and autolinks.\n* **Pitfall 1:** Always leave a **blank line** before a list or block.\n* **Pitfall 2:** Single newlines are ignored in `.md` files, but GitHub turns every newline into a visible line break in Issues/PRs.",
+          "hint": "Tables + task lists; blank lines + single newlines.",
+          "tags": ["markdown", "gfm"]
+        }
+      ]
+    }
+  ]
+}

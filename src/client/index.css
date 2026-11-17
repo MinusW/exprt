@@ -1,0 +1,84 @@
+@import 'katex/dist/katex.min.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Custom scrollbar for clean UI */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Reader font size scaling (A / A+ / A++) that overrides child utility text sizes */
+@layer utilities {
+  .reader-font-lg .text-xs {
+    font-size: 0.875rem;
+    line-height: 1.4rem;
+  }
+  .reader-font-lg .text-sm,
+  .reader-font-lg .sm\:text-sm,
+  .reader-font-lg .sm\:text-\[13px\] {
+    font-size: 1.025rem;
+    line-height: 1.65rem;
+  }
+  .reader-font-lg .text-base,
+  .reader-font-lg .sm\:text-base {
+    font-size: 1.15rem;
+    line-height: 1.8rem;
+  }
+  .reader-font-lg .text-lg {
+    font-size: 1.3rem;
+    line-height: 1.85rem;
+  }
+  .reader-font-lg .text-xl {
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+  .reader-font-lg .katex {
+    font-size: 1.24em;
+  }
+
+  .reader-font-xl .text-xs {
+    font-size: 1rem;
+    line-height: 1.55rem;
+  }
+  .reader-font-xl .text-sm,
+  .reader-font-xl .sm\:text-sm,
+  .reader-font-xl .sm\:text-\[13px\] {
+    font-size: 1.175rem;
+    line-height: 1.85rem;
+  }
+  .reader-font-xl .text-base,
+  .reader-font-xl .sm\:text-base {
+    font-size: 1.325rem;
+    line-height: 2rem;
+  }
+  .reader-font-xl .text-lg {
+    font-size: 1.45rem;
+    line-height: 2.05rem;
+  }
+  .reader-font-xl .text-xl {
+    font-size: 1.7rem;
+    line-height: 2.25rem;
+  }
+  .reader-font-xl .katex {
+    font-size: 1.38em;
+  }
+}

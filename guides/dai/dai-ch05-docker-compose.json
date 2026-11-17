@@ -1,0 +1,853 @@
+{
+  "id": "dai-ch05-docker-compose",
+  "title": "Chapter 05: Docker & Docker Compose",
+  "description": "Master containerization from first principles: bare metal vs VMs vs containers, OCI images and registries, Dockerfile layer caching and multi-stage builds, volumes, bridge DNS networking, and multi-service orchestration with Docker Compose.",
+  "estimated_minutes": 65,
+  "category": "Internet Applications (DAI)",
+  "track": "DAI - Développement d'Applications Internet (TE1)",
+  "track_order": 5,
+  "difficulty_level": "intermediate",
+  "tags": [
+    "docker",
+    "containers",
+    "docker-compose",
+    "dockerfile",
+    "networking",
+    "volumes",
+    "devops"
+  ],
+  "prerequisites": [
+    "dai-ch03-java-intellij-maven"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "HEIG-VD DAI Course — Chapter 05: Docker and Docker Compose",
+      "url_or_path": "https://heigvd-dai-26.github.io/chapters/05-docker.html",
+      "notes": "O. Tischhauser, based on the HEIG-VD DAI course by L. Delafontaine and H. Louis (CC BY-SA 4.0)."
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-why-containers",
+      "title": "1. Why Containers? Bare Metal vs VMs vs Containers",
+      "description": "Understand the dependency-collision problem and compare the three execution models: bare metal, virtual machines, and containers.",
+      "blocks": [
+        {
+          "id": "th-works-on-my-machine",
+          "block_type": "markdown",
+          "title": "The Problem Containers Solve",
+          "bookmarkable": true,
+          "content": "Your CLI from Practical Work 1 runs on your laptop because you installed **Java 25** and **Maven** in the exact versions it expects. Now imagine deploying three applications on the same server:\n\n* App A requires **Java 25**.\n* App B requires **Java 17**.\n* App C requires **PostgreSQL 14**, while App D requires **PostgreSQL 16**.\n\nInstalling everything directly on one machine causes **version collisions**. Worse, every project has its own ritual to build and launch (`./mvnw package && java -jar app.jar`, `pip install && python app.py`, or a custom shell script). **\"It works on my machine\" is not a deployment plan.**\n\nContainers solve this by packaging an application together with its exact runtime, libraries, and startup command, giving you three guarantees:\n\n| Guarantee | What It Means in Practice |\n| :--- | :--- |\n| **One recipe** | A single `Dockerfile` describes how to build the environment and what the container runs by default. |\n| **One artefact** | Each version of your app becomes one immutable **image**, built once and identical on every machine. |\n| **One interface** | The same `docker build`, `docker run`, `docker stop`, and `docker logs` commands work for Java, Python, Go, or Nginx. |"
+        },
+        {
+          "id": "th-three-ways-to-run",
+          "block_type": "markdown",
+          "title": "Three Ways to Run Software",
+          "bookmarkable": true,
+          "content": "Every server—including \"the cloud\", which is just someone else's computer—runs software using one of three isolation models:\n\n1. **Bare Metal:** Software is installed directly on the host OS. Zero virtualization overhead (fastest), but **zero isolation**—shared libraries and runtimes collide.\n2. **Virtual Machines (VMs):** A **hypervisor** simulates complete hardware, and each VM boots its own **full guest operating system** (kernel, init system, drivers). Isolation is strong, but each VM consumes gigabytes of disk, hundreds of megabytes to gigabytes of RAM, and tens of seconds to boot.\n3. **Containers:** Processes run isolated from the rest of the machine (using Linux **namespaces** for isolation and **cgroups** for resource limits), **sharing the host Linux kernel** instead of booting a second OS.\n\n> [!IMPORTANT]\n> **Explicit Non-Example:** A container is **not** a miniature virtual machine. It does **not** boot its own kernel. On Linux, containers share your machine's Linux kernel directly. On macOS and Windows, Docker Desktop runs **one** small Linux VM under the hood, and all of your containers share that single VM's kernel.\n\n| Property | Bare Metal | Virtual Machine | Container |\n| :--- | :--- | :--- | :--- |\n| **Isolation** | None (shared OS & libs) | Strong (separate kernel & virtual HW) | Process-level (namespaces + cgroups) |\n| **Kernel** | Host OS kernel | Own guest OS kernel per VM | Shared host Linux kernel |\n| **Disk / RAM Footprint** | App only | Gigabytes (full OS per VM) | Tens to hundreds of MB (app + runtime) |\n| **Startup Time** | Instant | 10s – minutes (OS boot) | Sub-second (~0.2 s for `nginx`) |"
+        },
+        {
+          "id": "diag-vm-vs-container",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Architecture: Virtual Machines vs Containers",
+          "caption": "VMs duplicate a full Guest OS and kernel per application; containers share a single host Linux kernel through the container engine.",
+          "bookmarkable": true,
+          "source": "flowchart TD\n  subgraph VM [\"Virtual Machines (Separate Guest OS per App)\"]\n    VM1App[\"App A + Libs\"] --> VM1OS[\"Guest OS 1 (Full Kernel)\"]\n    VM2App[\"App B + Libs\"] --> VM2OS[\"Guest OS 2 (Full Kernel)\"]\n    VM1OS --> Hyp[\"Hypervisor\"]\n    VM2OS --> Hyp\n    Hyp --> Host1[\"Host OS + Hardware\"]\n  end\n  subgraph CT [\"Containers (Shared Host Kernel)\"]\n    C1App[\"App A + JRE 25\"] --> Eng[\"Docker Engine (namespaces + cgroups)\"]\n    C2App[\"App B + JRE 17\"] --> Eng\n    Eng --> Host2[\"Host Linux Kernel + Hardware\"]\n  end"
+        },
+        {
+          "id": "sim-footprint-startup",
+          "block_type": "simulation",
+          "title": "Memory Footprint: VMs vs Containers at Scale",
+          "description": "Compare total RAM required for N microservice instances. Set `is_vm` to 1 to model Virtual Machines (each booting its own Guest OS), or 0 to model Containers (sharing one host OS kernel).",
+          "formula": "\\text{RAM}_{\\text{total}} = N \\cdot M_{\\text{app}} + \\text{is\\_vm} \\cdot N \\cdot M_{\\text{OS}} + (1 - \\text{is\\_vm}) \\cdot M_{\\text{OS}}",
+          "variables": [
+            {
+              "id": "instances",
+              "name": "Number of Services (N)",
+              "min": 1,
+              "max": 20,
+              "step": 1,
+              "default": 6
+            },
+            {
+              "id": "app_mb",
+              "name": "App + Runtime RAM (MB)",
+              "min": 50,
+              "max": 500,
+              "step": 50,
+              "default": 150,
+              "unit": "MB"
+            },
+            {
+              "id": "os_mb",
+              "name": "OS Kernel + Base RAM (MB)",
+              "min": 512,
+              "max": 4096,
+              "step": 256,
+              "default": 2048,
+              "unit": "MB"
+            },
+            {
+              "id": "is_vm",
+              "name": "Mode (0 = Containers, 1 = VMs)",
+              "min": 0,
+              "max": 1,
+              "step": 1,
+              "default": 1
+            }
+          ],
+          "compute_expression": "instances * app_mb + is_vm * instances * os_mb + (1 - is_vm) * os_mb",
+          "chart_type": "bar",
+          "output_label": "Total RAM Consumed",
+          "output_unit": "MB",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-images-containers-registries",
+      "title": "2. Images, Containers, Registries & the Docker Daemon",
+      "description": "Learn the OCI mental model, the Docker client-daemon split, registry publishing on ghcr.io, tags, and CPU architecture compatibility.",
+      "blocks": [
+        {
+          "id": "th-image-container-registry",
+          "block_type": "markdown",
+          "title": "Images vs Containers vs Registries (The OOP Analogy)",
+          "bookmarkable": true,
+          "content": "The Open Container Initiative (**OCI**) standard defines three core concepts:\n\n* **Image:** A **read-only** package containing an application, its dependencies, and startup metadata. Once built, an image never mutates; rebuilding creates a new image.\n* **Container:** A **runtime instance** of an image (running or stopped), isolated from the host and other containers.\n* **Registry:** A server that stores and distributes images—such as **Docker Hub** (default) or **GitHub Container Registry (`ghcr.io`)** used in DAI.\n\nIf you know object-oriented programming, the relationship is exact:\n\n$$\\text{Image} \\iff \\text{Class} \\qquad\\qquad \\text{Container} \\iff \\text{Object} \\qquad\\qquad \\texttt{docker run} \\iff \\texttt{new}$$\n\nYou can instantiate ten independent containers from one image, and deleting a container leaves the image untouched."
+        },
+        {
+          "id": "th-daemon-tags-arch",
+          "block_type": "markdown",
+          "title": "Daemon Architecture, Tags, Architectures & Common Pitfalls",
+          "bookmarkable": true,
+          "content": "Docker splits into two programs: the **client** (the `docker` CLI you type) and the **daemon** (the background service that builds images, runs containers, and talks to registries). If you see `Cannot connect to the Docker daemon`, the background service is not running.\n\n### Four Critical Rules & Pitfalls\n\n1. **An image is a frozen build:** Editing your Java source code does **not** update an existing image or a running container. You must run `mvn package` (or use a multi-stage `Dockerfile`), `docker build`, and `docker push` again.\n2. **The `latest` tag pitfall:** If you omit a tag (`docker build -t my-image .`), Docker attaches `:latest`. Because `:latest` is a moving label that gets overwritten on every build, relying on it makes it impossible to know which version is running in production. Always use explicit version tags (e.g., `ghcr.io/alice/my-app:1.0`).\n3. **Lowercase names & private packages on `ghcr.io`:** Image repository names **must be lowercase** (`docker tag` rejects uppercase GitHub usernames). Furthermore, newly pushed `ghcr.io` packages are **private by default**—teammates will get `denied` or `not found` on `docker pull` until you change package visibility to **Public**.\n4. **CPU Architecture (`amd64` vs `arm64`):** Building on an Apple Silicon Mac produces a `linux/arm64` image, which fails on an `amd64` Linux server with `no matching manifest for linux/amd64` or `exec format error`. Cross-build explicitly with:\n   ```bash\n   docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/<user>/my-app:1.0 --push .\n   ```"
+        },
+        {
+          "id": "diag-image-lifecycle",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Image Build, Registry Push, and Runtime Lifecycle",
+          "caption": "Code and Dockerfile are frozen into an image by docker build, shared via a registry, and instantiated as containers with docker run.",
+          "bookmarkable": true,
+          "source": "flowchart LR\n  Src[\"Dockerfile + Source Code\"] -->|\"docker build\"| Img[\"Local Image (Read-Only)\"]\n  Img -->|\"docker push\"| Reg[\"Registry (ghcr.io / Docker Hub)\"]\n  Reg -->|\"docker pull\"| Host[\"Target Machine Image Cache\"]\n  Host -->|\"docker run\"| Cont[\"Container (Isolated + Writable Layer)\"]"
+        },
+        {
+          "id": "exp-sandbox-tag-arch",
+          "block_type": "sandbox",
+          "runtime": "python",
+          "title": "Simulate a Registry Pull Resolver (Tags, Visibility & Architecture)",
+          "instructions": "Complete `resolve_pull(image_ref, host_arch, registry)` to simulate how `docker pull` validates a repository name, tag, package visibility, and CPU architecture.\n\nRules:\n1. Split `image_ref` on `:` (default tag to `'latest'` if omitted). Split repo into `repo_path` and `tag`.\n2. If `repo_path != repo_path.lower()`, return `'ERROR: repository name must be lowercase'`.\n3. Look up `repo_path` in `registry`; if missing or `pkg['visibility'] == 'private'`, return `'ERROR: denied or not found'`.\n4. Check if `tag` is in `pkg['tags']`; if not, return `'ERROR: manifest unknown'`.\n5. Check if `host_arch` is in `pkg['tags'][tag]`; if not, return `f'ERROR: no matching manifest for {host_arch}'`.\n6. Otherwise return `f'PULLED {repo_path}:{tag} ({host_arch})'`.",
+          "starter_code": "registry = {\n    'ghcr.io/alice/where-am-i': {\n        'visibility': 'public',\n        'tags': {'1.0': ['linux/amd64', 'linux/arm64'], 'latest': ['linux/arm64']}\n    },\n    'ghcr.io/bob/secret-app': {\n        'visibility': 'private',\n        'tags': {'1.0': ['linux/amd64']}\n    }\n}\n\ndef resolve_pull(image_ref, host_arch, reg):\n    # TODO: parse repo_path and tag (default 'latest')\n    # TODO: validate lowercase, visibility, tag, and host_arch\n    pass\n\nprint(resolve_pull('ghcr.io/alice/where-am-i:1.0', 'linux/amd64', registry))\nprint(resolve_pull('ghcr.io/Alice/where-am-i:1.0', 'linux/amd64', registry))\nprint(resolve_pull('ghcr.io/bob/secret-app:1.0', 'linux/amd64', registry))\nprint(resolve_pull('ghcr.io/alice/where-am-i', 'linux/amd64', registry))\n",
+          "expected_output": "PULLED ghcr.io/alice/where-am-i:1.0 (linux/amd64)\nERROR: repository name must be lowercase\nERROR: denied or not found\nERROR: no matching manifest for linux/amd64",
+          "solution": "registry = {\n    'ghcr.io/alice/where-am-i': {\n        'visibility': 'public',\n        'tags': {'1.0': ['linux/amd64', 'linux/arm64'], 'latest': ['linux/arm64']}\n    },\n    'ghcr.io/bob/secret-app': {\n        'visibility': 'private',\n        'tags': {'1.0': ['linux/amd64']}\n    }\n}\n\ndef resolve_pull(image_ref, host_arch, reg):\n    if ':' in image_ref:\n        repo_path, tag = image_ref.rsplit(':', 1)\n    else:\n        repo_path, tag = image_ref, 'latest'\n    if repo_path != repo_path.lower():\n        return 'ERROR: repository name must be lowercase'\n    pkg = reg.get(repo_path)\n    if not pkg or pkg['visibility'] == 'private':\n        return 'ERROR: denied or not found'\n    arches = pkg['tags'].get(tag)\n    if arches is None:\n        return 'ERROR: manifest unknown'\n    if host_arch not in arches:\n        return f'ERROR: no matching manifest for {host_arch}'\n    return f'PULLED {repo_path}:{tag} ({host_arch})'\n\nprint(resolve_pull('ghcr.io/alice/where-am-i:1.0', 'linux/amd64', registry))\nprint(resolve_pull('ghcr.io/Alice/where-am-i:1.0', 'linux/amd64', registry))\nprint(resolve_pull('ghcr.io/bob/secret-app:1.0', 'linux/amd64', registry))\nprint(resolve_pull('ghcr.io/alice/where-am-i', 'linux/amd64', registry))\n",
+          "hints": [
+            "Use `image_ref.rsplit(':', 1)` when `':' in image_ref` so a registry port like `localhost:5000/app` wouldn't break.",
+            "Check `repo_path != repo_path.lower()` before looking up the repository in `reg`."
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-docker-cli",
+      "title": "3. Core Docker CLI: Running, Inspecting & Cleaning",
+      "description": "Master the everyday Docker CLI flags and lifecycle commands for running, debugging, and cleaning up containers.",
+      "blocks": [
+        {
+          "id": "th-docker-run-flags",
+          "block_type": "markdown",
+          "title": "Essential `docker run` Flags & the `0.0.0.0` Binding Trap",
+          "bookmarkable": true,
+          "content": "All `docker run` flags must appear **before** the image name; anything placed **after** the image name is passed to the container itself as command arguments.\n\n| Flag | Meaning | Typical Use Case |\n| :--- | :--- | :--- |\n| `-d` | Detached mode (background) | Long-running web servers, databases |\n| `-it` | Interactive + pseudo-TTY | Opening an interactive shell (`sh` / `bash`) |\n| `--rm` | Delete container automatically on exit | One-off CLI tools, tests, avoiding stopped clutter |\n| `-p HOST:CONT` | Publish container port `CONT` on host port `HOST` | `-p 8080:80` exposes container port 80 at `localhost:8080` |\n| `-v SRC:DEST` | Mount a bind path or named volume into `DEST` | Persisting database files or sharing host files |\n| `--name NAME` | Assign a human-readable container name | Referencing by name in `logs`, `stop`, or DNS |\n| `--network NET` | Attach container to a user-defined Docker network | Enabling container-to-container DNS resolution |\n\n> [!WARNING]\n> **Bind on `0.0.0.0`, NOT `127.0.0.1`!**\n> Inside a container, `127.0.0.1` refers only to the container's own loopback interface. If your Java server binds to `127.0.0.1:8080`, `docker run -p 8080:8080` will connect to nothing and return an empty/refused response from the host. Always configure servers inside containers to listen on **`0.0.0.0`** (all interfaces)."
+        },
+        {
+          "id": "th-docker-lifecycle-cmds",
+          "block_type": "markdown",
+          "title": "Inspecting, Debugging & Cleaning Up",
+          "bookmarkable": true,
+          "content": "Once a container is running (or has exited), use these commands to observe and manage it:\n\n* `docker ps` — list currently running containers (`docker ps -a` includes stopped containers).\n* `docker logs <container>` — print stdout/stderr (`-f` follows live output).\n* `docker exec -it <container> sh` — open an interactive shell **inside an already-running container**.\n* `docker stop <container>` / `docker rm <container>` — gracefully stop a container, then delete it.\n* `docker build -t <name>:<tag> .` — build an image from the `Dockerfile` in `.` (the build context).\n* `docker images`, `docker container prune`, `docker image prune`, `docker system df` — inspect and reclaim disk space from stopped containers and unused layers."
+        },
+        {
+          "id": "code-cli-workflow",
+          "block_type": "code",
+          "language": "bash",
+          "filename": "docker-workflow.sh",
+          "title": "Annotated Workflow: Run, Inspect, Exec & Clean",
+          "bookmarkable": true,
+          "code": "docker run -d -p 8080:80 --name web nginx:1.30\ncurl localhost:8080\ndocker ps\ndocker logs web\ndocker exec -it web sh\ndocker stop web\ndocker rm web\ndocker ps -a",
+          "highlight_lines": [1, 4, 5],
+          "annotations": [
+            {
+              "line": 1,
+              "note": "Runs nginx:1.30 in detached (-d) mode named 'web', mapping host port 8080 to container port 80."
+            },
+            {
+              "line": 4,
+              "note": "Reads stdout/stderr printed by nginx inside the container."
+            },
+            {
+              "line": 5,
+              "note": "Attaches a new shell process inside the already-running 'web' container for live inspection."
+            }
+          ]
+        },
+        {
+          "id": "exp-sandbox-cli-builder",
+          "block_type": "sandbox",
+          "runtime": "javascript",
+          "title": "Build a Valid `docker run` Command",
+          "instructions": "Complete `buildDockerRun(cfg)` so it returns a valid `docker run` CLI string. Remember that all Docker flags come **before** `cfg.image`, and `cfg.args` (if non-empty) come **after** `cfg.image`.\n\nInclude flags in this exact order when truthy:\n1. `-d` (if `cfg.detach`)\n2. `-it` (if `cfg.interactive`)\n3. `--rm` (if `cfg.autoRemove`)\n4. `-p ${cfg.hostPort}:${cfg.containerPort}` (if both ports exist)\n5. `-v ${cfg.volume}` (if `cfg.volume`)\n6. `--network ${cfg.network}` (if `cfg.network`)\n7. `--name ${cfg.name}` (if `cfg.name`)\n8. `cfg.image`\n9. `...cfg.args` (if `cfg.args && cfg.args.length > 0`)",
+          "starter_code": "function buildDockerRun(cfg) {\n  const parts = ['docker', 'run'];\n  // TODO: append flags before cfg.image, then cfg.image, then cfg.args\n  return parts.join(' ');\n}\n\nconsole.log(buildDockerRun({\n  detach: true,\n  hostPort: 8080,\n  containerPort: 80,\n  name: 'web',\n  image: 'nginx:1.30'\n}));\n\nconsole.log(buildDockerRun({\n  interactive: true,\n  autoRemove: true,\n  volume: './data:/data',\n  network: 'dai-net',\n  image: 'ghcr.io/alice/cli:1.0',\n  args: ['--loop']\n}));\n",
+          "expected_output": "docker run -d -p 8080:80 --name web nginx:1.30\ndocker run -it --rm -v ./data:/data --network dai-net ghcr.io/alice/cli:1.0 --loop",
+          "solution": "function buildDockerRun(cfg) {\n  const parts = ['docker', 'run'];\n  if (cfg.detach) parts.push('-d');\n  if (cfg.interactive) parts.push('-it');\n  if (cfg.autoRemove) parts.push('--rm');\n  if (cfg.hostPort && cfg.containerPort) parts.push(`-p ${cfg.hostPort}:${cfg.containerPort}`);\n  if (cfg.volume) parts.push(`-v ${cfg.volume}`);\n  if (cfg.network) parts.push(`--network ${cfg.network}`);\n  if (cfg.name) parts.push(`--name ${cfg.name}`);\n  parts.push(cfg.image);\n  if (cfg.args && cfg.args.length > 0) parts.push(...cfg.args);\n  return parts.join(' ');\n}\n\nconsole.log(buildDockerRun({\n  detach: true,\n  hostPort: 8080,\n  containerPort: 80,\n  name: 'web',\n  image: 'nginx:1.30'\n}));\n\nconsole.log(buildDockerRun({\n  interactive: true,\n  autoRemove: true,\n  volume: './data:/data',\n  network: 'dai-net',\n  image: 'ghcr.io/alice/cli:1.0',\n  args: ['--loop']\n}));\n",
+          "hints": [
+            "Push each flag into `parts` before pushing `cfg.image`.",
+            "Use `parts.push(...cfg.args)` only after `parts.push(cfg.image)` so container arguments aren't interpreted as Docker flags."
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-dockerfile-layers",
+      "title": "4. Dockerfile, Layer Caching & Multi-Stage Builds",
+      "description": "Author production-ready Dockerfiles using layer caching, .dockerignore, ENTRYPOINT vs CMD, and multi-stage builds.",
+      "blocks": [
+        {
+          "id": "th-dockerfile-instructions",
+          "block_type": "markdown",
+          "title": "Core `Dockerfile` Instructions & `.dockerignore`",
+          "bookmarkable": true,
+          "content": "A `Dockerfile` is a sequential recipe where each instruction produces a new metadata entry or filesystem layer:\n\n| Instruction | Purpose | Build Time vs Run Time |\n| :--- | :--- | :--- |\n| `FROM` | Base image to start from (e.g., `eclipse-temurin:25-jre`) | Build time |\n| `WORKDIR` | Sets working directory for subsequent instructions and container startup | Both |\n| `COPY` | Copies files from the host **build context** (`.`) or an earlier stage (`--from=`) | Build time |\n| `RUN` | Executes a command while building the image (e.g., `mvn package`, `apt-get install`) | Build time |\n| `EXPOSE` | **Documents** the port the app listens on; **does NOT publish it** (use `-p` or `ports:`) | Metadata |\n| `ARG` / `ENV` | `ARG` is build-time only; `ENV` persists into the running container | Build (`ARG`) / Both (`ENV`) |\n| `ENTRYPOINT` | Executable run when the container starts | Run time |\n| `CMD` | Default arguments to `ENTRYPOINT` (or default command if no `ENTRYPOINT`) | Run time |\n\n### Keep the Build Context Lean with `.dockerignore`\nWhen you run `docker build -t my-app .`, the CLI sends the **entire** `.` directory to the daemon. A `.dockerignore` file (using `.gitignore` syntax) excludes `target/`, `.git/`, and IDE files (`.idea/`), speeding up builds and preventing secrets or huge artifacts from leaking into the image."
+        },
+        {
+          "id": "th-entrypoint-vs-cmd",
+          "block_type": "markdown",
+          "title": "`ENTRYPOINT` vs `CMD` (Classic Exam Question)",
+          "bookmarkable": true,
+          "content": "Confusing `ENTRYPOINT` and `CMD` is one of the most common Docker mistakes:\n\n* **`ENTRYPOINT`** defines the **fixed program** the container runs.\n* **`CMD`** supplies **default arguments** to `ENTRYPOINT` (or the whole default command if `ENTRYPOINT` is absent).\n* Arguments passed after `docker run <image>` **replace `CMD`**, **not `ENTRYPOINT`**.\n\n```dockerfile\nENTRYPOINT [\"java\", \"-jar\", \"/app/app.jar\"]\nCMD [\"--help\"]\n```\n\n* `docker run my-image` $\\rightarrow$ executes `java -jar /app/app.jar --help`\n* `docker run my-image --loop` $\\rightarrow$ executes `java -jar /app/app.jar --loop`\n* Need a shell inside an `ENTRYPOINT` image? Override it explicitly: `docker run --rm -it --entrypoint sh my-image`.\n\n**Rule of thumb:** Use `ENTRYPOINT` + `CMD` when packaging a single application; use `CMD` alone for a utility/tool box image (like `alpine`) so users can easily run `docker run --rm my-box echo hello`."
+        },
+        {
+          "id": "th-layers-and-caching",
+          "block_type": "markdown",
+          "title": "Image Layers, Copy-on-Write & Dependency Cache Ordering",
+          "bookmarkable": true,
+          "content": "An image is a **stack of read-only layers** (inspectable via `docker history`). Shared base layers are stored **once** on disk (`docker system df -v` shows shared vs unique size).\n\nWhen you rebuild an image, Docker checks each instruction in order. It **reuses cached layers** up to the **first instruction whose inputs or command changed**, and **rebuilds that layer and every instruction after it**.\n\n### Why Copy `pom.xml` Before `src/`?\nIf you write `COPY . .` followed by `RUN mvn package`, editing a single line of Java code invalidates `COPY . .` and forces Maven to re-download the internet on every build. Instead:\n\n1. `COPY pom.xml .`\n2. `RUN mvn dependency:go-offline` (cached as long as `pom.xml` is unchanged!)\n3. `COPY src ./src`\n4. `RUN mvn package -DskipTests` (only recompiles your code)"
+        },
+        {
+          "id": "th-multistage-builds",
+          "block_type": "markdown",
+          "title": "Multi-Stage Builds: Small, Secure Runtime Images",
+          "bookmarkable": true,
+          "content": "A **multi-stage build** uses multiple `FROM` statements in one `Dockerfile`. Stage 1 (`AS build`) uses a full JDK + Maven image to compile the JAR. Stage 2 starts fresh from a slim JRE image (`eclipse-temurin:25-jre`) and copies **only the compiled JAR** using `COPY --from=build`.\n\nBenefits:\n* **Much smaller image** (no Maven, no JDK compiler, no `src/` or `.m2` cache in the final image).\n* **Smaller attack surface** (fewer binaries and tools available to an attacker).\n* **Zero host toolchain required** (anyone with Docker can build and run the app without installing Java or Maven locally)."
+        },
+        {
+          "id": "diag-multistage-layers",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Multi-Stage Java Dockerfile & Layer Caching",
+          "caption": "Stage 1 caches Maven dependencies before copying src/. Stage 2 discards Maven and source code, keeping only the JRE and final JAR.",
+          "bookmarkable": true,
+          "source": "flowchart LR\n  subgraph S1 [\"Stage 1: Build (maven:3.9-eclipse-temurin-25)\"]\n    Pom[\"COPY pom.xml .\"] --> Deps[\"RUN mvn dependency:go-offline (Cached)\"]\n    Deps --> Src[\"COPY src ./src\"]\n    Src --> Pkg[\"RUN mvn package -> app.jar\"]\n  end\n  subgraph S2 [\"Stage 2: Runtime (eclipse-temurin:25-jre)\"]\n    Jre[\"Base JRE Layer\"] --> CopyJar[\"COPY --from=build app.jar\"]\n    CopyJar --> Run[\"ENTRYPOINT java -jar app.jar\"]\n  end\n  Pkg -->|\"Artifact only\"| CopyJar"
+        },
+        {
+          "id": "code-multistage-dockerfile",
+          "block_type": "code",
+          "language": "dockerfile",
+          "filename": "Dockerfile",
+          "title": "Production Multi-Stage Java Dockerfile",
+          "bookmarkable": true,
+          "code": "FROM maven:3.9-eclipse-temurin-25 AS build\nWORKDIR /build\nCOPY pom.xml .\nRUN mvn dependency:go-offline -B\nCOPY src ./src\nRUN mvn package -DskipTests -B\n\nFROM eclipse-temurin:25-jre\nWORKDIR /app\nCOPY --from=build /build/target/my-app-1.0.jar /app/app.jar\nEXPOSE 8080\nENTRYPOINT [\"java\", \"-jar\", \"/app/app.jar\"]\nCMD [\"--port\", \"8080\"]",
+          "highlight_lines": [1, 3, 4, 10, 11, 12, 13],
+          "annotations": [
+            {
+              "line": 1,
+              "note": "Names Stage 1 'build' using a full Maven + JDK 25 image."
+            },
+            {
+              "line": 3,
+              "note": "Copies only pom.xml first so dependency resolution is cached independently of Java source edits."
+            },
+            {
+              "line": 4,
+              "note": "Downloads Maven dependencies into the layer cache; skipped on rebuilds unless pom.xml changes."
+            },
+            {
+              "line": 10,
+              "note": "Copies only the compiled JAR from Stage 1 into the slim JRE image; Maven and src/ are discarded."
+            },
+            {
+              "line": 11,
+              "note": "Documents port 8080; does NOT publish it—still requires -p 8080:8080 or Compose ports:."
+            },
+            {
+              "line": 12,
+              "note": "Fixed executable started by every container from this image."
+            },
+            {
+              "line": 13,
+              "note": "Default arguments appended to ENTRYPOINT; replaced if arguments are passed to docker run."
+            }
+          ]
+        },
+        {
+          "id": "code-dockerignore",
+          "block_type": "code",
+          "language": "gitignore",
+          "filename": ".dockerignore",
+          "title": "Annotated `.dockerignore` for a Maven Project",
+          "bookmarkable": true,
+          "code": ".git/\ntarget/\n.idea/\n*.iml\nREADME.md\n.env",
+          "highlight_lines": [1, 2, 6],
+          "annotations": [
+            {
+              "line": 1,
+              "note": "Prevents sending git history to the Docker daemon."
+            },
+            {
+              "line": 2,
+              "note": "Excludes host-compiled artifacts so Stage 1 builds cleanly inside the container."
+            },
+            {
+              "line": 6,
+              "note": "Never bake local .env secrets into an image layer; pass secrets at runtime."
+            }
+          ]
+        },
+        {
+          "id": "exp-sandbox-layer-cache",
+          "block_type": "sandbox",
+          "runtime": "python",
+          "title": "Dockerfile Layer-Cache Invalidation Analyzer",
+          "instructions": "Complete `count_rebuilt_layers(instructions, changed_files)` to calculate how many layers must be rebuilt when files change.\n\nEach item in `instructions` is a tuple `(op, arg)`. For `'COPY'`, `arg` is the source path prefix (e.g. `'pom.xml'`, `'src'`, or `'.'`).\nRule:\n- Walk `instructions` from index `0` to `n - 1`.\n- If `op == 'COPY'` and any file in `changed_files` equals `arg`, starts with `arg + '/'`, or `arg == '.'`, then index `i` is invalidated!\n- Once any layer `i` is invalidated, **all** layers from `i` through `n - 1` (`n - i` layers total) must be rebuilt.\n- If no `COPY` matches `changed_files`, return `0`.",
+          "starter_code": "good_dockerfile = [\n    ('FROM', 'maven:3.9'),\n    ('WORKDIR', '/build'),\n    ('COPY', 'pom.xml'),\n    ('RUN', 'mvn dependency:go-offline'),\n    ('COPY', 'src'),\n    ('RUN', 'mvn package'),\n]\n\nbad_dockerfile = [\n    ('FROM', 'maven:3.9'),\n    ('WORKDIR', '/build'),\n    ('COPY', '.'),\n    ('RUN', 'mvn package'),\n]\n\ndef count_rebuilt_layers(instructions, changed_files):\n    # TODO: find first invalidated COPY layer and return count of layers rebuilt\n    pass\n\nprint('Good (src edit):', count_rebuilt_layers(good_dockerfile, ['src/Main.java']))\nprint('Good (pom edit):', count_rebuilt_layers(good_dockerfile, ['pom.xml']))\nprint('Bad  (src edit):', count_rebuilt_layers(bad_dockerfile, ['src/Main.java']))\n",
+          "expected_output": "Good (src edit): 2\nGood (pom edit): 4\nBad  (src edit): 2",
+          "solution": "good_dockerfile = [\n    ('FROM', 'maven:3.9'),\n    ('WORKDIR', '/build'),\n    ('COPY', 'pom.xml'),\n    ('RUN', 'mvn dependency:go-offline'),\n    ('COPY', 'src'),\n    ('RUN', 'mvn package'),\n]\n\nbad_dockerfile = [\n    ('FROM', 'maven:3.9'),\n    ('WORKDIR', '/build'),\n    ('COPY', '.'),\n    ('RUN', 'mvn package'),\n]\n\ndef count_rebuilt_layers(instructions, changed_files):\n    n = len(instructions)\n    for i, (op, arg) in enumerate(instructions):\n        if op == 'COPY':\n            for f in changed_files:\n                if arg == '.' or f == arg or f.startswith(arg + '/'):\n                    return n - i\n    return 0\n\nprint('Good (src edit):', count_rebuilt_layers(good_dockerfile, ['src/Main.java']))\nprint('Good (pom edit):', count_rebuilt_layers(good_dockerfile, ['pom.xml']))\nprint('Bad  (src edit):', count_rebuilt_layers(bad_dockerfile, ['src/Main.java']))\n",
+          "hints": [
+            "Iterate with `enumerate(instructions)` and return `len(instructions) - i` on the first matching `COPY`.",
+            "Note that in `good_dockerfile`, editing `src/Main.java` leaves `RUN mvn dependency:go-offline` cached (only 2 layers rebuild), whereas `bad_dockerfile` has to re-run `mvn package` without a separate cached dependency layer."
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-volumes-networking",
+      "title": "5. Persistence (Volumes) & Container Networking",
+      "description": "Understand why container writes are ephemeral, when to choose named volumes vs bind mounts, and how user-defined bridge networks enable container DNS.",
+      "blocks": [
+        {
+          "id": "th-volumes-vs-bind-mounts",
+          "block_type": "markdown",
+          "title": "Ephemeral Filesystem vs Volumes & Bind Mounts",
+          "bookmarkable": true,
+          "content": "When a container starts, Docker places **one thin writable layer** on top of the read-only image layers. Any file created or modified inside the container lives in that writable layer (via copy-on-write) and **vanishes permanently when the container is removed** (`docker rm`).\n\nTo persist data or share host files, mount storage into the container:\n\n| Mount Type | Syntax | Who Manages Storage? | Best Use Case |\n| :--- | :--- | :--- | :--- |\n| **Bind Mount** | `-v \"$(pwd):/data\"` | You (host path) | Sharing source code, config files (`./init.sql`), or outputs you want to inspect on the host |\n| **Named Volume** | `-v db-data:/var/lib/postgresql/data` | Docker (`docker volume create`) | Database state and service data that must survive `docker rm` cleanly across platforms |"
+        },
+        {
+          "id": "th-ports-and-networks",
+          "block_type": "markdown",
+          "title": "Bridge Networks & Container DNS",
+          "bookmarkable": true,
+          "content": "Without a custom network, containers attach to Docker's **default `bridge` network**. On the default bridge, containers can reach each other by IP address, **but Docker provides no automatic DNS resolution by name**.\n\nWhen you create a **user-defined bridge network**:\n```bash\ndocker network create my-network\ndocker run -d --network my-network --name my-server my-image\ndocker run --rm --network my-network alpine ping -c 2 my-server\n```\nDocker's embedded DNS resolves `my-server` to that container's internal IP automatically. Notice also that containers on the same network **do not need `-p` published to the host** to talk to each other—`-p` is only for external/host traffic!"
+        }
+      ]
+    },
+    {
+      "id": "sec-docker-compose",
+      "title": "6. Multi-Container Orchestration with Docker Compose",
+      "description": "Orchestrate multi-service applications (proxy, app server, database, volumes, networks) declaratively with compose.yaml.",
+      "blocks": [
+        {
+          "id": "th-compose-concepts",
+          "block_type": "markdown",
+          "title": "Docker Compose (`compose.yaml`) & Core Commands",
+          "bookmarkable": true,
+          "content": "Real applications combine multiple containers (a web server, an API, a database, a reverse proxy). **Docker Compose** orchestrates multi-container stacks on a single machine from one declarative `compose.yaml` (or `compose.yml`) file.\n\n> [!NOTE]\n> **`docker compose` vs `docker-compose`:** Legacy tutorials use `docker-compose` (v1, Python, unmaintained). Modern Docker includes Compose v2 as a built-in subcommand with a **space**: `docker compose`.\n\n### Key `compose.yaml` Keys\n* **`services:`** — defines each container (`image:` or `build: .`, `ports:`, `volumes:`, `environment:`, `depends_on:`, `networks:`, `command:`).\n* **`volumes:`** (top-level) — declares named volumes referenced by services.\n* **`networks:`** — Compose automatically creates a project bridge network where **every service is reachable by its service name** (e.g., `db` resolves to the `db` container).\n* **`depends_on:`** — controls startup order (and with `condition: service_healthy` + `healthcheck:`, waits until the dependency is actually ready).\n\n### Essential Commands\n* `docker compose up -d` — build/pull, create network & volumes, and start all services in the background.\n* `docker compose ps -a` — inspect status (including exited one-shot services).\n* `docker compose logs -f [service]` — stream logs.\n* `docker compose down` — stop and remove containers and the network (`docker compose down -v` **also deletes named volumes**—careful with database data!)."
+        },
+        {
+          "id": "diag-compose-network",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Multi-Service Docker Compose Topology",
+          "caption": "Compose creates a private bridge network with DNS so proxy reaches api and api reaches db by service name, while only port 8080 is published to the host.",
+          "bookmarkable": true,
+          "source": "flowchart LR\n  Host[\"Host Browser :8080\"] -->|\"-p 8080:80\"| Proxy[\"proxy (nginx :80)\"]\n  subgraph Net [\"Compose Bridge Network (Automatic DNS)\"]\n    Proxy -->|\"http://api:7000\"| Api[\"api (Java Server :7000)\"]\n    Api -->|\"jdbc:postgresql://db:5432\"| Db[\"db (postgres:18)\"]\n  end\n  Db -->|\"db-data\"| Vol[(\"Named Volume\")]"
+        },
+        {
+          "id": "code-compose-yaml",
+          "block_type": "code",
+          "language": "yaml",
+          "filename": "compose.yaml",
+          "title": "Annotated Multi-Service `compose.yaml`",
+          "bookmarkable": true,
+          "code": "services:\n  api:\n    build: .\n    ports:\n      - \"8080:7000\"\n    environment:\n      DB_HOST: db\n      DB_PORT: \"5432\"\n    depends_on:\n      - db\n\n  db:\n    image: postgres:18\n    environment:\n      POSTGRES_PASSWORD: secret\n    volumes:\n      - db-data:/var/lib/postgresql/data\n      - ./init.sql:/docker-entrypoint-initdb.d/init.sql\n\nvolumes:\n  db-data:",
+          "highlight_lines": [3, 5, 7, 17, 18, 21],
+          "annotations": [
+            {
+              "line": 3,
+              "note": "Builds the api image from the Dockerfile in the current directory."
+            },
+            {
+              "line": 5,
+              "note": "Publishes container port 7000 on host port 8080 (api must bind to 0.0.0.0:7000)."
+            },
+            {
+              "line": 7,
+              "note": "Uses the Compose service name 'db' as the hostname—resolved by Compose's bridge DNS."
+            },
+            {
+              "line": 17,
+              "note": "Named volume managed by Docker so database state survives 'docker compose down'."
+            },
+            {
+              "line": 18,
+              "note": "Bind mount injecting a local SQL seed script into the Postgres container."
+            },
+            {
+              "line": 21,
+              "note": "Top-level declaration required for every named volume used by services."
+            }
+          ]
+        },
+        {
+          "id": "exp-sandbox-compose-validator",
+          "block_type": "sandbox",
+          "runtime": "python",
+          "title": "Compose Configuration Linter (Ports, Volumes & Dependencies)",
+          "instructions": "Complete `lint_compose(services, top_volumes)` to catch three common `compose.yaml` errors and return a sorted list of error strings:\n\n1. **Host port collision:** Parse `ports` entries formatted `'HOST:CONT'`. If two services claim the same `HOST` port, add `'PORT_COLLISION: <HOST>'`.\n2. **Undeclared named volume:** For each entry `'SRC:DEST'` in `volumes`, if `SRC` does **not** start with `'./'` or `'/'` (meaning it is a named volume, not a bind mount) and `SRC` is not in `top_volumes`, add `'UNDECLARED_VOLUME: <SRC>'`.\n3. **Missing dependency:** For each `dep` in `depends_on`, if `dep` is not a key in `services`, add `'UNKNOWN_DEP: <dep>'`.",
+          "starter_code": "services_cfg = {\n    'web': {'ports': ['8080:80'], 'volumes': ['./html:/usr/share/nginx/html'], 'depends_on': ['api']},\n    'api': {'ports': ['8080:7000'], 'volumes': ['app-cache:/cache'], 'depends_on': ['cache']},\n    'db':  {'ports': [], 'volumes': ['db-data:/var/lib/postgresql/data'], 'depends_on': []}\n}\ntop_volumes = {'db-data'}\n\ndef lint_compose(services, top_vols):\n    errors = set()\n    # TODO: check host port collisions, undeclared named volumes, and unknown depends_on\n    return sorted(errors)\n\nfor err in lint_compose(services_cfg, top_volumes):\n    print(err)\n",
+          "expected_output": "PORT_COLLISION: 8080\nUNDECLARED_VOLUME: app-cache\nUNKNOWN_DEP: cache",
+          "solution": "services_cfg = {\n    'web': {'ports': ['8080:80'], 'volumes': ['./html:/usr/share/nginx/html'], 'depends_on': ['api']},\n    'api': {'ports': ['8080:7000'], 'volumes': ['app-cache:/cache'], 'depends_on': ['cache']},\n    'db':  {'ports': [], 'volumes': ['db-data:/var/lib/postgresql/data'], 'depends_on': []}\n}\ntop_volumes = {'db-data'}\n\ndef lint_compose(services, top_vols):\n    errors = set()\n    used_host_ports = set()\n    for svc in services.values():\n        for p in svc.get('ports', []):\n            host_port = p.split(':')[0]\n            if host_port in used_host_ports:\n                errors.add(f'PORT_COLLISION: {host_port}')\n            used_host_ports.add(host_port)\n        for v in svc.get('volumes', []):\n            src = v.split(':')[0]\n            if not (src.startswith('./') or src.startswith('/')) and src not in top_vols:\n                errors.add(f'UNDECLARED_VOLUME: {src}')\n        for dep in svc.get('depends_on', []):\n            if dep not in services:\n                errors.add(f'UNKNOWN_DEP: {dep}')\n    return sorted(errors)\n\nfor err in lint_compose(services_cfg, top_volumes):\n    print(err)\n",
+          "hints": [
+            "A volume source is a bind mount if `src.startswith('./') or src.startswith('/')`; otherwise treat it as a named volume.",
+            "Use a `set()` for `used_host_ports` to detect duplicates across services."
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-synthesis-reflection",
+      "title": "7. Metacognitive Synthesis & Feynman Articulation",
+      "description": "Consolidate your mental model by diagnosing a real-world debugging scenario and explaining layers/volumes without jargon.",
+      "blocks": [
+        {
+          "id": "ref-rubric-frozen-image",
+          "block_type": "reflection_rubric",
+          "title": "Synthesis: Debugging the \"Nothing Changed & Unreachable\" Container",
+          "prompt": "A teammate says: \"I edited my Java HTTP server, restarted the Docker container with `docker stop && docker start`, and two things are broken: (1) `curl localhost:8080` gets an empty reply even though I have `EXPOSE 8080` in my Dockerfile and `-p 8080:8080`, and (2) the logs still show the old startup banner.\" Diagnose both root causes and explain how to fix them.",
+          "self_check_criteria": [
+            "Identified that an image is a frozen build: restarting an existing container does not recompile or rebuild the image (`docker build` + new `docker run` required).",
+            "Identified that `EXPOSE 8080` is documentation only, and an empty reply with `-p 8080:8080` typically means the server bound to `127.0.0.1` instead of `0.0.0.0` inside the container.",
+            "Mentioned that in a multi-stage build, `mvn package` runs inside Stage 1 during `docker build`, so rebuilding the image updates the JAR."
+          ],
+          "model_answer": "1) Old startup banner: A Docker image is a frozen build, and a stopped container still points to that old image. Editing source code on the host does nothing until you rebuild (`docker build -t my-app:1.1 .`) and start a fresh container from the new image. 2) Empty reply on `localhost:8080`: `EXPOSE 8080` only documents the port. Even with `-p 8080:8080`, if the Java server binds to `127.0.0.1` (container loopback) instead of `0.0.0.0` (all interfaces), traffic forwarded from the host cannot reach it. Binding the server to `0.0.0.0:8080` fixes the connection.",
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-feynman-layers-volumes",
+          "block_type": "feynman_prompt",
+          "concept": "Images, Layers, Containers, and Volumes",
+          "target_audience": "a first-year CS student who thinks a container is just a mini virtual machine",
+          "prompt": "Explain why a container is NOT a mini virtual machine, how an image's read-only layers differ from a container's writable layer, and why a database container needs a volume.",
+          "key_points_to_cover": [
+            "Shared host Linux kernel vs separate Guest OS kernel in a VM",
+            "Read-only stacked image layers shared across containers vs thin ephemeral writable layer",
+            "Why deleting a container destroys the writable layer, requiring a volume or bind mount for persistence"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-retrieval-quizzes",
+      "title": "8. Diagnostic Knowledge Check",
+      "description": "Test your understanding of container architecture, Dockerfile semantics, layer caching, networking, and Compose.",
+      "blocks": [
+        {
+          "id": "qz-vm-vs-container",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-three-ways-to-run",
+          "title": "Shared Kernel vs Hypervisor",
+          "question": "What does a Linux container share with the host machine that a traditional virtual machine does NOT?",
+          "options": [
+            "The host's Linux kernel",
+            "A full guest operating system per instance",
+            "A simulated hardware hypervisor layer",
+            "The host's writable root filesystem without isolation"
+          ],
+          "correct_answer": "The host's Linux kernel",
+          "explanation": "Containers share the host's Linux kernel (using namespaces for isolation and cgroups for resource limits), which is why they start in milliseconds and weigh tens to hundreds of MB. Virtual machines boot their own guest OS kernel on top of a hypervisor. Containers still isolate their filesystem view, so they do not share the host's root filesystem directly.",
+          "hints": [
+            "Think about why a VM image is several gigabytes while an Alpine container image is under 10 MB.",
+            "Which OS component is booted once on the host and shared by all containers?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-image-vs-container",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-image-container-registry",
+          "title": "OOP Analogy: Image vs Container",
+          "question": "If you run `docker run --rm -it ubuntu:26.04 /bin/bash`, install `curl`, and then exit, what happens to the `ubuntu:26.04` image on your machine?",
+          "options": [
+            "The `ubuntu:26.04` image remains completely unchanged; `curl` was only written to the container's ephemeral writable layer.",
+            "The `ubuntu:26.04` image is updated in place to include `curl` for future containers.",
+            "The `ubuntu:26.04` image is deleted along with the container because `--rm` was passed.",
+            "Docker automatically pushes a new `ubuntu:latest` layer to Docker Hub."
+          ],
+          "correct_answer": "The `ubuntu:26.04` image remains completely unchanged; `curl` was only written to the container's ephemeral writable layer.",
+          "explanation": "Images are read-only blueprints. Any modification inside a running container goes into that container's thin writable layer. When `--rm` deletes the container upon exit, its writable layer is discarded while the underlying `ubuntu:26.04` image stays untouched.",
+          "hints": [
+            "Recall the OOP analogy: Image = Class, Container = Object.",
+            "Where do runtime filesystem writes go in a container?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-frozen-build",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-daemon-tags-arch",
+          "title": "Frozen Build Pitfall",
+          "question": "You edit `Main.java` to print a new greeting, run `mvn clean package`, and then immediately execute `docker run --rm my-app`. Why does it still print the old greeting?",
+          "options": [
+            "The image `my-app` is a frozen build from the previous `docker build`; you must rebuild the image before running a new container.",
+            "Maven packages JARs into a named volume that overrides the image.",
+            "The `--rm` flag tells Docker to restore the previous stdout output from cache.",
+            "Docker automatically runs `git checkout` on the container's `/app` directory."
+          ],
+          "correct_answer": "The image `my-app` is a frozen build from the previous `docker build`; you must rebuild the image before running a new container.",
+          "explanation": "An image is a frozen snapshot created at `docker build` time. Recompiling the JAR on your host does not update existing images or containers. You must run `docker build -t my-app .` again so the new JAR is copied into a new image.",
+          "hints": [
+            "When does `COPY target/app.jar /app/` actually execute?",
+            "Does `docker run` read files from your host project directory unless you mounted a volume?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-entrypoint-cmd",
+          "block_type": "quiz_question",
+          "question_type": "code_output",
+          "difficulty": 3,
+          "related_block_id": "th-entrypoint-vs-cmd",
+          "title": "Predict Command: ENTRYPOINT + CMD",
+          "question": "Given the following `Dockerfile`:\n\n```dockerfile\nFROM eclipse-temurin:25-jre\nENTRYPOINT [\"java\", \"-jar\", \"/app/cli.jar\"]\nCMD [\"--help\"]\n```\n\nWhat command does the container execute when you run `docker run --rm my-cli --loop`?",
+          "options": [
+            "java -jar /app/cli.jar --loop",
+            "--loop",
+            "java -jar /app/cli.jar --help --loop",
+            "docker run --rm my-cli --help"
+          ],
+          "correct_answer": "java -jar /app/cli.jar --loop",
+          "explanation": "Arguments passed after the image name in `docker run` replace `CMD` (`[\"--help\"]`), while `ENTRYPOINT` (`[\"java\", \"-jar\", \"/app/cli.jar\"]`) remains fixed. Thus `--loop` replaces `--help`, yielding `java -jar /app/cli.jar --loop`. Option `--loop` alone would only happen if the Dockerfile used `CMD` without `ENTRYPOINT`.",
+          "hints": [
+            "Which instruction (`ENTRYPOINT` or `CMD`) is replaced by trailing arguments on `docker run`?",
+            "Does `CMD` get appended to, or replaced?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-expose-vs-p",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-dockerfile-instructions",
+          "title": "Port Documentation vs Publishing",
+          "question": "Your `Dockerfile` contains `EXPOSE 80`, and you start the container with `docker run -d --name web nginx:1.30` (no `-p` flag). What happens when you run `curl localhost:80` on your host?",
+          "options": [
+            "Connection refused: `EXPOSE` only documents the port; you must pass `-p 80:80` (or `ports:` in Compose) to publish it to the host.",
+            "It succeeds because `EXPOSE 80` automatically binds host port 80.",
+            "It succeeds on a random port, which you can query with `docker logs`.",
+            "Docker refuses to build an image with `EXPOSE` unless `-p` is in the `Dockerfile`."
+          ],
+          "correct_answer": "Connection refused: `EXPOSE` only documents the port; you must pass `-p 80:80` (or `ports:` in Compose) to publish it to the host.",
+          "explanation": "`EXPOSE` in a `Dockerfile` is purely metadata documenting which port the application listens on. It does not publish the port to the host network. To reach port 80 from your host, you must pass `-p <host_port>:80` to `docker run` (or `-P` to publish all exposed ports to random host ports).",
+          "hints": [
+            "Does `EXPOSE` actually open a port on your host machine?",
+            "What flag on `docker run` maps a host port to a container port?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-localhost-bind",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 4,
+          "related_block_id": "th-docker-run-flags",
+          "title": "Diagnose Unreachable Container Server",
+          "question": "You run `docker run -d -p 8080:8080 my-java-server`. `docker ps` shows the container is Up and `0.0.0.0:8080->8080/tcp`, yet `curl localhost:8080` receives an empty reply / connection reset. Inside the container, `curl 127.0.0.1:8080` works. What is the bug?",
+          "options": [
+            "The Java server bound to `127.0.0.1` instead of `0.0.0.0`, so it ignores traffic arriving via Docker's port-forwarding interface.",
+            "The host and container ports cannot be the same number (`8080:8080`).",
+            "You forgot to add `--rm` to `docker run`.",
+            "You must use `docker exec` before `curl` can reach a published port."
+          ],
+          "correct_answer": "The Java server bound to `127.0.0.1` instead of `0.0.0.0`, so it ignores traffic arriving via Docker's port-forwarding interface.",
+          "explanation": "Inside a container, `127.0.0.1` is the container's isolated loopback interface. Traffic forwarded from the host via `-p` arrives on the container's virtual Ethernet interface (`eth0`), not loopback. Binding the server to `0.0.0.0` (all interfaces) allows both internal and host-forwarded connections. Matching port numbers (`8080:8080`) is completely valid.",
+          "hints": [
+            "Why would `curl 127.0.0.1:8080` work *inside* the container but fail from *outside*?",
+            "Which IP address listens on all network interfaces of a container?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-layer-cache-order",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 4,
+          "related_block_id": "th-layers-and-caching",
+          "title": "Optimizing Dockerfile Build Cache",
+          "question": "Why should a Java/Maven `Dockerfile` copy `pom.xml` and run `mvn dependency:go-offline` **before** `COPY src ./src`?",
+          "options": [
+            "Because `src/` changes on every edit while `pom.xml` rarely changes, keeping the slow dependency-download layer cached across code edits.",
+            "Because Maven refuses to compile `src/` if `pom.xml` is copied in the same `COPY . .` instruction.",
+            "Because `COPY pom.xml .` automatically creates a named volume for `.m2`.",
+            "Because `WORKDIR` only applies to instructions placed after `COPY src ./src`."
+          ],
+          "correct_answer": "Because `src/` changes on every edit while `pom.xml` rarely changes, keeping the slow dependency-download layer cached across code edits.",
+          "explanation": "Docker invalidates the build cache at the first instruction whose inputs change, and rebuilds every instruction after it. Placing `COPY pom.xml .` and `RUN mvn dependency:go-offline` above `COPY src ./src` ensures that routine Java source edits only invalidate `COPY src ./src` and `mvn package`, reusing the cached dependencies.",
+          "hints": [
+            "What happens to downstream layers when an earlier `COPY` instruction detects a modified file?",
+            "Which changes more often during development: `pom.xml` or `src/`?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-multistage-benefits",
+          "block_type": "quiz_question",
+          "question_type": "multi_select",
+          "difficulty": 3,
+          "related_block_id": "th-multistage-builds",
+          "title": "Benefits of Multi-Stage Builds",
+          "question": "Which of the following are genuine advantages of a multi-stage `Dockerfile` (Maven builder stage $\\rightarrow$ JRE runtime stage)? (Select all that apply)",
+          "options": [
+            "The final image excludes Maven, the JDK compiler, and raw source code, making it significantly smaller.",
+            "The final image has a smaller attack surface because fewer build tools are present at runtime.",
+            "Anyone with Docker can build the image without having Java or Maven installed on their host machine.",
+            "It allows the container to share the host's `/target` folder without using a volume."
+          ],
+          "correct_answer": [
+            "The final image excludes Maven, the JDK compiler, and raw source code, making it significantly smaller.",
+            "The final image has a smaller attack surface because fewer build tools are present at runtime.",
+            "Anyone with Docker can build the image without having Java or Maven installed on their host machine."
+          ],
+          "explanation": "Multi-stage builds compile inside Stage 1 (`maven:3.9-eclipse-temurin-25`) and copy only the resulting JAR via `COPY --from=build` into Stage 2 (`eclipse-temurin:25-jre`). This shrinks the image, reduces attack surface, and removes the need for local Java/Maven. It does not mount or share the host's `/target` folder at runtime.",
+          "hints": [
+            "What stays in the final image after `COPY --from=build` into `eclipse-temurin:25-jre`?",
+            "Does Stage 2 have any automatic link to your host's `target/` directory?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ephemeral-writable",
+          "block_type": "quiz_question",
+          "question_type": "fill_in_the_blank",
+          "difficulty": 2,
+          "related_block_id": "th-volumes-vs-bind-mounts",
+          "title": "Persisting Database Data",
+          "question": "To ensure PostgreSQL data survives `docker rm` or `docker compose down`, you should mount a Docker-managed named ___ to `/var/lib/postgresql/data`.",
+          "correct_answer": "volume",
+          "explanation": "Writes inside a container without a mount go to its ephemeral writable layer and are lost when the container is removed. A Docker-managed named `volume` persists independently of the container lifecycle and is the recommended choice for database storage.",
+          "hints": [
+            "What top-level section in `compose.yaml` declares `db-data:`?",
+            "Singular noun: `docker ____ create my-data`."
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-bridge-dns",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 4,
+          "related_block_id": "th-ports-and-networks",
+          "title": "Container-to-Container DNS Resolution",
+          "question": "Two containers (`api` and `db`) are started with `docker run` without specifying `--network`. `api` tries to connect to `db:5432` and fails with `UnknownHostException: db`. Why?",
+          "options": [
+            "Both containers are on Docker's default `bridge` network, which does NOT provide automatic DNS resolution by container name.",
+            "Containers can never communicate with each other unless both publish ports with `-p`.",
+            "Port 5432 is reserved by the host OS and blocked inside Docker.",
+            "Docker only resolves container names if the image tag is `:latest`."
+          ],
+          "correct_answer": "Both containers are on Docker's default `bridge` network, which does NOT provide automatic DNS resolution by container name.",
+          "explanation": "Docker's default `bridge` network allows IP-to-IP communication but lacks embedded DNS name resolution. Creating a user-defined bridge network (`docker network create my-net` and passing `--network my-net`, or using Docker Compose) enables automatic DNS resolution by container/service name without needing `-p`.",
+          "hints": [
+            "What is the difference between Docker's default `bridge` network and a user-defined network?",
+            "Do containers on the same network need `-p` to talk to each other?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-compose-down-volumes",
+          "block_type": "quiz_question",
+          "question_type": "code_output",
+          "difficulty": 3,
+          "related_block_id": "th-compose-concepts",
+          "title": "Effect of `docker compose down` vs `down -v`",
+          "question": "Consider a `compose.yaml` with a `postgres:18` service using a named volume `db-data`. You run:\n\n```bash\ndocker compose up -d\ndocker compose down\n```\n\nWhat is the state of the `db-data` named volume afterward?",
+          "options": [
+            "db-data is preserved on disk; only containers and the Compose network were removed.",
+            "db-data is permanently deleted along with the containers.",
+            "db-data is converted into a bind mount in the current directory.",
+            "docker compose down fails unless -v is passed."
+          ],
+          "correct_answer": "db-data is preserved on disk; only containers and the Compose network were removed.",
+          "explanation": "`docker compose down` stops and removes containers and the Compose-created network, but **preserves named volumes** by default so database data is not accidentally wiped. Passing the `-v` flag (`docker compose down -v`) explicitly deletes named volumes.",
+          "hints": [
+            "Why would deleting database volumes by default on `docker compose down` be dangerous?",
+            "What extra flag is required to also remove named volumes?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ghcr-visibility",
+          "block_type": "quiz_question",
+          "question_type": "multi_select",
+          "difficulty": 4,
+          "related_block_id": "th-daemon-tags-arch",
+          "title": "Troubleshooting `ghcr.io` Push & Pull",
+          "question": "Which two statements accurately describe publishing and pulling images on GitHub Container Registry (`ghcr.io`)? (Select all that apply)",
+          "options": [
+            "Newly pushed `ghcr.io` packages are private by default; teammates get `denied` or `not found` until visibility is set to Public.",
+            "Image repository names must be all lowercase; `docker tag` rejects uppercase usernames.",
+            "Once pushed, `ghcr.io` automatically cross-compiles your `arm64` image into `amd64`.",
+            "You can push to `ghcr.io` without logging in as long as your Git repository is public."
+          ],
+          "correct_answer": [
+            "Newly pushed `ghcr.io` packages are private by default; teammates get `denied` or `not found` until visibility is set to Public.",
+            "Image repository names must be all lowercase; `docker tag` rejects uppercase usernames."
+          ],
+          "explanation": "On `ghcr.io`, new packages default to private (causing `denied`/`not found` for others until changed to Public), and OCI image names must be lowercase (`repository name must be lowercase`). Registries never cross-compile images—you must use `docker buildx build --platform ...`—and pushing always requires `docker login ghcr.io` with a PAT (`write:packages`).",
+          "hints": [
+            "Think back to the two most common `docker tag` and `docker pull` errors on `ghcr.io`.",
+            "Does a registry ever recompile your code for another CPU architecture?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-flashcards",
+      "title": "9. Spaced Repetition Flashcards",
+      "description": "High-frequency recall cards for core Docker, Dockerfile, networking, and Compose concepts.",
+      "blocks": [
+        {
+          "id": "fc-vm-vs-container",
+          "block_type": "flashcard",
+          "title": "VM vs Container",
+          "front": "What is the fundamental architectural difference between a **Virtual Machine** and a **Container**?",
+          "back": "A **VM** boots its own **full guest OS and kernel** on top of a hypervisor (GBs of RAM/disk, slow boot). A **Container** shares the **host Linux kernel** using namespaces and cgroups, packaging only the app and its runtime/libraries (MBs, sub-second startup).",
+          "hint": "Think about what is shared vs duplicated.",
+          "tags": ["architecture", "containers", "vms"]
+        },
+        {
+          "id": "fc-image-vs-container",
+          "block_type": "flashcard",
+          "title": "Image vs Container",
+          "front": "How do an **Image** and a **Container** relate in the OCI model?",
+          "back": "An **Image** is a read-only, immutable layered blueprint (like a **class**). A **Container** is a running or stopped instance of an image with its own thin writable layer on top (like an **object** created with `new`).",
+          "hint": "Use the OOP class vs object analogy.",
+          "tags": ["oci", "images", "containers"]
+        },
+        {
+          "id": "fc-frozen-build",
+          "block_type": "flashcard",
+          "title": "Frozen Build Rule",
+          "front": "Why doesn't editing source code on your host update a running container?",
+          "back": "An image is a **frozen build** created at `docker build` time. You must rebuild the image (`docker build`) and start a new container from it (and `docker push` if others pull it).",
+          "hint": "When are files copied into the image?",
+          "tags": ["lifecycle", "pitfalls"]
+        },
+        {
+          "id": "fc-entrypoint-cmd",
+          "block_type": "flashcard",
+          "title": "ENTRYPOINT vs CMD",
+          "front": "In a `Dockerfile`, how do `ENTRYPOINT` and `CMD` interact when you pass arguments to `docker run <image> <args>`?",
+          "back": "`ENTRYPOINT` defines the **fixed executable**; `CMD` provides **default arguments**. Trailing `<args>` on `docker run` **replace `CMD`** and are passed to `ENTRYPOINT`. Without `ENTRYPOINT`, trailing `<args>` replace the entire `CMD`.",
+          "hint": "Which one gets replaced by trailing `docker run` arguments?",
+          "tags": ["dockerfile", "entrypoint", "cmd"]
+        },
+        {
+          "id": "fc-expose-vs-p",
+          "block_type": "flashcard",
+          "title": "EXPOSE vs -p",
+          "front": "Does `EXPOSE 8080` in a `Dockerfile` make port 8080 reachable from the host?",
+          "back": "**No.** `EXPOSE` is documentation metadata only. To publish a port to the host, you must pass `-p <host>:<container>` to `docker run` or configure `ports:` in `compose.yaml`.",
+          "hint": "Metadata vs actual port forwarding.",
+          "tags": ["networking", "ports", "dockerfile"]
+        },
+        {
+          "id": "fc-bind-0000",
+          "block_type": "flashcard",
+          "title": "0.0.0.0 vs 127.0.0.1",
+          "front": "Why must a server inside a container bind to **`0.0.0.0`** instead of **`127.0.0.1`**?",
+          "back": "`127.0.0.1` only accepts connections from inside the container itself. Host traffic forwarded by `-p` arrives on the container's network interface, so the server must listen on **`0.0.0.0`** (all interfaces).",
+          "hint": "Where does `-p` traffic enter the container?",
+          "tags": ["networking", "pitfalls"]
+        },
+        {
+          "id": "fc-layer-caching",
+          "block_type": "flashcard",
+          "title": "Dockerfile Layer Caching",
+          "front": "Why should `COPY pom.xml .` and `RUN mvn dependency:go-offline` appear **before** `COPY src ./src`?",
+          "back": "Docker reuses cached layers up to the first changed instruction and rebuilds everything after it. Separating `pom.xml` from `src/` keeps the slow dependency-download layer cached whenever only Java code changes.",
+          "hint": "How does Docker invalidate build cache layers?",
+          "tags": ["dockerfile", "caching", "maven"]
+        },
+        {
+          "id": "fc-multistage-build",
+          "block_type": "flashcard",
+          "title": "Multi-Stage Builds",
+          "front": "What does `COPY --from=build` achieve in a multi-stage `Dockerfile`?",
+          "back": "It copies only the compiled artifact (e.g., `app.jar`) from a heavy builder stage (Maven + JDK) into a slim runtime stage (JRE), leaving behind build tools and source code for a smaller, more secure final image.",
+          "hint": "Think about image size and attack surface.",
+          "tags": ["dockerfile", "multistage"]
+        },
+        {
+          "id": "fc-dockerignore",
+          "block_type": "flashcard",
+          "title": ".dockerignore",
+          "front": "What is the purpose of a `.dockerignore` file?",
+          "back": "It excludes heavy or sensitive files (`target/`, `.git/`, `.env`, `.idea/`) from the **build context** sent to the Docker daemon, making `docker build` faster and preventing unintended files from entering the image.",
+          "hint": "What gets sent to the daemon when you run `docker build .`?",
+          "tags": ["dockerfile", "build-context"]
+        },
+        {
+          "id": "fc-volume-vs-bind",
+          "block_type": "flashcard",
+          "title": "Named Volume vs Bind Mount",
+          "front": "When should you use a **Named Volume** vs a **Bind Mount**?",
+          "back": "Use a **Named Volume** (`db-data:/var/...`) for Docker-managed service/database persistence. Use a **Bind Mount** (`./host:/container`) when you want to view or edit files directly on your host machine.",
+          "hint": "Who manages the storage location?",
+          "tags": ["volumes", "persistence"]
+        },
+        {
+          "id": "fc-bridge-dns",
+          "block_type": "flashcard",
+          "title": "Default Bridge vs User-Defined Network",
+          "front": "Why can't containers resolve each other by name on Docker's default `bridge` network?",
+          "back": "Docker's default `bridge` network has **no embedded DNS** (only IP addressing). Creating a **user-defined network** (`docker network create`) or using **Docker Compose** enables automatic DNS resolution by container/service name.",
+          "hint": "What does a user-defined network add?",
+          "tags": ["networking", "dns"]
+        },
+        {
+          "id": "fc-compose-commands",
+          "block_type": "flashcard",
+          "title": "Docker Compose Lifecycle",
+          "front": "What is the difference between `docker compose down` and `docker compose down -v`?",
+          "back": "`docker compose down` stops and removes the containers and network while **keeping named volumes**. Adding `-v` (`down -v`) **also deletes the named volumes**.",
+          "hint": "Think about database persistence.",
+          "tags": ["compose", "volumes"]
+        }
+      ]
+    }
+  ]
+}
