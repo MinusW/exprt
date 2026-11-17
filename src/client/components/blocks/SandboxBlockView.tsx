@@ -467,6 +467,19 @@ export const SandboxBlockView: React.FC<Props> = ({ block }) => {
           <textarea
             value={code}
             onChange={(e) => setCode(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Tab') {
+                e.preventDefault();
+                const target = e.currentTarget;
+                const start = target.selectionStart;
+                const end = target.selectionEnd;
+                const next = code.slice(0, start) + '  ' + code.slice(end);
+                setCode(next);
+                requestAnimationFrame(() => {
+                  target.selectionStart = target.selectionEnd = start + 2;
+                });
+              }
+            }}
             rows={isExpanded ? 24 : layoutMode === 'split' ? 16 : Math.max(7, Math.min(18, code.split('\n').length + 2))}
             className="w-full bg-slate-900 text-emerald-300 font-mono text-xs sm:text-sm p-2 outline-none resize-y selection:bg-emerald-900/50 leading-normal"
             spellCheck={false}

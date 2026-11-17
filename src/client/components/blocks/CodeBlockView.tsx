@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Check, Copy, FileCode, Info, Moon, Sun } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Check, Copy, FileCode, Info, Moon, Sun, Edit3, Eye, RotateCcw } from 'lucide-react';
 import type { CodeBlock } from '../../types.js';
 import { MathText } from '../MathText.js';
 import {
@@ -14,6 +14,8 @@ interface Props {
 
 export const CodeBlockView: React.FC<Props> = ({ block }) => {
   const [copied, setCopied] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [code, setCode] = useState(block.code);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     try {
       return (localStorage.getItem('study_code_theme') as 'dark' | 'light') || 'dark';
@@ -22,12 +24,18 @@ export const CodeBlockView: React.FC<Props> = ({ block }) => {
     }
   });
 
+  useEffect(() => {
+    setCode(block.code);
+    setIsEditing(false);
+  }, [block.id, block.code]);
+
+  const isModified = code !== block.code;
   const isLight = theme === 'light';
   const tokenClasses = isLight ? LIGHT_TOKEN_CLASSES : DARK_TOKEN_CLASSES;
-  const lines = block.code.split('\n');
+  const lines = code.split('\n');
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(block.code);
+    navigator.clipboard.writeText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -80,6 +88,40 @@ export const CodeBlockView: React.FC<Props> = ({ block }) => {
         </div>
 
         <div className="flex items-center space-x-1.5">
+          {isModified && (
+            <button
+              type="button"
+              onClick={() => setCode(block.code)}
+              className={`flex items-center space-x-1 px-2 py-1 rounded transition-colors ${
+                isLight
+                  ? 'bg-white hover:bg-slate-200 text-slate-700 border border-slate-200'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'
+              }`}
+              title="Reset to original code"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span className="text-[11px] font-sans hidden sm:inline">Reset</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsEditing((v) => !v)}
+            className={`flex items-center space-x-1 px-2 py-1 rounded transition-colors ${
+              isEditing
+                ? 'bg-sky-600 text-white'
+                : isLight
+                ? 'bg-white hover:bg-slate-200 text-slate-700 border border-slate-200'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'
+            }`}
+            title={isEditing ? 'Switch back to highlighted view' : 'Edit this code snippet'}
+          >
+            {isEditing ? <Eye className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
+            <span className="text-[11px] font-sans hidden sm:inline">
+              {isEditing ? 'Done' : 'Edit'}
+            </span>
+          </button>
+
           <button
             type="button"
             onClick={handleToggleTheme}
@@ -112,8 +154,36 @@ export const CodeBlockView: React.FC<Props> = ({ block }) => {
         </div>
       </div>
 
-      {/* Code with Line Numbers, Syntax Highlighting, and Clean Callout Annotations */}
+      {/* Code Editor or Highlighted View */}
       <div className="p-4 overflow-x-auto">
+        {isEditing ? (
+          <textarea
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Tab') {
+                e.preventDefault();
+                const target = e.currentTarget;
+                const start = target.selectionStart;
+                const end = target.selectionEnd;
+                const next = code.slice(0, start) + '  ' + code.slice(end);
+                setCode(next);
+                requestAnimationFrame(() => {
+                  target.selectionStart = target.selectionEnd = start + 2;
+                });
+              }
+            }}
+            rows={Math.max(5, Math.min(28, lines.length + 1))}
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+            className={`w-full font-mono text-xs sm:text-[13px] leading-6 p-2 rounded-lg border outline-none resize-y ${
+              isLight
+                ? 'bg-white text-slate-900 border-slate-300 focus:border-sky-500'
+                : 'bg-slate-900 text-slate-100 border-slate-700 focus:border-sky-500'
+            }`}
+          />
+        ) : (
         <table className="w-full border-collapse">
           <tbody>
             {lines.map((line, idx) => {
@@ -180,6 +250,7 @@ export const CodeBlockView: React.FC<Props> = ({ block }) => {
             })}
           </tbody>
         </table>
+        )}
       </div>
     </div>
   );

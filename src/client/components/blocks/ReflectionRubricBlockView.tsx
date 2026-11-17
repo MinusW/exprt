@@ -72,6 +72,20 @@ export const ReflectionRubricBlockView: React.FC<Props> = ({
           <textarea
             value={note}
             onChange={handleTextChange}
+            onKeyDown={(e) => {
+              if (e.key === 'Tab') {
+                e.preventDefault();
+                const target = e.currentTarget;
+                const start = target.selectionStart;
+                const end = target.selectionEnd;
+                const next = note.slice(0, start) + '  ' + note.slice(end);
+                setNote(next);
+                onSaveNote(next);
+                requestAnimationFrame(() => {
+                  target.selectionStart = target.selectionEnd = start + 2;
+                });
+              }
+            }}
             placeholder="Type your reflection, synthesis, or answers here before viewing the rubric..."
             rows={5}
             className="w-full p-3 text-xs sm:text-sm text-slate-800 border border-slate-200 rounded-xl focus:border-slate-500 focus:ring-2 focus:ring-slate-200 outline-none leading-relaxed resize-y bg-slate-50/40"
