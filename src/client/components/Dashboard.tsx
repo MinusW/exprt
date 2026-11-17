@@ -5,9 +5,13 @@ import {
   ArrowRight,
   BookOpen,
   BrainCircuit,
+  GitFork,
+  X,
 } from 'lucide-react';
 import { type Guide, type UserProgressData, type UserSrsData, getGuideSections } from '../types.js';
 import { MathText } from './MathText.js';
+import { KrokiBlockView } from './blocks/KrokiBlockView.js';
+import { reduceTransitiveEdges } from '../utils/graph.js';
 
 interface Props {
   guides: Guide[];
@@ -28,6 +32,7 @@ export const Dashboard: React.FC<Props> = ({
   onToggleGuideComplete,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [showDependencyGraph, setShowDependencyGraph] = useState(false);
 
   const now = Date.now();
   const dueSrsCount = srsData?.items.filter((i) => i.due_date <= now).length || 0;
@@ -93,6 +98,45 @@ export const Dashboard: React.FC<Props> = ({
     }
     return map;
   }, [filteredGuides]);
+
+  // Transitive-reduced course dependency graph (only computed when opened)
+  const dependencyGraphSource = useMemo(() => {
+    if (!showDependencyGraph || guides.length === 0) return '';
+    const lines = ['graph LR'];
+    lines.push('  classDef completed fill:#d1fae5,stroke:#059669,stroke-width:2px,color:#065f46;');
+    lines.push('  classDef inprogress fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e40af;');
+    lines.push('  classDef review fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#92400e;');
+    lines.push('  classDef notstarted fill:#f1f5f9,stroke:#94a3b8,stroke-width:1.5px,color:#475569;');
+
+    const rawEdges: Array<{ from: string; to: string }> = [];
+    for (const g of guides) {
+      const cleanId = g.id.replace(/-/g, '_');
+      const safeTitle = g.title.replace(/["\(\)\[\]]/g, '');
+      const status = getGuideStatus(g);
+      const styleClass =
+        status === 'completed'
+          ? 'completed'
+          : status === 'in-progress'
+          ? 'inprogress'
+          : status === 'needs-review'
+          ? 'review'
+          : 'notstarted';
+
+      lines.push(`  ${cleanId}["${safeTitle}"]:::${styleClass}`);
+
+      if (g.prerequisites && g.prerequisites.length > 0) {
+        for (const prereqId of g.prerequisites) {
+          rawEdges.push({ from: prereqId, to: g.id });
+        }
+      }
+    }
+
+    for (const { from, to } of reduceTransitiveEdges(rawEdges)) {
+      lines.push(`  ${from.replace(/-/g, '_')} --> ${to.replace(/-/g, '_')}`);
+    }
+
+    return lines.join('\n');
+  }, [showDependencyGraph, guides, progress]);
 
   const renderGuideCard = (guide: Guide) => {
     const status = getGuideStatus(guide);
@@ -189,6 +233,20 @@ export const Dashboard: React.FC<Props> = ({
           />
         </div>
 
+        <button
+          type="button"
+          onClick={() => setShowDependencyGraph((v) => !v)}
+          className={`inline-flex items-center justify-center space-x-2 px-4 py-2.5 border text-xs sm:text-sm font-semibold rounded-xl transition shadow-2xs whitespace-nowrap ${
+            showDependencyGraph
+              ? 'bg-slate-900 border-slate-900 text-white'
+              : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+          }`}
+          title="View course prerequisite diagram"
+        >
+          <GitFork className="w-4 h-4" />
+          <span>Dependencies</span>
+        </button>
+
         {dueSrsCount > 0 && onNavigateToSrs && (
           <button
             onClick={onNavigateToSrs}
@@ -199,6 +257,54 @@ export const Dashboard: React.FC<Props> = ({
           </button>
         )}
       </div>
+
+      {/* Collapsible Course Dependency Diagram */}
+      {showDependencyGraph && dependencyGraphSource && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+          <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+            <div className="flex items-center space-x-2">
+              <GitFork className="w-4 h-4 text-slate-700" />
+              <h3 className="text-sm font-bold text-slate-800">Course Dependencies</h3>
+            </div>
+            <div className="flex items-center space-x-3 text-[11px]">
+              <span className="flex items-center space-x-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                <span className="text-slate-600">Completed</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span>
+                <span className="text-slate-600">In Progress</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>
+                <span className="text-slate-600">Needs Review</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-300 inline-block"></span>
+                <span className="text-slate-600">Not Started</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowDependencyGraph(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700"
+                title="Close diagram"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <KrokiBlockView
+            block={{
+              id: 'curriculum-graph',
+              block_type: 'kroki',
+              diagram_type: 'mermaid',
+              source: dependencyGraphSource,
+              bookmarkable: false,
+            }}
+          />
+        </div>
+      )}
 
       {/* Category Rows (Horizontal Scroll per Category with Category Progress) */}
       {Object.keys(groupedByCategory).length === 0 ? (
