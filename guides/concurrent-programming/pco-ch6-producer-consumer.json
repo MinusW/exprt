@@ -1,8 +1,8 @@
 {
   "id": "pco-ch6-producer-consumer",
   "title": "Chapter 6: The Producer-Consumer Problem",
-  "description": "Synchronizing producers and consumers over single-slot (Buffer1a) and circular N-slot buffers (BufferNa and optimized BufferN with passing-the-baton), plus semaphore ordering and splitting exercises.",
-  "estimated_minutes": 45,
+  "description": "Complete study of the Producer-Consumer problem: problem variations, AbstractBuffer framework, single-slot Buffer1a, circular buffer ambiguity, broken vs. mutex-protected BufferNa, optimized BufferN with passing-the-baton (passage de témoin), and Exercises 1–2.",
+  "estimated_minutes": 60,
   "category": "Concurrent Programming",
   "track": "PCO - Programmation Concurrente (TE1)",
   "track_order": 6,
@@ -22,54 +22,372 @@
     {
       "title": "PCO Chapter 5: Producteurs-consommateurs",
       "url_or_path": "sources/PCO-TE1/PCO_5_prodcons.pdf",
-      "notes": "Slides 1-29: Constraints, AbstractBuffer, Buffer1a, BufferNa, optimized BufferN, Exercises 1 & 2."
+      "notes": "Slides 1-29: Problem variations, Constraints, AbstractBuffer, Buffer1a, Circular Buffer ambiguity, naive & correct BufferNa, optimized BufferN (passage de témoin), Comparison, and Exercises 1 & 2."
     }
   ],
   "sections": [
     {
-      "id": "sec-prodcons-problem",
-      "title": "1. Problem Statement & Single-Slot Buffer (`Buffer1a`)",
-      "description": "The 3 fundamental constraints and the 2-semaphore single-slot solution.",
+      "id": "sec-problem-and-single-slot",
+      "title": "1. Problem Variations, Framework & Single-Slot Buffer (Buffer1a)",
+      "description": "Variations, the 3 fundamental constraints, conceptual pseudo-code, AbstractBuffer<T>, and the 2-semaphore single-slot solution.",
       "blocks": [
         {
-          "id": "th-prodcons-constraints",
+          "id": "th-problem-variations",
           "block_type": "markdown",
-          "title": "The 3 Producer-Consumer Constraints",
+          "title": "Problem Statement, Variations & Conceptual Pseudo-Code (Slides 3–8)",
           "bookmarkable": true,
-          "content": "Producers call `buffer->put(item)` and consumers call `buffer->get()` on a shared `AbstractBuffer<T>`:\n\n1. **Consume Once:** Every item in the buffer is consumed **at most once**.\n2. **FIFO Order:** Items are consumed in the **exact order** they were produced.\n3. **No Premature Overwrite:** If the buffer is full, a producer must wait until a slot is freed; if empty, a consumer must wait until an item is deposited.\n\n### Single-Slot Buffer (`Buffer1a`, size = 1)\nTwo semaphores maintain the invariant `waitEmpty + waitFull = 1`:\n* `waitEmpty(1)` — `1` when the slot is empty (producer can write)\n* `waitFull(0)` — `1` when the slot is full (consumer can read)\n\n```cpp\nvoid put(T item) override {\n    waitEmpty.acquire();\n    element = item;\n    waitFull.release();\n}\nT get() override {\n    T item;\n    waitFull.acquire();\n    item = element;\n    waitEmpty.release();\n    return item;\n}\n```"
+          "content": "Two types of threads must exchange data through a shared buffer (**tampon**): **producers** (writing items) and **consumers** (reading items).\n\n### Problem Variations (Slides 3–5)\n* **Buffer capacity:**\n  * **Single-slot buffer** (`size = 1`): holds at most one item at a time.\n  * **Multiple-slot buffer** (`size = N`, e.g. `size = 4`): holds up to $N$ items in FIFO order.\n* **Thread multiplicity:**\n  * **1 Producer / 1 Consumer (1P/1C)**\n  * **$N$ Producers / $M$ Consumers (NP/MC)**\n\n### The 3 Fundamental Constraints (Slide 6)\n1. **Consume Once:** Every item placed in the buffer is consumed **only once** (*qu'une seule fois*).\n2. **FIFO Order:** Items are consumed in the **exact order** in which they were produced.\n3. **No Premature Overwrite:** If the buffer is full, a producer must wait until a slot is freed; if empty, a consumer must wait until an item is deposited.\n\n### Conceptual Pseudo-Code (Slides 7–8)\n* **Production:** wait until the buffer has space, deposit the item, signal the consumer.\n* **Consumption:** wait until the buffer has content, withdraw the item, signal the producer.\n\n```text\nProducteur                          Consommateur\nDepose(item) {                      item Preleve() {\n  Tant que le tampon est plein:       Tant que le tampon est vide:\n    Attendre                            Attendre\n  Déposer l'item                      Retirer l'item\n  Signaler ceci au consommateur       Signaler ceci au producteur\n}                                   }\n```"
+        },
+        {
+          "id": "code-abstract-buffer-tasks",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "AbstractBuffer<T> & Producer/Consumer Task Framework (Slides 9–10)",
+          "filename": "abstract_buffer.cpp",
+          "code": "// Slide 9: Abstract template base class for all buffer implementations\ntemplate<typename T>\nclass AbstractBuffer {\npublic:\n    virtual void put(T item) = 0;\n    virtual T get() = 0;\n};\n\n// Slide 10: Producer and consumer tasks sharing a buffer\nstatic AbstractBuffer<ITEM> *buffer;\n\nvoid producerTask() {\n    ITEM item;\n    while (true) {\n        // produire item\n        buffer->put(item);\n    }\n}\n\nvoid consumerTask() {\n    ITEM item;\n    while (true) {\n        item = buffer->get();\n        // consommer item\n    }\n}\n\nint main(void) {\n    buffer = new Buffer1<ITEM>();\n    PcoThread prod(producerTask);\n    PcoThread cons(consumerTask);\n    prod.join();\n    cons.join();\n    return 0;\n}",
+          "highlight_lines": [4, 5, 29],
+          "annotations": [
+            {
+              "line": 4,
+              "note": "Pure virtual put(T item): blocks if the buffer is full, then inserts item."
+            },
+            {
+              "line": 5,
+              "note": "Pure virtual get(): blocks if the buffer is empty, then removes and returns the oldest item."
+            },
+            {
+              "line": 29,
+              "note": "Polymorphic instantiation: swapping Buffer1a, BufferNa, or BufferN requires changing only this line."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "code-buffer1a",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Single-Slot Buffer: Buffer1a<T> (Slides 12–13)",
+          "filename": "buffer1a.cpp",
+          "code": "template<typename T> class Buffer1a : public AbstractBuffer<T> {\npublic:\n    Buffer1a() : waitEmpty(1) {\n        // waitFull is default-initialized to 0\n    }\n\n    virtual ~Buffer1a() {}\n\n    void put(T item) override {\n        waitEmpty.acquire();\n        element = item;\n        waitFull.release();\n    }\n\n    T get() override {\n        T item;\n        waitFull.acquire();\n        item = element;\n        waitEmpty.release();\n        return item;\n    }\n\nprotected:\n    T element;\n    PcoSemaphore waitEmpty, waitFull;\n};",
+          "highlight_lines": [3, 10, 12, 17, 19],
+          "annotations": [
+            {
+              "line": 3,
+              "note": "waitEmpty starts at 1 (buffer is initially empty); waitFull starts at 0. Invariant: waitEmpty + waitFull = 1."
+            },
+            {
+              "line": 10,
+              "note": "Producer blocks until the slot is empty (waitEmpty == 1), consuming the empty-slot token."
+            },
+            {
+              "line": 12,
+              "note": "Signals a waiting consumer that the slot now holds an item."
+            },
+            {
+              "line": 17,
+              "note": "Consumer blocks until the slot is full (waitFull == 1)."
+            },
+            {
+              "line": 19,
+              "note": "Signals a waiting producer that the slot is free again."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "fc-prodcons-constraints",
+          "block_type": "flashcard",
+          "title": "Buffer1a Semaphore Invariant",
+          "front": "In `Buffer1a<T>`, what are the initial values of `waitEmpty` and `waitFull`, and what invariant do they maintain?",
+          "back": "* `waitEmpty` starts at **1** (buffer is initially empty so a producer can enter).\n* `waitFull` starts at **0** (consumers must wait for the first item).\n* **Invariant:** `waitEmpty + waitFull = 1` (at most one thread accesses `element` at any moment, so no separate `mutex` is needed even with multiple producers/consumers).",
+          "hint": "Think about what state the single slot starts in and whether a producer and consumer can ever be inside the critical region simultaneously.",
+          "tags": ["pco", "buffer1a", "semaphores"]
+        },
+        {
+          "id": "qz-buffer1a-invariant",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "code-buffer1a",
+          "question": "In `Buffer1a<T>`, why is no separate `mutex` semaphore needed even if there are multiple producers and multiple consumers?",
+          "options": [
+            "Because `waitEmpty + waitFull = 1`: at most one producer OR one consumer can be between `acquire()` and `release()` at any time.",
+            "Because `T element` is copied atomically by the CPU.",
+            "Because `PcoThread` automatically locks shared member variables.",
+            "Because `waitEmpty` is initialized to `size` instead of `1`."
+          ],
+          "correct_answer": "Because `waitEmpty + waitFull = 1`: at most one producer OR one consumer can be between `acquire()` and `release()` at any time.",
+          "explanation": "Since `waitEmpty` starts at 1 and `waitFull` starts at 0, only one thread can acquire a token before releasing the complementary token. Thus `element` is never accessed concurrently. (By contrast, in a multi-slot buffer of size N > 1, multiple tokens exist, so a `mutex` becomes necessary.)",
+          "hints": [
+            "Count the total number of tokens circulating between `waitEmpty` and `waitFull`.",
+            "Can two producers both pass `waitEmpty.acquire()` before a consumer calls `waitEmpty.release()`?"
+          ],
+          "bookmarkable": true
         }
       ]
     },
     {
-      "id": "sec-circular-buffer",
-      "title": "2. Circular N-Slot Buffer (`BufferNa` vs. Optimized `BufferN`)",
-      "description": "Managing writePointer, readPointer, mutual exclusion, and passing the baton.",
+      "id": "sec-circular-and-naive",
+      "title": "2. Circular Buffer, Pointer Ambiguity & The Broken 2-Semaphore Attempt",
+      "description": "Modulo indexing, why writePointer == readPointer is ambiguous (Slide 17), and why BufferNa without mutex fails for N producers or M consumers.",
+      "blocks": [
+        {
+          "id": "th-circular-ambiguity",
+          "block_type": "markdown",
+          "title": "Circular Buffer Indexing & The writePointer == readPointer Ambiguity (Slides 15–17)",
+          "bookmarkable": true,
+          "content": "For a buffer of capacity $N$, we store items in a **circular array** with two indices initialized to `0`:\n* `writePointer`: index where the next producer writes, then advances modulo $N$:\n  ```cpp\n  elements[writePointer] = item;\n  writePointer = (writePointer + 1) % BUFFER_SIZE;\n  ```\n* `readPointer`: index where the next consumer reads, then advances modulo $N$:\n  ```cpp\n  item = elements[readPointer];\n  readPointer = (readPointer + 1) % BUFFER_SIZE;\n  ```\n\n### Slide 17 Question: If `writePointer == readPointer`, is the buffer (1) Empty or (2) Full?\n**It is ambiguous — it could be EITHER empty OR full!**\n* Initially, `writePointer == 0` and `readPointer == 0` $\\rightarrow$ the buffer is **empty**.\n* If a producer writes $N$ items without any consumer reading, `writePointer` wraps around modulo $N$ back to `0 == readPointer` $\\rightarrow$ the buffer is **full**.\n\n### How `BufferNa` vs. `BufferN` Resolve the Ambiguity\n* **`BufferNa`** resolves it **implicitly via semaphore counts**: `waitNotFull` (initialized to `size`) tracks free slots, and `waitNotEmpty` (initialized to `0`) tracks filled slots. The code never compares `writePointer` and `readPointer`.\n* **`BufferN`** resolves it **explicitly via a counter variable `nbElements`** (initialized to `0`, protected by `mutex`): empty iff `nbElements == 0`, full iff `nbElements == bufferSize`."
+        },
+        {
+          "id": "code-bufferna-broken",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "1st Broken Attempt: BufferNa Without mutex (Slides 18–20)",
+          "filename": "bufferna_broken.cpp",
+          "code": "#include <pcosynchro/pcosemaphore>\n\ntemplate<typename T> class BufferNa : public AbstractBuffer<T> {\nprotected:\n    std::vector<T> elements;\n    int writePointer;\n    int readPointer;\n    int bufferSize;\n    PcoSemaphore waitNotFull, waitNotEmpty;\n\npublic:\n    BufferNa(unsigned int size) : elements(size), writePointer(0),\n        readPointer(0), bufferSize(size),\n        waitNotFull(size), waitNotEmpty(0) {}\n\n    virtual ~BufferNa() {}\n\n    void put(T item) override {\n        waitNotFull.acquire();\n        elements[writePointer] = item;                 // RACE if N > 1 producers!\n        writePointer = (writePointer + 1) % bufferSize; // RACE!\n        waitNotEmpty.release();\n    }\n\n    T get() override {\n        T item;\n        waitNotEmpty.acquire();\n        item = elements[readPointer];                   // RACE if M > 1 consumers!\n        readPointer = (readPointer + 1) % bufferSize;   // RACE!\n        waitNotFull.release();\n        return item;\n    }\n};",
+          "highlight_lines": [20, 21, 28, 29],
+          "annotations": [
+            {
+              "line": 20,
+              "note": "BUG (N > 1 producers): Two producers can both pass waitNotFull.acquire() when >= 2 slots are free and overwrite the same elements[writePointer]!"
+            },
+            {
+              "line": 21,
+              "note": "BUG: Concurrent read-modify-write on writePointer can lose an increment, leaving a slot uninitialized."
+            },
+            {
+              "line": 28,
+              "note": "BUG (M > 1 consumers): Two consumers can both pass waitNotEmpty.acquire() when >= 2 items are present and read the exact same item!"
+            },
+            {
+              "line": 29,
+              "note": "BUG: Concurrent read-modify-write on readPointer can skip an item in the buffer."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "th-why-broken-npmc",
+          "block_type": "markdown",
+          "title": "Why the 2-Semaphore Attempt Works for 1P/1C but Breaks for NP/MC",
+          "bookmarkable": true,
+          "content": "* **Why it works for 1 Producer / 1 Consumer (1P/1C):**\n  * Only **one** thread ever reads or modifies `writePointer` and writes to `elements[writePointer]`.\n  * Only **one** thread ever reads or modifies `readPointer` and reads `elements[readPointer]`.\n  * `waitNotFull` and `waitNotEmpty` guarantee that the producer and consumer never access the same array slot simultaneously.\n* **Why it breaks for $N$ Producers or $M$ Consumers (NP/MC):**\n  * Suppose `size = 4` and the buffer is empty (`waitNotFull = 4`). Two producers $P_1$ and $P_2$ both call `waitNotFull.acquire()` and both succeed (`waitNotFull` drops to 2).\n  * Both read `writePointer == 0`.\n  * $P_1$ writes `elements[0] = item1`; $P_2$ overwrites `elements[0] = item2` (**lost item**!).\n  * Both compute `(0 + 1) % 4` or race on incrementing `writePointer`, potentially advancing it to `2` while `elements[1]` was never written (**garbage read** by a consumer!).\n  * Symmetrically, two consumers $C_1, C_2$ can both pass `waitNotEmpty.acquire()` and read the same `elements[readPointer]`, violating Constraint 1 (consume only once)."
+        },
+        {
+          "id": "fc-pointer-ambiguity",
+          "block_type": "flashcard",
+          "title": "Circular Buffer Ambiguity",
+          "front": "In a circular buffer of size $N$, if `writePointer == readPointer`, is the buffer empty or full? How do `BufferNa` and `BufferN` resolve this?",
+          "back": "**It is ambiguous** — `writePointer == readPointer` occurs both when the buffer is **empty** (e.g., initially at 0) and when it is **full** (after $N$ unconsumed writes wrap around).\n* **`BufferNa`** avoids testing pointers altogether by tracking free/filled slots in `waitNotFull(size)` and `waitNotEmpty(0)`.\n* **`BufferN`** tracks the exact occupancy in a dedicated `nbElements` counter.",
+          "hint": "Think about what happens after 0 writes vs. N writes with 0 reads.",
+          "tags": ["pco", "circular-buffer", "writePointer"]
+        },
+        {
+          "id": "qz-naive-bufferna-race",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "code-bufferna-broken",
+          "question": "Under which configuration does the 2-semaphore `BufferNa` (without `mutex`) fail?",
+          "options": [
+            "Whenever there are 2 or more producers OR 2 or more consumers (NP/MC).",
+            "Even with 1 producer and 1 consumer, because `writePointer` and `readPointer` collide.",
+            "Only when `bufferSize == 1`.",
+            "Only when the buffer becomes completely full."
+          ],
+          "correct_answer": "Whenever there are 2 or more producers OR 2 or more consumers (NP/MC).",
+          "explanation": "With 1P/1C, only one thread ever touches `writePointer` and only one ever touches `readPointer`, while `waitNotFull`/`waitNotEmpty` keep them off the same slot. With >= 2 producers (or >= 2 consumers), multiple threads can pass `waitNotFull.acquire()` (or `waitNotEmpty.acquire()`) simultaneously and race on `elements[writePointer]` and `writePointer` (or `readPointer`).",
+          "hints": [
+            "Can two producers pass `waitNotFull.acquire()` at the same time when `bufferSize = 4`?",
+            "What happens if both producers read `writePointer == 0` before either increments it?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-bufferna-correct",
+      "title": "3. Correct N-Slot Buffer: BufferNa<T> (3 Semaphores)",
+      "description": "Adding a mutex semaphore to protect circular buffer state across N producers and M consumers.",
       "blocks": [
         {
           "id": "diag-circular-buffer",
           "block_type": "kroki",
           "diagram_type": "mermaid",
-          "title": "Circular Buffer & BufferNa Synchronization Flow",
+          "title": "BufferNa Synchronization Flow (3 Semaphores)",
           "caption": "BufferNa uses waitNotFull(size) and waitNotEmpty(0) for capacity/item counting, plus mutex(1) to protect writePointer, readPointer, and elements[].",
           "source": "graph LR\n  Prod[\"Producer: put(item)\"] --> WNF[\"waitNotFull.acquire()\"]\n  WNF --> M1[\"mutex.acquire()\"]\n  M1 --> Write[\"elements[writePointer] = item\\nwritePointer = (writePointer + 1) % size\"]\n  Write --> R1[\"waitNotEmpty.release()\"]\n  R1 --> U1[\"mutex.release()\"]\n\n  Cons[\"Consumer: get()\"] --> WNE[\"waitNotEmpty.acquire()\"]\n  WNE --> M2[\"mutex.acquire()\"]\n  M2 --> Read[\"item = elements[readPointer]\\nreadPointer = (readPointer + 1) % size\"]\n  Read --> R2[\"waitNotFull.release()\"]\n  R2 --> U2[\"mutex.release()\"]\n  classDef sem fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px;\n  class WNF,M1,R1,U1,WNE,M2,R2,U2 sem;",
           "bookmarkable": true
         },
         {
-          "id": "code-bufferna-and-buffern",
+          "id": "code-bufferna-full",
           "block_type": "code",
           "language": "cpp",
-          "title": "BufferNa (3 Semaphores) vs. BufferN (Passing the Baton)",
-          "filename": "buffer_n.cpp",
-          "code": "// BufferNa: mutex(1), waitNotFull(size), waitNotEmpty(0)\nvoid put(T item) override {\n    waitNotFull.acquire();\n    mutex.acquire();\n    elements[writePointer] = item;\n    writePointer = (writePointer + 1) % bufferSize;\n    waitNotEmpty.release();\n    mutex.release();\n}\n\n// BufferN (Optimized: \"passage de témoin\")\n// mutex(1), waitProd(0), waitConso(0), nbElements(0), nbWaitingProd(0), nbWaitingConso(0)\nvoid put_opt(T item) {\n    mutex.acquire();\n    if (nbElements == bufferSize) {\n        nbWaitingProd += 1;\n        mutex.release();\n        waitProd.acquire(); // receives mutex ownership when woken!\n    }\n    elements[writePointer] = item;\n    writePointer = (writePointer + 1) % bufferSize;\n    nbElements++;\n    if (nbWaitingConso > 0) {\n        nbWaitingConso -= 1;\n        waitConso.release(); // passes baton (mutex) to waiting consumer!\n    } else {\n        mutex.release();\n    }\n}",
-          "highlight_lines": [18, 25, 26],
+          "title": "Complete Correct BufferNa<T> Class (Slides 21–22)",
+          "filename": "bufferna.cpp",
+          "code": "#include <PcoSemaphore>\n\ntemplate<typename T> class BufferNa : public AbstractBuffer<T> {\nprotected:\n    std::vector<T> elements;\n    int writePointer;\n    int readPointer;\n    int bufferSize;\n    PcoSemaphore mutex, waitNotFull, waitNotEmpty;\n\npublic:\n    BufferNa(unsigned int size) : elements(size), writePointer(0),\n        readPointer(0), bufferSize(size),\n        mutex(1), waitNotFull(size), waitNotEmpty(0) {\n    }\n\n    virtual ~BufferNa() {}\n\n    void put(T item) override {\n        waitNotFull.acquire();\n        mutex.acquire();\n        elements[writePointer] = item;\n        writePointer = (writePointer + 1) % bufferSize;\n        waitNotEmpty.release();\n        mutex.release();\n    }\n\n    T get() override {\n        T item;\n        waitNotEmpty.acquire();\n        mutex.acquire();\n        item = elements[readPointer];\n        readPointer = (readPointer + 1) % bufferSize;\n        waitNotFull.release();\n        mutex.release();\n        return item;\n    }\n};",
+          "highlight_lines": [9, 14, 20, 21, 30, 31],
           "annotations": [
             {
-              "line": 18,
-              "note": "Notice: after waitProd.acquire(), the woken producer does NOT re-acquire mutex—ownership was passed to it!"
+              "line": 9,
+              "note": "Three semaphores: mutex(1) for mutual exclusion, waitNotFull(size) for free slots, waitNotEmpty(0) for filled slots."
             },
             {
-              "line": 25,
-              "note": "If a consumer is waiting, we release waitConso instead of mutex, transferring the critical section directly ('passage de témoin')."
+              "line": 20,
+              "note": "Wait for a free slot FIRST (before acquiring mutex) to avoid holding mutex while blocked!"
+            },
+            {
+              "line": 21,
+              "note": "Acquire mutex so only one thread updates writePointer and elements[] at a time."
+            },
+            {
+              "line": 30,
+              "note": "Wait for an available item FIRST (before acquiring mutex)."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "fc-bufferna-semaphores",
+          "block_type": "flashcard",
+          "title": "BufferNa Semaphore Roles & Initial Values",
+          "front": "What are the 3 semaphores in `BufferNa(unsigned int size)`, their initial values, and the order of `acquire()` calls?",
+          "back": "* `mutex(1)` — protects `elements[]`, `writePointer`, `readPointer`.\n* `waitNotFull(size)` — counts free slots (blocks producers when 0).\n* `waitNotEmpty(0)` — counts available items (blocks consumers when 0).\n\n**Critical order:** `waitNotFull.acquire()` / `waitNotEmpty.acquire()` MUST come **before** `mutex.acquire()`, otherwise a blocked thread would hold `mutex` and cause a **deadlock**.",
+          "hint": "What happens if a thread acquires mutex first and then blocks waiting for the buffer to become non-full?",
+          "tags": ["pco", "bufferna", "semaphores"]
+        }
+      ]
+    },
+    {
+      "id": "sec-buffern-optimized",
+      "title": "4. Optimized BufferN<T> & Passing the Baton (Passage de Témoin)",
+      "description": "Reducing semaphore operations in the uncontended case using explicit waiting counters and passing-the-baton ownership transfer.",
+      "blocks": [
+        {
+          "id": "code-buffern-full",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Complete Optimized BufferN<T> Class (Slides 23–25)",
+          "filename": "buffern.cpp",
+          "code": "#include <PcoSemaphore>\n\ntemplate<typename T> class BufferN : public AbstractBuffer<T> {\nprotected:\n    std::vector<T> elements;\n    int writePointer, readPointer, nbElements, bufferSize;\n    PcoSemaphore mutex, waitProd, waitConso;\n    unsigned nbWaitingProd, nbWaitingConso;\n\npublic:\n    BufferN(unsigned int size) : elements(size), writePointer(0),\n        readPointer(0), nbElements(0), bufferSize(size),\n        mutex(1), waitProd(0), waitConso(0),\n        nbWaitingProd(0), nbWaitingConso(0) {\n    }\n\n    virtual ~BufferN() {}\n\n    void put(T item) override {\n        mutex.acquire();\n        if (nbElements == bufferSize) {\n            nbWaitingProd += 1;\n            mutex.release();\n            waitProd.acquire(); // receives baton (mutex ownership)!\n        }\n        elements[writePointer] = item;\n        writePointer = (writePointer + 1) % bufferSize;\n        nbElements++;\n        if (nbWaitingConso > 0) {\n            nbWaitingConso -= 1;\n            waitConso.release(); // passes baton to waiting consumer!\n        } else {\n            mutex.release();\n        }\n    }\n\n    T get() override {\n        T item;\n        mutex.acquire();\n        if (nbElements == 0) {\n            nbWaitingConso += 1;\n            mutex.release();\n            waitConso.acquire(); // receives baton (mutex ownership)!\n        }\n        item = elements[readPointer];\n        readPointer = (readPointer + 1) % bufferSize;\n        nbElements--;\n        if (nbWaitingProd > 0) {\n            nbWaitingProd -= 1;\n            waitProd.release(); // passes baton to waiting producer!\n        } else {\n            mutex.release();\n        }\n        return item;\n    }\n};",
+          "highlight_lines": [21, 24, 29, 30, 31, 40, 43, 48, 49, 50],
+          "annotations": [
+            {
+              "line": 21,
+              "note": "Uses `if` (NOT `while`) because baton passing guarantees the buffer is non-full when woken."
+            },
+            {
+              "line": 24,
+              "note": "Woken producer does NOT call mutex.acquire() again — the consumer that called waitProd.release() kept mutex locked and handed ownership to it."
+            },
+            {
+              "line": 30,
+              "note": "Signaler decrements nbWaitingConso while still holding mutex, before waking the consumer."
+            },
+            {
+              "line": 31,
+              "note": "Passes the baton: calls waitConso.release() INSTEAD of mutex.release()."
+            },
+            {
+              "line": 43,
+              "note": "Symmetric baton reception in get(): consumer resumes inside the critical section without re-acquiring mutex."
+            },
+            {
+              "line": 50,
+              "note": "Symmetric baton handoff to a waiting producer when nbWaitingProd > 0."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "diag-passing-the-baton",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Passing the Baton (Passage de Témoin) Sequence",
+          "caption": "Consumer C1 blocks when nbElements == 0. Producer P1 deposits an item, keeps mutex locked, decrements nbWaitingConso, and passes the baton directly to C1 via waitConso.release().",
+          "source": "sequenceDiagram\n  participant C1 as Consumer C1\n  participant M as mutex (init 1)\n  participant WC as waitConso (init 0)\n  participant P1 as Producer P1\n\n  C1->>M: acquire() [mutex=0]\n  Note over C1: nbElements == 0 -> nbWaitingConso = 1\n  C1->>M: release() [mutex=1]\n  C1->>WC: acquire() [blocks]\n\n  P1->>M: acquire() [mutex=0]\n  Note over P1: writes item, nbElements = 1\n  Note over P1: nbWaitingConso > 0 -> nbWaitingConso = 0\n  P1->>WC: release() [wakes C1, mutex stays 0!]\n  Note over P1: P1 exits WITHOUT mutex.release()\n\n  WC-->>C1: C1 resumes (holds baton!)\n  Note over C1: reads item, nbElements = 0\n  Note over C1: nbWaitingProd == 0\n  C1->>M: release() [mutex=1]",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-passing-the-baton-deep",
+          "block_type": "markdown",
+          "title": "Deep Dive: The 4 Subtleties of Passing the Baton (Passage de Témoin)",
+          "bookmarkable": true,
+          "content": "`BufferN` uses the **Passing the Baton** (*passage de témoin*) pattern. Every detail of this pattern is coupled—changing any one breaks correctness:\n\n1. **Why is `mutex` NOT released when `nbWaitingConso > 0` (or `nbWaitingProd > 0`)?**\n   The exiting thread **transfers ownership** of the critical section directly to the woken thread. Because `mutex` stays at `0`, **no newcomer thread** can barge into `put()` or `get()` in between the `waitConso.release()` and the woken consumer resuming.\n2. **Why does the woken thread NOT re-acquire `mutex` after `waitProd.acquire()` / `waitConso.acquire()`?**\n   Because the signaler did **not** release `mutex`! The woken thread wakes up **already owning the logical lock** (`mutex == 0`). When it finishes its own work, *it* will either pass the baton to someone else or finally call `mutex.release()`.\n3. **Why does `if` work instead of `while`?**\n   With standard condition variables (Mesa semantics), a woken thread must re-check its condition in a `while` loop because a newcomer could steal the item/slot before the woken thread re-acquires the lock. Here, **no newcomer can enter** because `mutex` never became `1`! The condition (`nbElements > 0` for `get`, `nbElements < bufferSize` for `put`) is **guaranteed** to still hold when the woken thread resumes.\n4. **Why is `nbWaiting*` decremented by the signaler under `mutex`?**\n   `nbWaitingProd` and `nbWaitingConso` are shared state protected by `mutex`. Decrementing `nbWaitingConso -= 1` **before** calling `waitConso.release()` (while the signaler still holds `mutex`) ensures the count is exact at all times—if another thread later enters the critical section, it will never see a stale waiting count or issue a duplicate wakeup."
+        },
+        {
+          "id": "fc-passing-the-baton",
+          "block_type": "flashcard",
+          "title": "Passing the Baton: Why `if` Instead of `while`?",
+          "front": "In `BufferN<T>`, why is `if (nbElements == 0)` sufficient instead of `while (nbElements == 0)`?",
+          "back": "Because of **passing the baton** (*passage de témoin*): when a producer wakes a waiting consumer via `waitConso.release()`, it does **not** release `mutex`. Since `mutex` remains `0`, no other thread can enter the critical section and steal the item before the woken consumer runs, guaranteeing `nbElements > 0`.",
+          "hint": "Could any other consumer sneak in between `waitConso.release()` and `waitConso.acquire()` returning?",
+          "tags": ["pco", "buffern", "passing-the-baton"]
+        },
+        {
+          "id": "ref-baton-if-vs-while",
+          "block_type": "reflection_rubric",
+          "title": "Synthesis: What Breaks If You Release `mutex` Before `waitConso.release()` in `BufferN`?",
+          "prompt": "Suppose a student modifies `BufferN::put()` so that it always calls `mutex.release()` AND `waitConso.release()` (and changes `get()` to re-acquire `mutex` after `waitConso.acquire()`). What bug does this introduce if `get()` still uses `if (nbElements == 0)`?",
+          "self_check_criteria": [
+            "Identified that releasing `mutex` allows a newcomer consumer to enter `get()` before the woken consumer re-acquires `mutex`.",
+            "Explained that the newcomer consumer can consume the newly deposited item, bringing `nbElements` back to `0`.",
+            "Concluded that the woken consumer—using `if` instead of `while`—would skip re-checking `nbElements == 0` and read garbage from an empty buffer (and underflow `nbElements`!)."
+          ],
+          "model_answer": "If `mutex` is released before/alongside `waitConso.release()`, a fast newcomer consumer can acquire `mutex`, consume the single item (`nbElements` becomes 0), and exit. When the woken consumer finally acquires `mutex` after `waitConso.acquire()`, the `if (nbElements == 0)` check is NOT re-evaluated—it blindly reads `elements[readPointer]` from an empty buffer and decrements `nbElements` below 0. Without baton passing, you must use a `while` loop.",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-baton-mechanics",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-passing-the-baton-deep",
+          "question": "In `BufferN<T>::put()`, when `nbWaitingConso > 0` at the end of `put()`, what happens to `mutex`?",
+          "options": [
+            "`mutex` is NOT released by `put()`; ownership of the critical section is passed to the woken consumer via `waitConso.release()`.",
+            "`mutex.release()` is called first, then `waitConso.release()`.",
+            "`waitConso.release()` is called, and the woken consumer immediately calls `mutex.acquire()`.",
+            "`mutex` is released twice: once by `put()` and once by the woken consumer."
+          ],
+          "correct_answer": "`mutex` is NOT released by `put()`; ownership of the critical section is passed to the woken consumer via `waitConso.release()`.",
+          "explanation": "That is the essence of *passage de témoin*: `put()` keeps `mutex` at 0 and wakes one waiting consumer on `waitConso`. The woken consumer resumes directly inside the critical section without calling `mutex.acquire()`, and will release `mutex` (or pass the baton again) when it finishes.",
+          "hints": [
+            "Look at the `if (nbWaitingConso > 0) { ... } else { mutex.release(); }` branch in `BufferN::put()`.",
+            "Does the woken consumer call `mutex.acquire()` after `waitConso.acquire()`?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-comparison-exercises",
+      "title": "5. Comparison (BufferNa vs. BufferN) & Exercises 1–2",
+      "description": "Performance and complexity tradeoffs (Slide 26), swapping release/acquire order (Exercise 1, Slides 27–28), and splitting mutex (Exercise 2, Slide 29).",
+      "blocks": [
+        {
+          "id": "th-comparison-table",
+          "block_type": "markdown",
+          "title": "Comparison: BufferNa vs. BufferN (Slide 26)",
+          "bookmarkable": true,
+          "content": "| Criterion | `BufferNa` (3 Semaphores) | `BufferN` (Passing the Baton) |\n| :--- | :--- | :--- |\n| **Semaphore ops / call (uncontended)** | **Always 4** (`waitNotFull/Empty.acquire`, `mutex.acquire`, `waitNotEmpty/Full.release`, `mutex.release`) | **2** (`mutex.acquire`, `mutex.release`) when neither blocking nor waking |\n| **Semaphore ops / call (contended)** | **4** (plus OS blocking on semaphore) | **4** (`mutex.acquire`, `mutex.release`, `wait*.acquire`, and either `wait*.release` or `mutex.release`) |\n| **Code Complexity** | Simple, short, easy to verify | Higher complexity; relies on subtle baton-passing invariant |\n| **Fairness / Barging** | Woken threads still compete for `mutex` with newcomers | Baton handoff gives the critical section directly to the woken thread (prevents newcomer barging) |\n| **Can `mutex` be split?** | **Yes** (`mutexProd` + `mutexConso`) | **No** (both roles mutate `nbElements` and `nbWaiting*`) |"
+        },
+        {
+          "id": "code-exercise1-swapped-release",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Exercise 1: Swapping mutex.release() and waitX.release() in BufferNa (Slides 27–28)",
+          "filename": "exercise1_swapped_release.cpp",
+          "code": "void put(T item) override {\n    waitNotFull.acquire();\n    mutex.acquire();\n    elements[writePointer] = item;\n    writePointer = (writePointer + 1) % bufferSize;\n    mutex.release();          // Released BEFORE waitNotEmpty.release()\n    waitNotEmpty.release();\n}\n\nT get() override {\n    T item;\n    waitNotEmpty.acquire();\n    mutex.acquire();\n    item = elements[readPointer];\n    readPointer = (readPointer + 1) % bufferSize;\n    mutex.release();          // Released BEFORE waitNotFull.release()\n    waitNotFull.release();\n    return item;\n}",
+          "highlight_lines": [6, 7, 16, 17],
+          "annotations": [
+            {
+              "line": 6,
+              "note": "SAFE & SLIGHTLY BETTER: mutex is already free (1) when the consumer wakes up on line 7!"
+            },
+            {
+              "line": 16,
+              "note": "SAFE & SLIGHTLY BETTER: mutex is already free (1) when the producer wakes up on line 17!"
             }
           ],
           "bookmarkable": true
@@ -79,7 +397,50 @@
           "block_type": "markdown",
           "title": "Critical Analysis: Exercises 1 & 2 (Slides 27–29)",
           "bookmarkable": true,
-          "content": "* **Exercise 1 — Can we swap `waitNotEmpty.release()` and `mutex.release()` in `BufferNa`?**\n  **Yes!** Releasing `mutex` *before* `waitNotEmpty.release()` is actually **slightly better**: if a consumer wakes up immediately on `waitNotEmpty.release()`, `mutex` is already free so the consumer won't immediately block on `mutex.acquire()`. (Whereas acquiring `waitNotFull` and `mutex` at the *start* must NOT be swapped—that would deadlock!)\n* **Exercise 2 — Can we split `mutex` into two semaphores (`mutexProd` and `mutexConso`)?**\n  * **In `BufferNa`:** **Yes!** Producers only modify `writePointer` and consumers only modify `readPointer`, and `waitNotFull`/`waitNotEmpty` guarantee they never access the same slot simultaneously.\n  * **In `BufferN` (optimized):** **No!** Both producers and consumers read and modify the shared `nbElements`, `nbWaitingProd`, and `nbWaitingConso` variables—they *must* share a single `mutex`."
+          "content": "### Exercise 1: Swapping `release()` vs. Swapping `acquire()` in `BufferNa` (Slides 27–28)\n* **Can we swap the trailing `release()` calls (`mutex.release()` before `waitNotEmpty.release()`)?**\n  **Yes — and it is actually slightly better!** If a consumer is waiting on `waitNotEmpty` and wakes up immediately when `waitNotEmpty.release()` runs, `mutex` is **already `1`**, avoiding an extra block/context-switch on `mutex.acquire()`.\n* **Contrast — what if we swapped the leading `acquire()` calls (`mutex.acquire()` before `waitNotFull.acquire()`)?**\n  **DEADLOCK!** If the buffer is full, a producer acquires `mutex` (setting `mutex = 0`) and then blocks on `waitNotFull.acquire()`. Now no consumer can ever acquire `mutex` to call `get()` and `waitNotFull.release()`, freezing the system forever.\n\n### Exercise 2: Splitting `mutex` into `mutexProd` and `mutexConso` (Slide 29)\n* **In `BufferNa`:** **Yes, it works!**\n  Producers only read/modify `writePointer`, and consumers only read/modify `readPointer`. Meanwhile, `waitNotFull` and `waitNotEmpty` guarantee that a producer and a consumer never access the same array slot `elements[i]` simultaneously. Splitting `mutex` into `mutexProd(1)` and `mutexConso(1)` even **increases parallelism**, allowing one producer and one consumer to access different slots at the same time.\n* **In `BufferN` (optimized):** **No, it breaks!**\n  Both producers and consumers read and mutate the **shared** variables `nbElements`, `nbWaitingProd`, and `nbWaitingConso` (and pass the baton between roles). Without a single shared `mutex`, concurrent `nbElements++` and `nbElements--` cause data races, corrupt counts, and lost wakeups."
+        },
+        {
+          "id": "fc-swap-acquire-deadlock",
+          "block_type": "flashcard",
+          "title": "Exercise 1: Swapping `acquire()` vs. `release()` in BufferNa",
+          "front": "In `BufferNa`, what happens if you swap the order of (a) the two `release()` calls at the end, vs. (b) the two `acquire()` calls at the start?",
+          "back": "* **(a) Swapping `release()` calls (`mutex.release()` first):** **Safe & slightly better!** `mutex` is already unlocked when the woken thread resumes.\n* **(b) Swapping `acquire()` calls (`mutex.acquire()` first):** **DEADLOCK!** A producer blocking on `waitNotFull.acquire()` while holding `mutex` prevents any consumer from entering `get()` to free a slot.",
+          "hint": "Hold-and-wait on `mutex` while blocking on a condition semaphore.",
+          "tags": ["pco", "deadlock", "exercise1"]
+        },
+        {
+          "id": "ref-split-mutex-analysis",
+          "block_type": "reflection_rubric",
+          "title": "Synthesis: Why `mutexProd` + `mutexConso` Works in BufferNa but Fails in BufferN",
+          "prompt": "Explain in your own words which variables are shared between producers and consumers in `BufferNa` versus `BufferN`, and why that determines whether `mutex` can be split into `mutexProd` and `mutexConso`.",
+          "self_check_criteria": [
+            "Stated that in `BufferNa`, `writePointer` is producer-only and `readPointer` is consumer-only.",
+            "Explained that in `BufferNa`, `waitNotFull` and `waitNotEmpty` prevent a producer and consumer from touching the same `elements[i]` slot simultaneously.",
+            "Stated that in `BufferN`, both producers and consumers read/write `nbElements`, `nbWaitingProd`, and `nbWaitingConso`, making a single shared `mutex` mandatory."
+          ],
+          "model_answer": "In `BufferNa`, `writePointer` is accessed only by producers and `readPointer` only by consumers, while `waitNotFull`/`waitNotEmpty` ensure they never access the same array index concurrently. Thus `mutexProd` and `mutexConso` suffice and even allow parallel `put()` and `get()`. In `BufferN`, both roles share and mutate `nbElements`, `nbWaitingProd`, and `nbWaitingConso` (and transfer the baton), so a single `mutex` is strictly required.",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch6-exercise1-swap",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-exercises-1-2",
+          "question": "In `BufferNa::put()`, what is the effect of swapping `waitNotEmpty.release()` and `mutex.release()` so that `mutex.release()` comes first?",
+          "options": [
+            "It is completely valid and slightly better: if a woken consumer runs immediately, `mutex` is already free.",
+            "It causes a deadlock when the buffer is full.",
+            "It causes a race condition on `writePointer`.",
+            "It violates FIFO ordering when multiple consumers are waiting."
+          ],
+          "correct_answer": "It is completely valid and slightly better: if a woken consumer runs immediately, `mutex` is already free.",
+          "explanation": "Once `elements[writePointer]` and `writePointer` have been updated, releasing `mutex` before `waitNotEmpty.release()` is safe and avoids waking a consumer only for it to immediately block on `mutex.acquire()`. (By contrast, swapping the leading `acquire()` calls at the top of `put()`/`get()` WOULD cause a deadlock.)",
+          "hints": [
+            "Has `writePointer` already been updated before `mutex.release()`?",
+            "If `waitNotEmpty.release()` wakes a consumer immediately, what is the next line that consumer executes?"
+          ],
+          "bookmarkable": true
         },
         {
           "id": "qz-ch6-split-mutex",

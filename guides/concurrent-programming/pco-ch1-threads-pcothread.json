@@ -1,8 +1,8 @@
 {
   "id": "pco-ch1-threads-pcothread",
   "title": "Chapter 1: Processes, Threads & PcoThread",
-  "description": "Process anatomy vs. thread anatomy, shared address space, Unix/thread state lifecycle, context switching, green vs. native threads, and the C++ PcoThread API.",
-  "estimated_minutes": 45,
+  "description": "Process anatomy vs. thread anatomy, shared vs. private properties, Unix/thread state lifecycle, multi-core vs. single-core execution, 5-step context switching, green vs. native threads, and the complete C++ PcoThread API.",
+  "estimated_minutes": 60,
   "category": "Concurrent Programming",
   "track": "PCO - Programmation Concurrente (TE1)",
   "track_order": 1,
@@ -21,59 +21,98 @@
     {
       "title": "PCO Chapter 2: Tâches et PcoThread",
       "url_or_path": "sources/PCO-TE1/PCO_2_threads.pdf",
-      "notes": "Slides 1-37: Process vs Thread anatomy, state diagram, green/native threads, PcoThread API."
+      "notes": "Slides 1-37: Process vs Thread anatomy, shared/non-shared properties, state diagram, context switch, green/native threads, monocore vs multicore, PcoThread API."
     }
   ],
   "sections": [
     {
       "id": "sec-process-vs-thread",
       "title": "1. Process vs. Thread Anatomy",
-      "description": "What a process owns, what threads share, and what each thread keeps private.",
+      "description": "What a process owns, the 7 properties threads and processes share, what they do not share, and how memory is laid out.",
       "blocks": [
         {
           "id": "th-process-anatomy",
           "block_type": "markdown",
           "title": "Anatomy of a Process & Its Address Space",
           "bookmarkable": true,
-          "content": "A **process** (*processus*) is an independent program in execution managed by the operating system. Every process owns:\n\n* Compiled executable code (**Text segment**)\n* Its own isolated **address space** (*espace d'adressage*)\n* A **priority** and a unique **identifier (PID)**\n* An **execution context** (Program Counter `PC` + CPU registers)\n\n### Memory Layout of a Process\n\n| Segment | Purpose | Shared Across Threads? |\n| :--- | :--- | :---: |\n| **Stack segment** (*pile*) | Procedure call frames, return addresses, local variables | **No** — each thread gets its own stack |\n| **Data segment** (*tas / heap* & globals) | Global variables (`static`, globals) and dynamic allocations (`new`, `malloc`) | **Yes** — shared by all threads of the process |\n| **Text segment** | Compiled machine instructions to execute | **Yes** — shared (read-only) |\n\n> [!IMPORTANT]\n> **Key Distinction:** Each thread has its **own stack** and **own execution context** (`PC`, `SP`, registers), but **all threads within the same process share the same address space** (Data + Text segments). Threads of *different* processes do **not** share an address space."
+          "content": "A **process** (*processus*) is an independent program in execution managed by the operating system. Every process owns:\n\n* Compiled executable code (**Text segment**)\n* Its own isolated **address space** (*espace d'adressage*)\n* A **priority** and a unique **identifier (PID)**\n* An **execution context** (Program Counter `PC` + CPU registers)\n\n### Memory Layout of a Process\n\n| Segment | Purpose | Shared Across Threads of the Same Process? |\n| :--- | :--- | :---: |\n| **Stack segment** (*pile*) | Procedure call frames, return addresses, local variables (e.g., `int i = 100;`) | **No** — each thread gets its own private stack |\n| **Data segment** (*tas / heap* & globals) | Global variables (`int x; int y;`, `static`) and dynamic allocations (`new`, `malloc`) | **Yes** — shared by all threads of the process |\n| **Text segment** | Compiled machine instructions (`main()`, `fonctionA()`, `fonctionB()`) | **Yes** — shared (read-only) |\n\n> [!IMPORTANT]\n> **Key Distinction:** Each thread is a *fil d'exécution* inside a process. It has its **own stack**, **own attributes** (Thread ID, priority, stack size), and **own execution context** (`PC`, `SP`, registers), but **all threads within the same process share the same address space** (Data + Text segments). Threads of *different* processes do **not** share an address space."
+        },
+        {
+          "id": "th-process-vs-thread-common",
+          "block_type": "markdown",
+          "title": "What Processes and Threads Have in Common (7 Properties)",
+          "bookmarkable": true,
+          "content": "Despite their differences in memory isolation, processes and threads share **7 fundamental properties** (*Thread-processus : en commun*):\n\n1. **Identity & scheduling metadata:** Both possess an **ID**, a set of **registers**, a **state** (*état*), and a **priority**.\n2. **Control block:** Both possess an **information block** (PCB for processes, TCB for threads) managed by the OS.\n3. **Resource sharing with parent:** Both share resources with their parent process.\n4. **Independence once created:** Both execute as **independent entities** once created.\n5. **Creator control:** Creators of processes and threads retain control over them.\n6. **Dynamic evolution:** Both can **change their attributes** after creation and **create new resources**.\n7. **Isolation from unrelated entities:** Neither can access the resources of **unrelated** threads or processes."
         },
         {
           "id": "th-process-vs-thread-table",
           "block_type": "markdown",
-          "title": "Processes vs. Threads: Communication & Control",
+          "title": "Processes vs. Threads: What They Do NOT Share",
           "bookmarkable": true,
-          "content": "| Aspect | Process (*Processus*) | Thread |\n| :--- | :--- | :--- |\n| **Address Space** | Own isolated address space | **Shared** within the same process |\n| **Inter-task Communication** | Requires OS IPC mechanisms (pipes, sockets, shared memory) | Direct: read/write shared global or heap variables |\n| **Peer Control** | Child processes cannot control sibling processes or the parent | All threads of a process are **peers**: any thread can control another (or the main thread, affecting the whole process) |\n| **Creation Cost** | Heavy (new address space, OS tables) | Light (shares existing address space; only needs a new stack & context) |"
+          "content": "| Aspect | Process (*Processus*) | Thread |\n| :--- | :--- | :--- |\n| **Address Space** | Own isolated address space | **No private address space** — shares the process's address space |\n| **Inter-task Communication** | Parent and child processes must use OS **IPC mechanisms** (pipes, sockets, shared memory) | Threads of the same process communicate directly by **reading and modifying process variables** (globals / heap) |\n| **Peer Control** | Child processes have **no control** over sibling child processes | All threads of a process are **peers** (*pairs*) and can control any other thread in the process |\n| **Control over Parent / Main** | Child processes **cannot** control the parent process | Any thread can control the **main thread**, and therefore affect the **entire process** |\n| **Creation Cost** | Heavy (new address space, OS tables) | Light (reuses existing address space; only allocates a stack & context) |"
         },
         {
           "id": "diag-multithread-memory",
           "block_type": "kroki",
           "diagram_type": "mermaid",
-          "title": "Shared Address Space vs. Private Thread Stacks",
-          "caption": "Threads A and B share Text and Data (globals/heap) while maintaining separate stacks and CPU register contexts.",
-          "source": "graph TD\n  subgraph Process[\"Process Address Space\"]\n    Text[\"Text Segment (Compiled Code)\"]\n    Data[\"Data & Heap Segment (Globals, new/malloc)\"]\n    subgraph ThreadA[\"Thread A (Private)\"]\n      StackA[\"Stack A (Locals, Call Frames)\"]\n      CtxA[\"Context A (PC, SP, Registers)\"]\n    end\n    subgraph ThreadB[\"Thread B (Private)\"]\n      StackB[\"Stack B (Locals, Call Frames)\"]\n      CtxB[\"Context B (PC, SP, Registers)\"]\n    end\n  end\n  CtxA -.->|executes| Text\n  CtxB -.->|executes| Text\n  StackA <-->|reads/writes| Data\n  StackB <-->|reads/writes| Data\n  classDef shared fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px;\n  classDef priv fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;\n  class Text,Data shared;\n  class StackA,CtxA,StackB,CtxB priv;",
+          "title": "Multi-Threaded Process Address Space (Concrete Memory Layout)",
+          "caption": "Threads A (ID 212) and B (ID 315) share Text (main, fonctionA, fonctionB) and Data (globals x, y, threadA, threadB), while keeping private attributes, registers (SP, PC), and stacks (i=100 vs. i=10).",
+          "source": "graph TD\n  subgraph Process[\"Process Address Space\"]\n    Text[\"Text Segment: main(), fonctionA(), fonctionB()\"]\n    Data[\"Data Segment: int x, int y, pthread_t threadA, threadB\"]\n    subgraph ThreadA[\"Thread A (Private)\"]\n      AttrA[\"Attributs: Thread ID=212, priorite=2, taille=...\"]\n      RegA[\"Registres: SP, PC, ...\"]\n      StackA[\"Pile du threadA: fonctionA() -> int i = 100\"]\n    end\n    subgraph ThreadB[\"Thread B (Private)\"]\n      AttrB[\"Attributs: Thread ID=315, priorite=2, taille=...\"]\n      RegB[\"Registres: SP, PC, ...\"]\n      StackB[\"Pile du threadB: fonctionB() -> int i = 10\"]\n    end\n  end\n  RegA -.->|executes| Text\n  RegB -.->|executes| Text\n  StackA <-->|reads/writes x, y| Data\n  StackB <-->|reads/writes x, y| Data\n  classDef shared fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px;\n  classDef priv fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;\n  class Text,Data shared;\n  class AttrA,RegA,StackA,AttrB,RegB,StackB priv;",
           "bookmarkable": true
         }
       ]
     },
     {
       "id": "sec-states-and-scheduling",
-      "title": "2. Thread Lifecycle, Context Switch & Thread Models",
-      "description": "The 5-state lifecycle diagram, single-core vs. multi-core execution, and green vs. native threads.",
+      "title": "2. Thread Lifecycle, Execution Models & Context Switch",
+      "description": "The 5-state lifecycle diagram, multi-core parallel vs. single-core interleaved execution, the 5-step context switch, and green vs. native threads.",
       "blocks": [
         {
           "id": "th-thread-states",
           "block_type": "markdown",
           "title": "States and Transitions of a Thread",
           "bookmarkable": true,
-          "content": "A thread's lifecycle closely mirrors that of a Unix process:\n\n1. **Prêt (*Ready*):** Eligible to run, waiting for a CPU core. Entered upon creation, wake-up (*réveil*), or preemption.\n2. **Élu (*Running*):** Currently executing instructions on a CPU core.\n   * On a **single-core CPU** (*monocœur*), at most **1** thread is in the *élu* state at any instant (**min 0, max 1**—0 if all threads are blocked or idle).\n   * On a **multi-core CPU** with $k$ cores, up to $k$ threads can be *élu* simultaneously.\n3. **Bloqué (*Waiting / Blocked*):** Suspended while waiting for an event—for example, `PcoSemaphore::acquire()`, `PcoMutex::lock()`, `PcoThread::join()`, `sleep()`, or an I/O operation.\n4. **Zombie:** The thread has finished executing, but its creator/parent has not yet collected its termination via `join()` (*jointure*).\n5. **Terminé (*Terminated*):** Pseudo-state where resources are freed and the thread disappears."
+          "content": "A thread's lifecycle closely mirrors that of a Unix process:\n\n1. **Prêt (*Ready*):** Eligible to run, waiting for a CPU core. Entered upon creation, wake-up (*réveil*), or preemption.\n2. **Élu (*Running*):** Currently executing instructions on a CPU core.\n   * On a **single-core CPU** (*monocœur*), at most **1** thread is in the *élu* state at any instant (**min 0, max 1** — 0 if all threads are blocked or idle).\n   * On a **multi-core CPU** with $k$ cores, up to $k$ threads can be *élu* simultaneously.\n3. **Bloqué (*Waiting / Blocked*):** Suspended while waiting for an event—for example, `PcoSemaphore::acquire()`, `PcoMutex::lock()`, `PcoThread::join()`, `usleep()`, or an I/O operation.\n4. **Zombie:** The thread has finished executing (`return;`), **but its creator/parent has not yet collected its termination via `join()`** (*jointure*). Its exit metadata remains allocated until `join()` is called.\n5. **Terminé (*Terminated*):** Pseudo-state reached after `join()` (or if detached/cancelled), where all remaining resources are freed and the thread disappears."
         },
         {
           "id": "diag-thread-lifecycle",
           "block_type": "kroki",
           "diagram_type": "mermaid",
           "title": "Thread State Transition Diagram",
-          "caption": "Note the two paths out of 'élu': normal/blocking wait ('attente -> bloqué -> réveil -> prêt') and termination ('terminaison -> zombie -> jointure -> terminé').",
+          "caption": "Note the two paths out of 'élu': blocking wait ('attente -> bloqué -> réveil -> prêt') and termination ('terminaison -> zombie -> jointure -> terminé').",
           "source": "stateDiagram-v2\n  [*] --> pret : création\n  pret --> elu : exécution\n  elu --> pret : préemption\n  elu --> bloque : attente (I/O, mutex, sémaphore, join)\n  bloque --> pret : réveil\n  elu --> termine : terminaison (détaché)\n  elu --> zombie : terminaison\n  zombie --> termine : jointure (join)",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-multicore-vs-singlecore",
+          "block_type": "markdown",
+          "title": "Multi-Core Parallel Execution vs. Single-Core Interleaving",
+          "bookmarkable": true,
+          "content": "How threads actually execute on hardware depends on the number of CPU cores:\n\n* **Multi-Core Processor (True Parallelism):** When the main thread creates `ThreadA` and `ThreadB`, all three threads can run **simultaneously** on separate cores while communicating through shared memory (`com.`).\n* **Single-Core Processor (*Simple cœur* — Interleaved Execution):** Only **one** thread can occupy the single CPU core at any instant. The OS scheduler creates the *illusion* of simultaneous execution by rapidly switching between the main thread, `ThreadA`, and `ThreadB` (**time-slicing / interleaving**). Whenever a switch occurs, the OS performs a **context switch**.\n\n> [!NOTE]\n> **Why concurrency bugs still happen on a single core:** Even on a single-core CPU, preemption can interrupt a thread mid-operation (e.g., between reading a shared variable and writing it back), causing race conditions just like on a multi-core CPU."
+        },
+        {
+          "id": "diag-multicore-vs-singlecore",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Multi-Core Parallelism vs. Single-Core Interleaving",
+          "caption": "Top: On a multi-core CPU, Main, ThreadA, and ThreadB execute simultaneously across cores. Bottom: On a single-core CPU, only one thread runs at any instant; the OS interleaves them via context switches.",
+          "source": "flowchart LR\n  subgraph MultiCore[\"Multi-Core CPU (True Parallelism)\"]\n    direction TB\n    M1[\"Main Thread (Core 0): create A -> create B -> com.\"]\n    A1[\"Thread A (Core 1): running in parallel <-> com.\"]\n    B1[\"Thread B (Core 2): running in parallel <-> com.\"]\n    M1 -->|create| A1\n    M1 -->|create| B1\n  end\n  subgraph SingleCore[\"Single-Core CPU (Time-Sliced Interleaving)\"]\n    direction LR\n    S1[\"Main: create A\"] --> S2[\"Thread A: slice 1\"] --> S3[\"Main: create B\"] --> S4[\"Thread B: slice 1\"] --> S5[\"Thread A: slice 2\"] --> S6[\"Main: com.\"]\n  end\n  classDef par fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px;\n  classDef seq fill:#fef3c7,stroke:#d97706,stroke-width:1.5px;\n  class M1,A1,B1 par;\n  class S1,S2,S3,S4,S5,S6 seq;",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-context-switch",
+          "block_type": "markdown",
+          "title": "The 5-Step Context Switch Sequence",
+          "bookmarkable": true,
+          "content": "Whenever the OS switches a CPU core from one thread (or process) to another, it executes this exact **5-step context switch sequence**:\n\n1. **Enqueue active thread:** Move the currently running thread into the **ready** queue (if preempted) or **blocked** queue (if waiting on I/O, mutex, semaphore, or `join`).\n2. **Save execution context:** Store the outgoing thread's `PC`, `SP`, and CPU registers into its information block.\n3. **Select next thread:** Pick the **highest-priority eligible thread** from the ready queue.\n4. **Restore execution context:** Load the chosen thread's previously saved `PC`, `SP`, and registers back into the CPU.\n5. **Activate chosen thread:** Resume execution—from the interrupted thread's perspective, **it appears as if it never stopped running**."
+        },
+        {
+          "id": "diag-context-switch",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "5-Step Context Switch Pipeline",
+          "caption": "Because registers and PC are saved and restored atomically by the OS, the interrupted thread resumes seamlessly.",
+          "source": "flowchart LR\n  Step1[\"1. Enqueue active thread\\n(Ready or Blocked queue)\"] --> Step2[\"2. Save context\\n(PC, SP, registers)\"]\n  Step2 --> Step3[\"3. Select highest-priority\\neligible Ready thread\"]\n  Step3 --> Step4[\"4. Restore chosen thread's\\nsaved context\"]\n  Step4 --> Step5[\"5. Activate chosen thread\\n(seamless resumption)\"]\n  classDef step fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px;\n  class Step1,Step2,Step3,Step4,Step5 step;",
           "bookmarkable": true
         },
         {
@@ -81,31 +120,94 @@
           "block_type": "markdown",
           "title": "Green Threads vs. Native Threads",
           "bookmarkable": true,
-          "content": "* **Green Thread:** Scheduled in user space by a virtual machine or runtime library that emulates an OS scheduler (useful on bare-metal systems without an OS). Cannot exploit multiple CPU cores on its own.\n* **Native Thread:** Managed and scheduled directly by the OS kernel. **This is the only way to exploit multi-core parallelism.** Both C++ (`std::thread`, `PcoThread`) and modern Java use native threads.\n\n### Context Switch Sequence\n1. Move the active thread to the **ready** (if preempted) or **blocked** (if waiting) queue.\n2. **Save** its execution context (`PC`, `SP`, CPU registers).\n3. **Select** the highest-priority eligible thread from the ready queue.\n4. **Restore** the chosen thread's saved execution context.\n5. **Activate** the chosen thread—from its perspective, it never noticed the interruption."
+          "content": "* **Green Thread:** Scheduled in user space by a virtual machine or runtime library that *emulates* an OS scheduler (useful on bare-metal systems without an OS; historically used in Java before version 1.3 in 2000). **Cannot exploit multiple CPU cores on its own.** Similar concepts in other languages include coroutines, fibers, and greenlets.\n* **Native Thread:** Managed and scheduled directly by the OS kernel. **This is the only way to exploit multi-core parallelism.** Both C++ (`std::thread`, `PcoThread`) and modern Java use native threads."
         }
       ]
     },
     {
       "id": "sec-pcothread-api",
       "title": "3. The PcoThread C++ API",
-      "description": "Creating threads, passing arguments safely, joining, and cooperative cancellation.",
+      "description": "Immediate launch on construction, variadic templates, std::ref() lifetime hazards, all 3 instance-method constructors, join() ordering, termination, and cooperative cancellation.",
       "blocks": [
+        {
+          "id": "th-pcothread-basics",
+          "block_type": "markdown",
+          "title": "Thread Creation, Variadic Templates & the std::ref() Lifetime Trap",
+          "bookmarkable": true,
+          "content": "`PcoThread` is the teaching C++ thread class used in PCO (modeled on `std::thread`). Keep three crucial rules in mind:\n\n1. **Immediate Launch on Construction:** Constructing `PcoThread myThread(myFunction);` **immediately starts** the new thread—there is no separate `.start()` method.\n2. **Variadic Templates:** Like `std::thread`, `PcoThread`'s constructor uses **variadic templates**, allowing you to pass **any number and any types of arguments** to the thread function.\n3. **Pass by Value vs. Pointer vs. `std::ref()`:** Arguments are copied **by value** by default. To pass a reference, you must wrap it in `std::ref(var)`.\n\n> [!CAUTION]\n> **Why `std::ref()` on Stack Locals Is Dangerous:** Wrapping a stack-allocated local variable in `std::ref()` (or passing `&localVar`) is risky if the creating function can return before the spawned thread finishes. Once the creator's stack frame is popped, the reference becomes **dangling** (undefined behavior). When sharing mutable state across threads, prefer passing a **pointer** to heap/long-lived data or ensuring `join()` completes before the variable leaves scope."
+        },
         {
           "id": "code-pcothread-args",
           "block_type": "code",
           "language": "cpp",
-          "title": "Creating Threads & Passing Arguments",
+          "title": "Passing Arguments: Value, Pointer, std::ref() & Dangling Reference Trap",
           "filename": "pcothread_args.cpp",
-          "code": "// 1. By value (default, safest for primitives)\nPcoThread t1(myTask, 42);\n\n// 2. By pointer (watch object lifetime!)\nType1 a1;\nPcoThread t2(myTaskPtr, &a1);\n\n// 3. By reference (MUST wrap in std::ref)\nType1 a2;\nPcoThread t3(myTaskRef, std::ref(a2));\n\n// 4. Instance method on an object\nSomeClass* obj = new SomeClass();\nPcoThread t4(&SomeClass::someFunction, obj, 10);\n\n// 5. Instance method from inside the class itself\nPcoThread t5(&SomeClass::someFunction, this, 10);",
-          "highlight_lines": [9, 13, 17],
+          "code": "// Immediate launch on construction (0 arguments)\nPcoThread t0(myFunction); // Thread is ALREADY running here!\n\n// 1. By value (default, variadic templates accept any types/count)\nType1 a1; Type2 a2;\nPcoThread t1(myTask, a1, a2);\n\n// 2. By pointer (common for shared/heap objects)\nPcoThread t2(myTaskPtr, &a1, &a2);\n\n// 3. By reference (MUST wrap in std::ref)\nPcoThread t3(myTaskRef, std::ref(a1), std::ref(a2));\n\n// --- BROKEN: std::ref() on a stack local that dies too early ---\nvoid brokenLauncher() {\n    int localCounter = 42; // Lives on brokenLauncher's stack\n    PcoThread t(workerRef, std::ref(localCounter));\n    // BUG: brokenLauncher() returns immediately without join()!\n    // localCounter is destroyed while 't' still holds a reference to it.\n}\n\n// --- SAFE: Pass by value OR join() before scope exits ---\nvoid safeLauncher() {\n    int localCounter = 42;\n    PcoThread t(workerVal, localCounter); // Copied by value: safe!\n    t.join(); // Even if using std::ref/pointer, joining guarantees lifetime.\n}",
+          "highlight_lines": [2, 12, 16, 17, 25, 26],
+          "annotations": [
+            {
+              "line": 2,
+              "note": "No .start() call exists: constructing PcoThread launches the thread immediately."
+            },
+            {
+              "line": 12,
+              "note": "Without std::ref(), PcoThread copies arguments by value and will not compile for non-const reference parameters."
+            },
+            {
+              "line": 17,
+              "note": "Dangling reference! localCounter is destroyed when brokenLauncher() returns."
+            },
+            {
+              "line": 25,
+              "note": "Copying primitives by value avoids shared stack lifetime bugs; joining guarantees stack locals outlive the thread."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "code-pcothread-instance-methods",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "All 3 Instance-Method Constructor Forms (Pages 22–24)",
+          "filename": "pcothread_methods.cpp",
+          "code": "// Form 1: Public instance method with 0 arguments\nclass SomeClass1 {\npublic:\n    void someFunction();\n};\nvoid example1() {\n    SomeClass1* myObject = new SomeClass1();\n    PcoThread myThread(&SomeClass1::someFunction, myObject);\n}\n\n// Form 2: Public instance method with 1 argument\nclass SomeClass2 {\npublic:\n    void someFunction(int a);\n};\nvoid example2() {\n    int aValue = 0;\n    SomeClass2* myObject = new SomeClass2();\n    PcoThread myThread(&SomeClass2::someFunction, myObject, aValue);\n}\n\n// Form 3: Private instance method launched from inside the object via 'this'\nclass SomeClass3 {\nprivate:\n    void someFunction(int a);\npublic:\n    void somePublicFunction() {\n        PcoThread myThread(&SomeClass3::someFunction, this, 10);\n        myThread.join();\n    }\n};\nvoid example3() {\n    SomeClass3 myObject;\n    myObject.somePublicFunction();\n}",
+          "highlight_lines": [8, 19, 28, 29],
+          "annotations": [
+            {
+              "line": 8,
+              "note": "Form 1: &Class::method followed by object pointer."
+            },
+            {
+              "line": 19,
+              "note": "Form 2: Method arguments follow the object pointer."
+            },
+            {
+              "line": 28,
+              "note": "Form 3: Inside the class, 'this' allows spawning a thread on a private method; join() ensures myObject stays alive."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "code-join-examples",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "join() Ordering: Sequential Trap vs. Concurrent Execution & Early main() Return",
+          "filename": "pcothread_join.cpp",
+          "code": "typedef struct { int a; int b; } struct_t;\nvoid task1(struct_t& var) { std::cout << \"Task 1: \" << var.a << \", \" << var.b << std::endl; }\nvoid task2(int val)       { std::cout << \"Task 2: \" << val << std::endl; }\n\n// EXAMPLE 1 (Sequential Trap!): join() immediately after each creation\nint main_sequential_trap() {\n    struct_t v = {1, 2};\n    PcoThread thread1(task1, std::ref(v));\n    thread1.join(); // Blocks here! thread2 hasn't even been created yet!\n    PcoThread thread2(task2, 3);\n    thread2.join(); // Runs strictly AFTER thread1 finishes (zero concurrency)\n    return 0;\n}\n\n// EXAMPLE 2 (Concurrent): Launch all threads first, THEN join all\nint main_concurrent() {\n    struct_t v = {1, 2};\n    PcoThread thread1(task1, std::ref(v));\n    PcoThread thread2(task2, 3); // thread1 and thread2 run concurrently!\n    thread1.join();\n    thread2.join();\n    return 0;\n}\n\n// EARLY RETURN TRAP: main() returns without join()\nvoid taskFunction() {\n    for (int i = 0; i <= 100; i++) std::cout << \"Coucou\" << std::endl;\n}\nint main_missing_join() {\n    PcoThread thread(taskFunction);\n    return 0; // DANGER: Terminates the ENTIRE process and kills 'thread' immediately!\n}\n// Fix: Call thread.join(); before return 0;",
+          "highlight_lines": [9, 19, 20, 21, 31],
           "annotations": [
             {
               "line": 9,
-              "note": "Arguments are copied by value by default; references require std::ref()."
+              "note": "Sequential trap: calling join() before creating thread2 forces sequential execution."
             },
             {
-              "line": 13,
-              "note": "First argument is &Class::method, second is the object pointer (obj or this), followed by method arguments."
+              "line": 19,
+              "note": "Concurrent pattern: construct all worker threads first, then join() them."
+            },
+            {
+              "line": 31,
+              "note": "Returning from main() destroys the process and all running threads without waiting."
             }
           ],
           "bookmarkable": true
@@ -113,9 +215,57 @@
         {
           "id": "th-join-and-termination",
           "block_type": "markdown",
-          "title": "Joining & Cooperative Termination",
+          "title": "Termination: return; vs. exit(), Zombie State & Cooperative Cancellation",
           "bookmarkable": true,
-          "content": "* **`join()`:** Blocks the calling thread until the target thread finishes. Also prevents the main thread from returning early and killing the whole process!\n* **Self-termination (`return;`):** Cleanly ends the thread and wakes any thread blocked on `join()`. Note: returning from `main()` terminates the **entire process** and all its threads.\n* **Cooperative Cancellation (`requestStop()` / `stopRequested()`):** Never forcefully kill another thread—it could leave shared data structures or mutexes in an inconsistent state. Instead:\n  1. Caller invokes `thread->requestStop();`\n  2. Worker periodically checks `if (PcoThread::thisThread()->stopRequested()) return;`\n  3. Caller waits with `thread->join();`\n\n> [!WARNING]\n> **Lifetime Trap:** To call `thread->requestStop()`, the `PcoThread` object must still exist and be initialized! Also, if `t1` calls `t2->requestStop()` before `t2` is assigned in `main()`, you have a null-pointer race condition."
+          "content": "* **Self-termination (`return;`):** Cleanly ends **only the calling thread** and wakes any thread blocked on `join()`. When a thread returns, it enters the **Zombie** state until its creator calls `join()`, which frees its resources and moves it to **Terminé**.\n* **Process termination (`exit()` or `return` from `main()`):** Calling `exit()` from *any* thread—or returning from `main()`—terminates the **entire process** and **destroys all threads**.\n* **Why you should never forcefully kill another thread:** Terminating a thread externally at an arbitrary instruction can leave shared data structures half-updated or mutexes permanently locked (**inconsistent system state**).\n* **Unique Thread ID & `PcoThread::thisThread()`:** Every thread has a unique numeric identifier, and any function can retrieve a pointer to the `PcoThread` currently executing it via `PcoThread* PcoThread::thisThread()`.\n* **Cooperative Cancellation (`requestStop()` / `stopRequested()`):**\n  1. Caller invokes `thread->requestStop();` (the `PcoThread` object **must already exist and be initialized**!).\n  2. Worker periodically checks `if (PcoThread::thisThread()->stopRequested()) return;` at a safe point.\n  3. Caller waits with `thread->join();`."
+        },
+        {
+          "id": "code-request-stop-ex1",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Cooperative Cancellation: PcoThread::usleep(), thisThread(), requestStop() & stopRequested()",
+          "filename": "pcothread_stop_ex1.cpp",
+          "code": "static int counter = 1;\n\nvoid taskFunction() {\n    while (true) {\n        counter++;\n        if (counter % 100 == 0) {\n            // Check cancellation flag only at a safe point (every 100 iterations)\n            if (PcoThread::thisThread()->stopRequested())\n                return; // Clean self-termination -> wakes join()\n        }\n    }\n}\n\nint main(int argc, char* argv[]) {\n    PcoThread thread(taskFunction);\n    PcoThread::usleep(5000); // Sleep 5000 microseconds (5 ms)\n    thread.requestStop();    // Politely ask 'thread' to stop\n    thread.join();           // Wait for 'thread' to reach safe point and return\n    std::cout << \"Counter: \" << counter << std::endl;\n    return 0;\n}",
+          "highlight_lines": [8, 9, 16, 17, 18],
+          "annotations": [
+            {
+              "line": 8,
+              "note": "PcoThread::thisThread() returns a pointer to the currently executing PcoThread."
+            },
+            {
+              "line": 16,
+              "note": "PcoThread::usleep(5000) pauses the calling thread for 5000 microseconds."
+            },
+            {
+              "line": 17,
+              "note": "Sets the stop-requested flag; does NOT interrupt or kill the thread."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "code-request-stop-race",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Safe vs. Null-Pointer Race Condition Crash (Examples 2 & 3, Pages 35–36)",
+          "filename": "pcothread_stop_race.cpp",
+          "code": "PcoThread* thread1 = nullptr;\nPcoThread* thread2 = nullptr;\n\n// --- EXAMPLE 2 (SAFE): thread2 stops thread1 ---\nvoid task1_safe() {\n    while (true) {\n        if (PcoThread::thisThread()->stopRequested()) return;\n    }\n}\nvoid task2_safe() {\n    thread1->requestStop(); // SAFE: thread1 was assigned BEFORE thread2 was created\n}\nint main_safe() {\n    thread1 = new PcoThread(task1_safe);\n    thread2 = new PcoThread(task2_safe);\n    thread1->join(); thread2->join();\n    delete thread1; delete thread2;\n    return 0;\n}\n\n// --- EXAMPLE 3 (RACE CONDITION CRASH!): thread1 stops thread2 ---\nvoid task1_crash() {\n    thread2->requestStop(); // DANGER: thread2 may STILL be nullptr!\n}\nvoid task2_crash() {\n    while (true) {\n        if (PcoThread::thisThread()->stopRequested()) return;\n    }\n}\nint main_crash() {\n    thread1 = new PcoThread(task1_crash); // Launches IMMEDIATELY!\n    // Race window: task1_crash() can run BEFORE thread2 is assigned below!\n    thread2 = new PcoThread(task2_crash);\n    thread1->join(); thread2->join();\n    delete thread1; delete thread2;\n    return 0;\n}",
+          "highlight_lines": [11, 14, 23, 31, 33],
+          "annotations": [
+            {
+              "line": 14,
+              "note": "thread1 is fully constructed and assigned before new PcoThread(task2_safe) runs."
+            },
+            {
+              "line": 23,
+              "note": "Null-pointer dereference if task1_crash runs before line 33 completes!"
+            },
+            {
+              "line": 31,
+              "note": "Because PcoThread launches immediately on construction, task1_crash races with main_crash's assignment to thread2."
+            }
+          ],
+          "bookmarkable": true
         },
         {
           "id": "fc-pcothread-ref",
@@ -125,13 +275,40 @@
           "back": "`PcoThread`'s constructor copies arguments **by value** by default (like `std::thread`). `std::ref(x)` creates a `std::reference_wrapper` so the thread function receives a true reference.\n\n**Danger:** If `x` lives on the creator's stack and the creator exits its scope before the spawned thread finishes, the reference becomes **dangling** (undefined behavior).",
           "hint": "Think about template argument forwarding and stack frame lifetimes.",
           "tags": ["pco", "pcothread", "cpp"]
+        },
+        {
+          "id": "fc-zombie-vs-termine",
+          "block_type": "flashcard",
+          "title": "Zombie vs. Terminé State",
+          "front": "What is the difference between the **Zombie** state and the **Terminé** state for a thread?",
+          "back": "* **Zombie:** The thread has finished executing (`return;`), but its creator has **not yet called `join()`** to collect its termination.\n* **Terminé:** Pseudo-state reached **after `join()`** (or if detached), where the OS frees the thread's remaining resources and the thread disappears.",
+          "hint": "Think about what `join()` actually cleans up.",
+          "tags": ["pco", "lifecycle", "zombie"]
+        },
+        {
+          "id": "fc-exit-vs-return",
+          "block_type": "flashcard",
+          "title": "exit() vs. return; in Threads",
+          "front": "How does calling `return;` inside a worker thread differ from calling `exit()` (or `return 0;` in `main()`)?",
+          "back": "* `return;` in a worker thread terminates **only that thread** and wakes any thread blocked on `join()`.\n* `exit()` (anywhere) or `return` from `main()` terminates the **entire process** and destroys **all** threads immediately.",
+          "hint": "One affects a single execution stream; the other tears down the whole address space.",
+          "tags": ["pco", "termination", "pcothread"]
+        },
+        {
+          "id": "fc-green-vs-native",
+          "block_type": "flashcard",
+          "title": "Green Threads vs. Native Threads",
+          "front": "Why can't **Green Threads** exploit multi-core CPUs on their own, whereas **Native Threads** can?",
+          "back": "**Green threads** are scheduled in user space by a VM or library emulating an OS scheduler, so the OS kernel only sees a single thread/process. **Native threads** (`PcoThread`, `std::thread`, modern Java) are managed directly by the OS kernel, which can schedule them across multiple physical CPU cores simultaneously.",
+          "hint": "Who schedules the threads: user-space runtime or OS kernel?",
+          "tags": ["pco", "scheduling", "threads"]
         }
       ]
     },
     {
       "id": "sec-ch1-assessment",
       "title": "4. Synthesis & Diagnostic Check",
-      "description": "Verify your understanding of thread memory, states, and PcoThread semantics.",
+      "description": "Verify your understanding of thread memory, states, context switching, and PcoThread semantics.",
       "blocks": [
         {
           "id": "ref-ch1-feynman",
@@ -144,6 +321,19 @@
             "Forceful termination leaves shared state/locks corrupted",
             "Cooperative cancellation lets the thread exit at a safe point"
           ],
+          "bookmarkable": true
+        },
+        {
+          "id": "rubric-ch1-join-and-race",
+          "block_type": "reflection_rubric",
+          "title": "Self-Check: Diagnosing Concurrency & Lifetime Bugs",
+          "prompt": "Compare `main_sequential_trap()` vs. `main_concurrent()` (Pages 26–27) and `main_crash()` in Example 3 (Page 36). Explain in your own words: (1) why placing `thread1.join()` before `PcoThread thread2(...)` eliminates concurrency, and (2) why `task1_crash()` calling `thread2->requestStop()` can segfault even though `thread2 = new PcoThread(...)` is on the very next line of `main_crash()`.",
+          "self_check_criteria": [
+            "Explains that join() is a blocking call that suspends main until thread1 finishes, delaying thread2's construction.",
+            "Notes that PcoThread launches immediately upon construction (no separate start() step).",
+            "Identifies the race window between `thread1 = new PcoThread(task1_crash)` and `thread2 = new PcoThread(task2_crash)` where `thread2` is still `nullptr`."
+          ],
+          "model_answer": "1. `join()` blocks the calling thread (`main`) until the target thread terminates. Calling `thread1.join()` before constructing `thread2` forces `thread1` to run to completion before `thread2` is even created—making execution strictly sequential.\n2. `PcoThread` launches the new thread immediately inside its constructor. As soon as `new PcoThread(task1_crash)` starts `task1_crash`, the OS may schedule `task1_crash` before `main_crash` executes the next line (`thread2 = new PcoThread(...)`). If `task1_crash` runs first, `thread2` is still `nullptr` (or uninitialized), so `thread2->requestStop()` causes a null-pointer dereference crash.",
           "bookmarkable": true
         },
         {
@@ -189,12 +379,96 @@
           "bookmarkable": true
         },
         {
+          "id": "qz-ch1-zombie-state",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-thread-states",
+          "question": "A worker thread executes `return;` and finishes its function, while the parent thread is still busy and has not called `join()` yet. What state is the worker thread in?",
+          "options": [
+            "Zombie",
+            "Terminé",
+            "Bloqué",
+            "Prêt"
+          ],
+          "correct_answer": "Zombie",
+          "explanation": "When a thread finishes executing, it transitions from 'élu' to 'Zombie' until its creator calls `join()` (jointure). Only after `join()` does it transition to the 'Terminé' pseudo-state and release its remaining resources.",
+          "hints": [
+            "Look at the transition from 'élu' on termination in the state diagram.",
+            "Which state exists specifically while waiting for `join()`?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch1-join-ordering",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "code-join-examples",
+          "question": "In `main()`, a developer writes:\n```cpp\nPcoThread t1(task1);\nt1.join();\nPcoThread t2(task2);\nt2.join();\n```\nWhat is the execution behavior of `task1` and `task2`?",
+          "options": [
+            "They run sequentially: `task1` finishes completely before `task2` is even created.",
+            "They run concurrently, and `main()` waits for both.",
+            "`task2` starts immediately while `t1.join()` is waiting.",
+            "It causes a deadlock because `join()` is called twice."
+          ],
+          "correct_answer": "They run sequentially: `task1` finishes completely before `task2` is even created.",
+          "explanation": "`t1.join()` blocks `main()` until `t1` finishes. Because `PcoThread t2(task2)` is placed after `t1.join()`, `t2` is not constructed or launched until `t1` has already terminated.",
+          "hints": [
+            "Remember that `join()` is a blocking function.",
+            "When does `PcoThread t2(task2)` execute?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch1-exit-vs-return",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-join-and-termination",
+          "question": "Suppose `threadA` calls `exit(0);` while `threadB` and `main()` are still running. What happens?",
+          "options": [
+            "The entire process terminates immediately, destroying `threadA`, `threadB`, and `main()`.",
+            "Only `threadA` terminates and enters the Zombie state.",
+            "`threadA` sends a `requestStop()` signal to `threadB`.",
+            "`main()` catches `exit(0)` and continues running `threadB`."
+          ],
+          "correct_answer": "The entire process terminates immediately, destroying `threadA`, `threadB`, and `main()`.",
+          "explanation": "`exit()` terminates the entire process and destroys all of its threads. To terminate only the calling thread cleanly, use `return;` inside the thread function.",
+          "hints": [
+            "Distinguish between terminating a single thread (`return;`) and terminating the whole process (`exit()`).",
+            "Remember from Page 9 that any thread can affect the entire process."
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch1-request-stop-race",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "code-request-stop-race",
+          "question": "Consider:\n```cpp\nPcoThread *t1, *t2;\nvoid f1() { t2->requestStop(); }\nvoid f2() { while (!PcoThread::thisThread()->stopRequested()) {} }\nint main() {\n  t1 = new PcoThread(f1);\n  t2 = new PcoThread(f2);\n  t1->join(); t2->join();\n}\n```\nWhy can this program crash with a segmentation fault?",
+          "options": [
+            "`t1` launches immediately on construction and `f1()` may dereference `t2` before `main()` assigns `t2 = new PcoThread(f2)`.",
+            "`requestStop()` cannot be called from another thread; only `main()` can call it.",
+            "`f2()` must call `PcoThread::usleep()` before `stopRequested()` works.",
+            "`join()` cannot be called on heap-allocated `PcoThread*` pointers."
+          ],
+          "correct_answer": "`t1` launches immediately on construction and `f1()` may dereference `t2` before `main()` assigns `t2 = new PcoThread(f2)`.",
+          "explanation": "Constructing `new PcoThread(f1)` starts `f1()` immediately. There is a race condition between `f1()` executing `t2->requestStop()` and `main()` completing `t2 = new PcoThread(f2)`. If `f1()` runs first, `t2` is still null/uninitialized, causing a null-pointer dereference.",
+          "hints": [
+            "When does `f1()` start executing relative to `t2 = new PcoThread(f2)`?",
+            "What value does `t2` hold before `new PcoThread(f2)` finishes?"
+          ],
+          "bookmarkable": true
+        },
+        {
           "id": "qz-ch1-stop-trap",
           "block_type": "quiz_question",
           "question_type": "multiple_choice",
           "difficulty": 3,
           "related_block_id": "th-join-and-termination",
-          "question": "In a `PcoThread` worker loop, a developer writes `if (PcoThread::thisThread()->stopRequested()) { std::cout << \"Stopping\"; }` inside a helper function `checkStop()`, without returning from the worker loop. What happens when `requestStop()` is called?",
+          "question": "In a `PcoThread` worker loop, a developer writes `if (PcoThread::thisThread()->stopRequested()) { std::cout << \"Stopping\"; }` inside a helper function `void checkStop()`, without returning from the worker loop. What happens when `requestStop()` is called?",
           "options": [
             "The worker thread prints \"Stopping\" and keeps running forever because `return` only exits `checkStop()`, not the worker loop.",
             "The worker thread immediately terminates because `stopRequested()` throws a cancellation exception.",
@@ -205,7 +479,7 @@
           "explanation": "`requestStop()` only sets a boolean flag on the target `PcoThread`. It does not interrupt or kill the thread. If `checkStop()` returns `void` and only `return`s from itself, the caller's `for`/`while` loop continues executing!",
           "hints": [
             "Does `requestStop()` force-kill a thread, or is it purely cooperative?",
-            "If a helper function `void should_stop()` executes `return;`, which function does it return from?"
+            "If a helper function `void checkStop()` executes `return;`, which function does it return from?"
           ],
           "bookmarkable": true
         }

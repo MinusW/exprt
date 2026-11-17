@@ -1,8 +1,8 @@
 {
   "id": "pco-ch5-locks-and-semaphores",
   "title": "Chapter 5: Locks (PcoMutex) & Semaphores (PcoSemaphore)",
-  "description": "Passive waiting with PcoMutex (ownership, non-recursive vs. recursive, common traps) and PcoSemaphore (Dijkstra P/V, counting & controlled sections, strong FIFO vs. weak, PrinterManager, task coordination, and Rendezvous).",
-  "estimated_minutes": 50,
+  "description": "Passive waiting with PcoMutex (Verrouille/Déverrouille, ownership, recursive vs. non-recursive, common traps) and PcoSemaphore (Dijkstra P/V, controlled sections, strong FIFO vs. weak, all 3 PrinterManager stages, task coordination, Rendezvous Solution 1 & 2, and all 3 chapter exercises).",
+  "estimated_minutes": 65,
   "category": "Concurrent Programming",
   "track": "PCO - Programmation Concurrente (TE1)",
   "track_order": 5,
@@ -14,7 +14,8 @@
     "mutex",
     "semaphore",
     "rendezvous",
-    "deadlock"
+    "deadlock",
+    "printer-manager"
   ],
   "prerequisites": [
     "pco-ch4-active-waiting-mutual-exclusion"
@@ -24,86 +25,172 @@
     {
       "title": "PCO Chapter 4: Verrous et sémaphores",
       "url_or_path": "sources/PCO-TE1/PCO_4_mutex.pdf",
-      "notes": "Slides 1-44: PcoMutex, recursive locks, PcoSemaphore, strong/weak, PrinterManager, coordination, Rendezvous, exercises."
+      "notes": "Slides 1-44: Verrouille/Déverrouille, PcoMutex, recursive locks, PcoSemaphore, Dijkstra P/V, controlled sections, strong/weak, PrinterManager (3 stages), coordination, Rendezvous Solutions 1 & 2, exercises."
     }
   ],
   "sections": [
     {
       "id": "sec-pcomutex",
-      "title": "1. Locks (`PcoMutex`): Ownership & Recursion",
-      "description": "How mutexes eliminate active waiting and the rules of lock ownership.",
+      "title": "1. Locks (PcoMutex): Passive Waiting, Ownership & Recursion",
+      "description": "How mutexes eliminate active waiting, ownership semantics, recursive vs. non-recursive locks, and common locking traps.",
       "blocks": [
         {
           "id": "th-mutex-semantics",
           "block_type": "markdown",
-          "title": "PcoMutex Semantics & Ownership Rules",
+          "title": "Verrouille / Déverrouille & PcoMutex Semantics",
           "bookmarkable": true,
-          "content": "A **mutex** (*verrou*, mutual exclusion) replaces CPU-wasting active waiting with **passive waiting**: a boolean lock state plus an OS waiting queue, manipulated by two **atomic** operations:\n\n* `PcoMutex::lock()` — If unlocked, acquires the mutex and sets the calling thread as its **owner**. If already locked by another thread, suspends the caller (`bloqué`) until unlocked.\n* `PcoMutex::unlock()` — Releases the mutex and wakes one waiting thread (if any).\n\n### Critical Rules & Traps\n1. **Strict Ownership:** Only the thread that locked a mutex may unlock it! Thread A cannot lock `m` and have Thread B unlock `m` (use a `PcoSemaphore` for cross-thread signaling!).\n2. **No Memory of Multiple Unlocks:** Unlocking an already unlocked mutex has no effect (no counter increment).\n3. **Non-Recursive Deadlock:** By default (`RecursionMode::NonRecursive`), if a thread calls `lock()` twice on a mutex it already owns (e.g., `function1()` locks `m` and calls `doSomething()` which also locks `m`), **instant self-deadlock**!\n   * Fix: either use `PcoMutex mutex(PcoMutex::RecursionMode::Recursive);` (maintains an owner + lock count) or acquire/release the mutex in the same function without nested locking.\n4. **Local vs. `static` Mutex Trap (Slide 43):** Declaring `PcoMutex mutex;` as a **local variable** inside `void tache()` gives *each* thread its own separate mutex—providing **zero** mutual exclusion! It must be `static`, global, or a shared class member."
+          "content": "Active waiting (*attente active*) wastes CPU cycles polling a condition. A **mutex** (*verrou*, mutual exclusion) replaces it with **passive waiting**: a boolean state (`true` = unlocked) paired with an OS waiting queue, manipulated by two **atomic** operations (Slide 4):\n\n```cpp\nvoid Verrouille(verrou v) {\n    if (v)\n        v = false;\n    else\n        suspendre la tâche appelante dans la file associée à v\n}\n\nvoid Déverrouille(verrou v) {\n    if (la file associée à v != vide)\n        débloquer une tâche en attente dans file\n    else\n        v = true;\n}\n```\n\n### Critical Rules & Ownership (Slides 5–11)\nIn C++ with PCO, include `#include <pcosynchro/pcomutex.h>` and use `PcoMutex` (constructor: `PcoMutex(RecursionMode recursionMode = RecursionMode::NonRecursive)` — always unlocked initially):\n\n1. **Strict Ownership:** The thread that calls `lock()` becomes the **owner** of the mutex until it calls `unlock()`. **A thread cannot unlock a mutex locked by another thread** (use a `PcoSemaphore` for cross-thread signaling!).\n2. **Atomic Operations:** Both `lock()` and `unlock()` are atomic.\n3. **No Memory of Multiple Unlocks:** Calling `unlock()` multiple times on a non-recursive mutex has no cumulative effect.\n4. **Non-Recursive Self-Deadlock:** By default (`RecursionMode::NonRecursive`), if the owner thread calls `lock()` again before calling `unlock()`, it blocks on itself → **guaranteed deadlock**.\n5. **Recursive Mutexes (Slides 13–14):** Declaring `PcoMutex mutex(PcoMutex::RecursionMode::Recursive);` tracks both the **owner thread** and a **lock counter**. The same thread may call `lock()` multiple times without blocking, and must call `unlock()` the **exact same number of times** to release the mutex."
+        },
+        {
+          "id": "code-mutex-counter",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "PcoMutex: Protecting a Shared Counter (Slide 12)",
+          "filename": "mutex_counter.cpp",
+          "code": "#include <iostream>\n#include <pcosynchro/pcomutex.h>\n#include <pcosynchro/pcothread.h>\n\nstatic PcoMutex mutex;\nstatic int counter = 0;\nconst int NB_ITERATIONS = 1000000;\n\nvoid runTask() {\n    for (int i = 0; i < NB_ITERATIONS; i++) {\n        mutex.lock();\n        counter = counter + 1;\n        mutex.unlock();\n    }\n}\n\nint main(int /*argc*/, char */*argv*/[]) {\n    PcoThread thread1(runTask);\n    PcoThread thread2(runTask);\n    thread1.join();\n    thread2.join();\n    std::cout << \"Fin des taches : counter = \" << counter << \" (\"\n              << 2 * NB_ITERATIONS << \")\" << std::endl;\n    return 0;\n}",
+          "highlight_lines": [5, 11, 13],
+          "annotations": [
+            {
+              "line": 5,
+              "note": "Shared static PcoMutex (unlocked by default, NonRecursive)."
+            },
+            {
+              "line": 11,
+              "note": "Acquires ownership before entering the critical section (counter = counter + 1)."
+            },
+            {
+              "line": 13,
+              "note": "Releases ownership in the same function immediately after the critical section."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "code-mutex-traps",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Mutex Traps: Cross-Thread Unlock, Recursion & Split Lock/Unlock (Slides 7, 15–17)",
+          "filename": "mutex_traps.cpp",
+          "code": "// --- 1. ILLEGAL: Cross-thread unlock (Slide 7, pseudocode) ---\nmutex m;\nvoid taskA(void* p) {\n    unlock(m); // ILLEGAL! main() owns m, not taskA\n}\nint main() {\n    initMutex(m);\n    lock(m);\n    createThread(taskA);\n}\n\n// --- 2. Non-recursive vs. Recursive double-lock (Slide 15) ---\nvoid nonRecursiveFail() {\n    PcoMutex mutex; // NonRecursive by default\n    mutex.lock();\n    mutex.lock();   // DEADLOCK! Blocks on itself\n    mutex.unlock();\n    mutex.unlock();\n}\n\nvoid recursiveOk() {\n    PcoMutex mutex(PcoMutex::RecursionMode::Recursive);\n    mutex.lock();\n    mutex.lock();   // OK: lock count = 2\n    mutex.unlock(); // lock count = 1\n    mutex.unlock(); // lock count = 0 -> unlocked\n}\n\n// --- 3. Class methods calling each other (Slide 16) ---\nclass BadClass {\n    PcoMutex mutex;\npublic:\n    void function1() { mutex.lock(); doSomething(); mutex.unlock(); }\n    void doSomething() { mutex.lock(); /* DEADLOCK when called from function1()! */ mutex.unlock(); }\n};\n\nclass GoodClass {\n    PcoMutex mutex{PcoMutex::RecursionMode::Recursive};\npublic:\n    void function() { mutex.lock(); doSomething(); mutex.unlock(); }\n    void doSomething() { mutex.lock(); /* OK: recursive */ mutex.unlock(); }\n};\n\n// --- 4. Best practice: lock() and unlock() in the SAME function (Slide 17) ---\nclass SplitLockBad {\n    PcoMutex mutex;\npublic:\n    void function1() { mutex.lock(); doSomething(); } // Easy to forget unlock!\n    void doSomething() { /* ... */ mutex.unlock(); }\n};\n\nclass SameFunctionGood {\n    PcoMutex mutex;\npublic:\n    void function() { mutex.lock(); /* ... */ doSomething(); mutex.unlock(); }\n    void doSomething() { /* really do work, no unlock responsibility */ }\n};",
+          "highlight_lines": [4, 16, 22, 34, 48],
+          "annotations": [
+            {
+              "line": 4,
+              "note": "Violates ownership: only the thread that locked m may unlock it."
+            },
+            {
+              "line": 16,
+              "note": "Default PcoMutex is non-recursive: second lock() by the same thread deadlocks."
+            },
+            {
+              "line": 22,
+              "note": "Recursive mode counts nested locks by the same owner thread."
+            },
+            {
+              "line": 34,
+              "note": "Public method calling another locked public method deadlocks unless mutex is recursive."
+            },
+            {
+              "line": 48,
+              "note": "Splitting lock() and unlock() across functions risks forgetting unlock() on early returns or alternate call paths."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "fc-mutex-ownership",
+          "block_type": "flashcard",
+          "title": "Mutex Ownership & Cross-Thread Signaling",
+          "front": "Can Thread A lock a `PcoMutex` and have Thread B unlock it to signal an event? Why or why not?",
+          "back": "**No!** A mutex has a strict **owner**—only the thread that acquired the lock is permitted to call `unlock()`. Furthermore, unlocking an already-unlocked mutex has no memory/counter effect. For cross-thread signaling (`T1 -> T2`), you must use a `PcoSemaphore`.",
+          "hint": "Think about Slide 5, Slide 7, and Slide 18.",
+          "tags": ["pco", "pcomutex", "ownership"]
+        },
+        {
+          "id": "fc-mutex-recursive",
+          "block_type": "flashcard",
+          "title": "Recursive vs. Non-Recursive PcoMutex",
+          "front": "What happens if a thread calls `lock()` twice on a default `PcoMutex`, and how does `PcoMutex::RecursionMode::Recursive` change this?",
+          "back": "* **Default (`NonRecursive`):** Instant **self-deadlock** on the second `lock()`.\n* **`Recursive`:** The mutex remembers the **owner thread** and increments a **lock counter**. The owner can re-lock without blocking, and the mutex only becomes free after `unlock()` is called the **exact same number of times**.",
+          "hint": "Think about the internal counter + owner tracking.",
+          "tags": ["pco", "pcomutex", "recursive"]
+        },
+        {
+          "id": "qz-ch5-mutex-unlock",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-mutex-semantics",
+          "question": "Which statement about a default (non-recursive) `PcoMutex` is TRUE?",
+          "options": [
+            "Calling `unlock()` three times on an unlocked mutex leaves it unlocked with no cumulative effect, and calling `lock()` twice consecutively in the same thread causes a deadlock.",
+            "Calling `unlock()` three times increments an internal counter to 3, allowing three threads to enter simultaneously.",
+            "Any thread can call `unlock()` to release a mutex locked by another thread.",
+            "A `PcoMutex` starts locked after construction and must be unlocked in `main()` before threads use it."
+          ],
+          "correct_answer": "Calling `unlock()` three times on an unlocked mutex leaves it unlocked with no cumulative effect, and calling `lock()` twice consecutively in the same thread causes a deadlock.",
+          "explanation": "A non-recursive `PcoMutex` starts unlocked, has strict single-thread ownership, has no memory of extra `unlock()` calls, and self-deadlocks if the owner calls `lock()` again before `unlock()`.",
+          "hints": [
+            "Does a mutex maintain a counter of extra unlocks like a semaphore?",
+            "What is the initial state of `PcoMutex mutex;`?"
+          ],
+          "bookmarkable": true
         }
       ]
     },
     {
       "id": "sec-pcosemaphore",
-      "title": "2. Semaphores (`PcoSemaphore`): Counting, Signaling & Strong FIFO",
-      "description": "Dijkstra's P/V operations, controlled sections, and the PrinterManager case study.",
+      "title": "2. Semaphores (PcoSemaphore): Dijkstra P/V, Controlled Sections & Strong FIFO",
+      "description": "Generalizing locks with an integer counter, controlled sections, and Strong vs. Weak semaphore queues.",
       "blocks": [
         {
           "id": "th-semaphore-semantics",
           "block_type": "markdown",
-          "title": "Dijkstra's P/V & `PcoSemaphore`",
+          "title": "Dijkstra's P/V Pseudocode vs. PcoSemaphore",
           "bookmarkable": true,
-          "content": "Proposed by Edsger Dijkstra (1962–63), a **semaphore** generalizes a lock using an **integer counter** plus a waiting queue:\n\n* `PcoSemaphore(unsigned int n = 0)`: Initializes the counter to $n \\ge 0$ (`0` by default). *(Passing `-1` to an `unsigned int` parameter causes unsigned underflow to `UINT_MAX`, NOT blocking!)*\n* `acquire()` (*P — Prolaag*): Decrements the semaphore. If `counter > 0`, decrements and returns immediately; if `counter == 0`, blocks the calling thread until a `release()` occurs.\n* `release()` (*V — Verhoog*): Increments the semaphore; if threads are waiting in the queue, wakes one up.\n\n### Key Use Cases & Properties\n* **Binary Mutex (`n = 1`):** Protects a critical section (`acquire()` / `release()`).\n* **Controlled Section (`n = v > 1`):** Allows up to $v$ threads simultaneously into a region (e.g., $N$ printers).\n* **Strong vs. Weak Semaphores:**\n  * **Strong (FIFO):** Waiting threads are woken in strict arrival order. **`PcoSemaphore` is a strong semaphore.**\n  * **Weak:** Waiting threads may be woken in arbitrary order."
+          "content": "Proposed by Edsger Dijkstra (1962–63), a **semaphore** generalizes a lock using an **integer counter** `s` and a waiting queue (Slide 21):\n\n```cpp\nvoid P(sémaphore s) {\n    s -= 1;\n    if (s < 0)\n        suspendre la tâche appelante dans la file associée à s\n}\n\nvoid V(sémaphore s) {\n    s += 1;\n    if (s <= 0)\n        débloquer une des tâches de la file associée à s\n}\n```\n\nIn Dijkstra's classic formulation, when `s < 0`, **`|s|` equals the number of waiting threads** in the queue.\n\n### C++ `PcoSemaphore` API (Slides 24–29)\nInclude `#include <pcosynchro/pcosemaphore.h>`:\n* **`PcoSemaphore(unsigned int n = 0)`:** Initializes the counter to $n \\ge 0$ (`0` by default). Initializing to a negative value makes no sense—passing `-1` to `unsigned int` causes **unsigned underflow to `UINT_MAX`** (`4294967295`), so `acquire()` will not block!\n* **`void acquire()` (*P — Prolaag*):** If counter $> 0$, decrements and returns immediately; if counter $== 0$, blocks until `release()`.\n* **`void release()` (*V — Verhoog*):** Increments the counter; if threads are waiting, wakes one.\n\n### Use Cases & Queue Ordering\n* **Critical Section (`n = 1`):** Binary semaphore (`acquire()` / `release()`). Unlike a mutex, it has **no ownership**.\n* **Controlled Section (`n = v > 1`):** Admits up to $v$ threads simultaneously (e.g., $N$ printers or database connections).\n* **Strong vs. Weak Semaphores (Slide 29):**\n  * **Strong (*fort*):** Waiting queue is **FIFO**—threads are woken in strict arrival order. **`PcoSemaphore` is a strong semaphore.**\n  * **Weak (*faible*):** Waiting queue is unordered—threads may wake in arbitrary order."
         },
         {
-          "id": "th-printer-manager-trap",
-          "block_type": "markdown",
-          "title": "Case Study: `PrinterManager` & Lock-Ordering Deadlock",
-          "bookmarkable": true,
-          "content": "In `PCO_4_mutex.pdf` (Slides 30–34), `PrinterManager(int nbPrinters)` uses `nbPrintersSem(nbPrinters)` to count free printers and `mutex(1)` to protect the `std::vector<bool> busy` array:\n\n* **Correct Order in `allocate()`:**\n  1. `nbPrintersSem.acquire();` *(wait for a free printer FIRST)*\n  2. `mutex.acquire();` *(then lock `busy` to find/mark the index)*\n  3. `mutex.release();`\n* **Deadlock Trap (Slide 34):** If `allocate()` acquires `mutex` **before** `nbPrintersSem.acquire()`, and all printers are busy, the thread blocks on `nbPrintersSem.acquire()` **while holding `mutex`**! When another thread calls `giveBack()` to free a printer, `giveBack()` tries `mutex.acquire()` before `nbPrintersSem.release()` → **permanent deadlock!**"
-        }
-      ]
-    },
-    {
-      "id": "sec-coordination-rendezvous",
-      "title": "3. Task Coordination & The Rendezvous Problem",
-      "description": "Enforcing execution order (T1 -> T2) and mutual synchronization (Rendezvous) without deadlock.",
-      "blocks": [
-        {
-          "id": "diag-rendezvous",
-          "block_type": "kroki",
-          "diagram_type": "mermaid",
-          "title": "The Rendezvous Synchronization Pattern",
-          "caption": "Both TâcheA and TâcheB must complete their first activity (a1, b1) before EITHER can start its second activity (a2, b2).",
-          "source": "sequenceDiagram\n  participant TA as Tâche A\n  participant TB as Tâche B\n  Note over TA: Execute a1()\n  Note over TB: Execute b1()\n  TA->>TB: arriveA.release()\n  TB->>TA: arriveB.release()\n  Note over TA,TB: Rendezvous Point (Both synchronized!)\n  Note over TA: Execute a2()\n  Note over TB: Execute b2()",
-          "bookmarkable": true
-        },
-        {
-          "id": "th-rendezvous-solutions",
-          "block_type": "markdown",
-          "title": "Rendezvous: Solution 1 (Correct) vs. Solution 2 (Deadlock!)",
-          "bookmarkable": true,
-          "content": "With `PcoSemaphore arriveA(0);` and `PcoSemaphore arriveB(0);`:\n\n| Solution 1 (Correct) | Solution 2 (Deadlock!) |\n| :--- | :--- |\n| `TâcheA`: `a1(); arriveA.release(); arriveB.acquire(); a2();` | `TâcheA`: `a1(); arriveB.acquire(); arriveA.release(); a2();` |\n| `TâcheB`: `b1(); arriveB.release(); arriveA.acquire(); b2();` | `TâcheB`: `b1(); arriveA.acquire(); arriveB.release(); b2();` |\n| **Why it works:** Both signal their arrival *before* waiting for the other. | **Why it fails:** Both call `acquire()` on a `0`-initialized semaphore *before* either calls `release()`! Both block forever (**interblocage**). |"
-        },
-        {
-          "id": "qz-ch5-rendezvous",
-          "block_type": "quiz_question",
-          "question_type": "multiple_choice",
-          "difficulty": 2,
-          "related_block_id": "th-rendezvous-solutions",
-          "question": "Suppose `arriveA(0)` and `arriveB(0)` are initialized to `0`. `taskA` runs `a1(); arriveB.acquire(); arriveA.release(); a2();` and `taskB` runs `b1(); arriveA.acquire(); arriveB.release(); b2();`. What happens?",
-          "options": [
-            "Deadlock (interblocage): both threads block forever on `acquire()`.",
-            "`a2()` is always executed after `b1()`.",
-            "In some schedules `a2()` executes before `b1()`.",
-            "The result depends on the OS scheduler."
-          ],
-          "correct_answer": "Deadlock (interblocage): both threads block forever on `acquire()`.",
-          "explanation": "Both `arriveA` and `arriveB` start at 0. `taskA` blocks on `arriveB.acquire()` before calling `arriveA.release()`, and `taskB` blocks on `arriveA.acquire()` before calling `arriveB.release()`. Neither can ever reach its `release()`, causing a guaranteed deadlock.",
-          "hints": [
-            "What are the initial values of `arriveA` and `arriveB`?",
-            "Can either `taskA` or `taskB` reach its `release()` statement?"
+          "id": "code-controlled-section",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Controlled Section Example: Max 2 of 4 Threads Inside (Slide 28)",
+          "filename": "controlled_section.cpp",
+          "code": "#include <iostream>\n#include <cstdlib>\n#include <pcosynchro/pcosemaphore.h>\n#include <pcosynchro/pcothread.h>\n\nconst int NB_THREADS = 4;\nstatic PcoSemaphore *sem = new PcoSemaphore(2);\n\nvoid task(int tid) {\n    sem->acquire();\n    std::cout << \"Tache \" << tid << \" est rentrée en SC\" << std::endl;\n    PcoThread::usleep((int)((float)3000000 * rand() / (RAND_MAX + 1.0)));\n    std::cout << \"Tache \" << tid << \" sort de la SC\" << std::endl;\n    sem->release();\n}\n\nint main(void) {\n    PcoThread *threads[NB_THREADS];\n    for (int i = 0; i < NB_THREADS; i++) {\n        threads[i] = new PcoThread(task, i);\n    }\n    for (int i = 0; i < NB_THREADS; i++)\n        threads[i]->join();\n    return EXIT_SUCCESS;\n}",
+          "highlight_lines": [7, 10, 14],
+          "annotations": [
+            {
+              "line": 7,
+              "note": "Initialized to 2: up to 2 threads can be inside the controlled section simultaneously."
+            },
+            {
+              "line": 10,
+              "note": "The 3rd and 4th threads block in FIFO order until one of the first 2 calls release()."
+            },
+            {
+              "line": 14,
+              "note": "Releases one slot, waking the oldest waiting thread in the FIFO queue."
+            }
           ],
           "bookmarkable": true
+        },
+        {
+          "id": "fc-dijkstra-pv",
+          "block_type": "flashcard",
+          "title": "Dijkstra's Negative Counter vs. PcoSemaphore",
+          "front": "In Dijkstra's `P(s)`/`V(s)` pseudocode, what does a negative value `s = -3` mean, and why can't you initialize `PcoSemaphore(-1)`?",
+          "back": "In Dijkstra's pseudocode, `s = -3` means **3 threads are currently blocked** in the semaphore's waiting queue (`V` checks `if (s <= 0)` to wake one).\n\nIn `PcoSemaphore(unsigned int n = 0)`, `n` is `unsigned int` because a semaphore cannot *start* with negative resources. Passing `-1` underflows to `UINT_MAX`, making the semaphore wide open instead of blocking.",
+          "hint": "Check `P(s)` (`s -= 1; if (s < 0) ...`) and the C++ constructor signature.",
+          "tags": ["pco", "pcosemaphore", "dijkstra"]
+        },
+        {
+          "id": "fc-strong-vs-weak",
+          "block_type": "flashcard",
+          "title": "Strong vs. Weak Semaphores",
+          "front": "What is the difference between a **strong** (*fort*) and a **weak** (*faible*) semaphore, and which one is `PcoSemaphore`?",
+          "back": "* **Strong semaphore:** The waiting queue is ordered (**FIFO**)—threads are woken in their exact arrival order.\n* **Weak semaphore:** The waiting queue is **unordered**—any waiting thread may be woken.\n\n**`PcoSemaphore` is a strong (FIFO) semaphore.**",
+          "hint": "Think about arrival order and starvation.",
+          "tags": ["pco", "pcosemaphore", "fifo"]
         },
         {
           "id": "qz-ch5-sem-neg1",
@@ -123,6 +210,296 @@
           "hints": [
             "Check the parameter type of `PcoSemaphore::PcoSemaphore(unsigned int n = 0)`.",
             "What happens in C++ when `-1` is passed to an `unsigned int` parameter?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch5-controlled-section",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "code-controlled-section",
+          "question": "In the Controlled Section example (`NB_THREADS = 4`, `PcoSemaphore(2)`), suppose T0 and T1 enter first, then T2 arrives, then T3 arrives. When T0 calls `sem->release()`, which thread is woken next?",
+          "options": [
+            "T2, because `PcoSemaphore` is a strong (FIFO) semaphore.",
+            "Either T2 or T3 arbitrarily, because semaphores have unordered queues.",
+            "T3, because `PcoSemaphore` uses LIFO ordering.",
+            "Neither T2 nor T3 until T1 also calls `release()`."
+          ],
+          "correct_answer": "T2, because `PcoSemaphore` is a strong (FIFO) semaphore.",
+          "explanation": "`PcoSemaphore` is a strong semaphore, meaning its waiting queue is strictly FIFO. Since T2 arrived before T3, T2 is woken first when T0 releases a slot.",
+          "hints": [
+            "Is `PcoSemaphore` a strong or weak semaphore?",
+            "How many slots are needed for one waiting thread to proceed?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-printer-manager",
+      "title": "3. Case Study: PrinterManager (All 3 Stages & Deadlock Trap)",
+      "description": "From a race-prone first attempt, to the correct two-semaphore design, to the fatal lock-ordering deadlock.",
+      "blocks": [
+        {
+          "id": "th-printer-manager-stages",
+          "block_type": "markdown",
+          "title": "Evolution of PrinterManager (Slides 30–34)",
+          "bookmarkable": true,
+          "content": "`PrinterManager(int nbPrinters)` manages $N$ printers (`std::vector<bool> busy`) using `nbPrintersSem(nbPrinters)` to count available printers and `mutex(1)` for mutual exclusion. The slides walk through **3 stages**:\n\n### Stage 1: Broken Attempt Without `mutex` (Slides 31–32)\n* `allocate()` calls `nbPrintersSem.acquire(); return giveIndex();` and `giveBack()` sets `busy[index] = false; nbPrintersSem.release();`.\n* **Bug:** Up to $N$ threads can enter `giveIndex()` **simultaneously**! Two threads can both scan `busy`, see `busy[0] == false`, and allocate the **exact same printer** (data race on `busy`).\n\n### Stage 2: Correct Solution (Slide 33)\n* Add `PcoSemaphore mutex(1);` to protect `giveIndex()` and the `busy[index] = false;` update in `giveBack()`.\n* **Order in `allocate()`:** `nbPrintersSem.acquire()` **FIRST**, then `giveIndex()` (which acquires/releases `mutex`).\n* **Order in `giveBack()`:** `mutex.acquire()` → `busy[index] = false;` → `mutex.release()` → `nbPrintersSem.release()`.\n* **Self-Deadlock Note (Slide 33):** Even in this correct design, if a **single thread** allocates all $N$ printers and tries to allocate an $(N+1)$-th printer before calling `giveBack()`, it deadlocks on itself!\n\n### Stage 3: Faulty Lock Ordering (Slide 34 — Deadlock!)\n* If `allocate()` calls `mutex.acquire()` **before** `nbPrintersSem.acquire()`, and all $N$ printers are busy, the thread blocks on `nbPrintersSem.acquire()` **while still holding `mutex`**!\n* When another thread calls `giveBack()` to return a printer, `giveBack()` calls `mutex.acquire()` before `nbPrintersSem.release()` → it blocks waiting for `mutex` → **permanent deadlock**!"
+        },
+        {
+          "id": "code-printer-manager",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "PrinterManager: Correct Stage 2 vs. Faulty Stage 3 (Slides 33–34)",
+          "filename": "printer_manager.cpp",
+          "code": "class PrinterManager {\n    PcoSemaphore nbPrintersSem;\n    std::vector<bool> busy;\n    PcoSemaphore mutex;\n\n    unsigned giveIndex(void) {\n        unsigned index = 0;\n        mutex.acquire();\n        // Search for first free printer\n        while (busy[index])\n            index += 1;\n        busy[index] = true;\n        mutex.release();\n        return index;\n    }\n\npublic:\n    PrinterManager(int nbPrinters) :\n        nbPrintersSem(nbPrinters), mutex(1) {\n        busy.resize(nbPrinters);\n        for (int i = 0; i < nbPrinters; i++)\n            busy[i] = false;\n    }\n\n    // STAGE 2 (CORRECT): acquire resource semaphore FIRST, mutex INSIDE giveIndex()\n    unsigned allocate(void) {\n        nbPrintersSem.acquire();\n        return giveIndex();\n    }\n\n    /* STAGE 3 (DEADLOCK!): holding mutex while waiting on nbPrintersSem\n    unsigned allocate_BROKEN(void) {\n        mutex.acquire();\n        nbPrintersSem.acquire(); // Blocks while holding mutex if 0 printers free!\n        return giveIndex();      // (Also note giveIndex() would re-acquire mutex if unchanged!)\n    }\n    */\n\n    void giveBack(unsigned index) {\n        mutex.acquire();\n        busy[index] = false;\n        mutex.release();\n        nbPrintersSem.release();\n    }\n};",
+          "highlight_lines": [27, 33, 34, 40, 43],
+          "annotations": [
+            {
+              "line": 27,
+              "note": "Wait for a free printer slot BEFORE acquiring mutex."
+            },
+            {
+              "line": 33,
+              "note": "Slide 34 bug: acquiring mutex before nbPrintersSem.acquire() causes deadlock with giveBack()."
+            },
+            {
+              "line": 40,
+              "note": "giveBack() must acquire mutex to clear busy[index] before calling nbPrintersSem.release()."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch5-printer-manager",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-printer-manager-stages",
+          "question": "In Stage 3 of `PrinterManager` (Slide 34), `allocate()` calls `mutex.acquire()` BEFORE `nbPrintersSem.acquire()`, and `giveBack()` calls `mutex.acquire()` BEFORE `nbPrintersSem.release()`. When all printers are currently allocated, what happens if a thread calls `allocate()`?",
+          "options": [
+            "Permanent deadlock: `allocate()` blocks on `nbPrintersSem.acquire()` while holding `mutex`, preventing any thread in `giveBack()` from acquiring `mutex` to release a printer.",
+            "It works fine as long as `PcoSemaphore` is a strong FIFO semaphore.",
+            "Two threads can allocate the same printer index, corrupting `busy`.",
+            "`giveBack()` skips `mutex` and releases `nbPrintersSem` immediately."
+          ],
+          "correct_answer": "Permanent deadlock: `allocate()` blocks on `nbPrintersSem.acquire()` while holding `mutex`, preventing any thread in `giveBack()` from acquiring `mutex` to release a printer.",
+          "explanation": "Never block on a resource-counting semaphore while holding a mutual-exclusion lock needed by the thread that releases the resource. `allocate()` holds `mutex` while waiting for `nbPrintersSem.release()`, and `giveBack()` cannot reach `nbPrintersSem.release()` because it is blocked on `mutex.acquire()`.",
+          "hints": [
+            "Which semaphore does `allocate()` hold when it blocks on `nbPrintersSem.acquire()`?",
+            "What does `giveBack()` need to acquire before it can call `nbPrintersSem.release()`?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-coordination-rendezvous",
+      "title": "4. Task Coordination & The Rendezvous Problem",
+      "description": "Enforcing execution order (T1 -> T2) and mutual synchronization (Rendezvous Solutions 1 & 2 vs. broken symmetric-acquire).",
+      "blocks": [
+        {
+          "id": "code-coordination-t1-t2",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Task Coordination: Uncoordinated vs. T1 -> T2 (Slides 37–38)",
+          "filename": "coordination_t1_t2.cpp",
+          "code": "#include <iostream>\n#include <pcosynchro/pcosemaphore.h>\n#include <pcosynchro/pcothread.h>\n\n// --- Uncoordinated (T1 || T2): I2 may run before I1 (Slide 37) ---\nvoid T1_uncoord() { std::cout << \"T1: I1\" << std::endl; }\nvoid T2_uncoord() { std::cout << \"T2: I2\" << std::endl; }\n\n// --- Coordinated (T1 -> T2): I1 guaranteed before I2 (Slide 38) ---\nstatic PcoSemaphore sync(0);\n\nvoid T1() {\n    PcoThread::usleep(1000000); // I_1\n    std::cout << \"T1: fini sleep\" << std::endl;\n    sync.release(); // Signal T2 that I_1 is done\n}\n\nvoid T2() {\n    std::cout << \"T2: avant acquire\" << std::endl;\n    sync.acquire(); // Wait until T1 finishes I_1\n    std::cout << \"T2: apres acquire\" << std::endl; // I_2\n}\n\nint main(void) {\n    PcoThread thread1(T1);\n    PcoThread thread2(T2);\n    thread1.join();\n    thread2.join();\n    return 0;\n}",
+          "highlight_lines": [10, 15, 20],
+          "annotations": [
+            {
+              "line": 10,
+              "note": "Initialized to 0 so T2 blocks if it reaches acquire() before T1 calls release()."
+            },
+            {
+              "line": 15,
+              "note": "T1 signals completion of I_1."
+            },
+            {
+              "line": 20,
+              "note": "T2 waits here until sync.release() has been called."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "diag-rendezvous",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "The Rendezvous Synchronization Pattern (Slide 39)",
+          "caption": "Both TâcheA and TâcheB must complete their first activity (a1, b1) before EITHER can start its second activity (a2, b2).",
+          "source": "sequenceDiagram\n  participant TA as Tâche A\n  participant TB as Tâche B\n  Note over TA: Execute a1()\n  Note over TB: Execute b1()\n  TA->>TB: arriveA.release()\n  TB->>TA: arriveB.release()\n  Note over TA,TB: Rendezvous Point (Both synchronized!)\n  Note over TA: Execute a2()\n  Note over TB: Execute b2()",
+          "bookmarkable": true
+        },
+        {
+          "id": "code-rendezvous-solutions",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Rendezvous: Solution 1 (Slide 40), Solution 2 (Slide 41) & Broken Variant",
+          "filename": "rendezvous_solutions.cpp",
+          "code": "static PcoSemaphore arriveA(0);\nstatic PcoSemaphore arriveB(0);\n\n// === SOLUTION 1 (Slide 40): Symmetric release-first -> VALID ===\nvoid myTaskA_sol1() {\n    a1();\n    arriveA.release();\n    arriveB.acquire();\n    a2();\n}\nvoid myTaskB_sol1() {\n    b1();\n    arriveB.release();\n    arriveA.acquire();\n    b2();\n}\n\n// === SOLUTION 2 (Slide 41): Asymmetric -> VALID (NO DEADLOCK!) ===\nvoid myTaskA_sol2() {\n    a1();\n    arriveB.acquire(); // Waits for B to finish b1() and release arriveB\n    arriveA.release(); // Signals B after both a1() and b1() are done\n    a2();\n}\nvoid myTaskB_sol2() {\n    b1();\n    arriveB.release(); // B releases FIRST!\n    arriveA.acquire(); // B waits for A\n    b2();\n}\n\n// === BROKEN VARIANT (NOT Slide 41!): Symmetric acquire-first -> DEADLOCK! ===\nvoid myTaskA_deadlock() {\n    a1();\n    arriveB.acquire(); // Blocks waiting for B\n    arriveA.release();\n    a2();\n}\nvoid myTaskB_deadlock() {\n    b1();\n    arriveA.acquire(); // Blocks waiting for A\n    arriveB.release();\n    b2();\n}",
+          "highlight_lines": [21, 27, 35, 41],
+          "annotations": [
+            {
+              "line": 21,
+              "note": "In Slide 41, A calls acquire() first, but B calls release() first—so no deadlock!"
+            },
+            {
+              "line": 27,
+              "note": "B releases arriveB before calling acquire(arriveA), unblocking A."
+            },
+            {
+              "line": 35,
+              "note": "If BOTH tasks call acquire() before release(), neither can ever reach release() -> deadlock."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "th-rendezvous-solutions",
+          "block_type": "markdown",
+          "title": "Rendezvous Analysis: Why Slide 41 (Solution 2) Works vs. Symmetric Acquire-First",
+          "bookmarkable": true,
+          "content": "With `static PcoSemaphore arriveA(0);` and `static PcoSemaphore arriveB(0);`:\n\n| Variant | `myTaskA` | `myTaskB` | Outcome & Why |\n| :--- | :--- | :--- | :--- |\n| **Solution 1 (Slide 40)** | `a1(); arriveA.release(); arriveB.acquire(); a2();` | `b1(); arriveB.release(); arriveA.acquire(); b2();` | **Valid Rendezvous:** Both signal arrival *before* waiting. |\n| **Solution 2 (Slide 41)** | `a1(); arriveB.acquire(); arriveA.release(); a2();` | `b1(); arriveB.release(); arriveA.acquire(); b2();` | **Valid Rendezvous (NO deadlock!):** `myTaskB` calls `arriveB.release()` **first**, unblocking `myTaskA` so it can call `arriveA.release()` and unblock `myTaskB`. Both `a1` and `b1` still finish before `a2` or `b2`! |\n| **Broken Symmetric Acquire-First** | `a1(); arriveB.acquire(); arriveA.release(); a2();` | `b1(); arriveA.acquire(); arriveB.release(); b2();` | **Guaranteed Deadlock (*interblocage*):** Both call `acquire()` on `0`-initialized semaphores before either calls `release()`. |\n\n> [!IMPORTANT]\n> **Careful Reading on Exams:** Always check whether **both** tasks call `acquire()` first, or only **one** does! In Slide 41's asymmetric Solution 2, `myTaskB` releases `arriveB` before acquiring `arriveA`, which breaks the circular wait."
+        },
+        {
+          "id": "fc-rendezvous-asymmetric",
+          "block_type": "flashcard",
+          "title": "Rendezvous: Asymmetric (Slide 41) vs. Symmetric Acquire-First",
+          "front": "In Slide 41's Solution 2 (`myTaskA`: `arriveB.acquire(); arriveA.release();` and `myTaskB`: `arriveB.release(); arriveA.acquire();`), does it deadlock? Why or why not?",
+          "back": "**No, it does NOT deadlock—it is a valid asymmetric rendezvous!**\n\n`myTaskB` calls `arriveB.release()` **first**, so `myTaskA` can pass `arriveB.acquire()` and then call `arriveA.release()`, which unblocks `myTaskB`. Both `a1()` and `b1()` are guaranteed to finish before either `a2()` or `b2()` starts.\n\nDeadlock only occurs if **both** tasks call `acquire()` before `release()` (the symmetric `acquire`-first bug).",
+          "hint": "Trace which semaphore `myTaskB` operates on first.",
+          "tags": ["pco", "rendezvous", "pcosemaphore"]
+        },
+        {
+          "id": "qz-ch5-rendezvous",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-rendezvous-solutions",
+          "question": "In Slide 41 (Solution 2), `arriveA(0)` and `arriveB(0)` start at `0`. `myTaskA` runs `a1(); arriveB.acquire(); arriveA.release(); a2();` and `myTaskB` runs `b1(); arriveB.release(); arriveA.acquire(); b2();`. What happens?",
+          "options": [
+            "Valid rendezvous (no deadlock): both `a1()` and `b1()` always complete before either `a2()` or `b2()` starts.",
+            "Guaranteed deadlock (interblocage): both threads block forever on `acquire()`.",
+            "`a2()` can execute before `b1()` finishes.",
+            "`b2()` can execute before `a1()` finishes."
+          ],
+          "correct_answer": "Valid rendezvous (no deadlock): both `a1()` and `b1()` always complete before either `a2()` or `b2()` starts.",
+          "explanation": "Because `myTaskB` calls `arriveB.release()` BEFORE `arriveA.acquire()`, it unblocks `myTaskA` at `arriveB.acquire()`. `myTaskA` then calls `arriveA.release()`, unblocking `myTaskB`. Neither `a2()` nor `b2()` can start until both `a1()` and `b1()` have completed.",
+          "hints": [
+            "Look closely at `myTaskB`: does it call `acquire()` or `release()` first?",
+            "Can `a2()` start before `myTaskB` calls `arriveB.release()`? Can `b2()` start before `myTaskA` calls `arriveA.release()`?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-exercises",
+      "title": "5. End-of-Chapter Exercises (Slides 43–44)",
+      "description": "Implementing a mutex with semaphores, local vs. static PcoMutex, and main-thread start signaling.",
+      "blocks": [
+        {
+          "id": "code-ex1-mutex-from-sem",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Exercise 1 (Slide 43): Implementing a Mutex Using Only Semaphores",
+          "filename": "mutex_from_sem.cpp",
+          "code": "#include <pcosynchro/pcosemaphore.h>\n#include <thread>\n\nclass SemMutex {\n    PcoSemaphore sem{1};      // Controls mutual exclusion\n    PcoSemaphore stateLock{1}; // Protects owner & locked flag\n    bool locked = false;\n    std::thread::id owner;\n\npublic:\n    void lock() {\n        // Note: if the same owner calls lock() again, sem.acquire() deadlocks (non-recursive).\n        sem.acquire();\n        stateLock.acquire();\n        locked = true;\n        owner = std::this_thread::get_id();\n        stateLock.release();\n    }\n\n    void unlock() {\n        stateLock.acquire();\n        // Preserve mutex ownership & no-memory-of-extra-unlocks semantics:\n        if (locked && owner == std::this_thread::get_id()) {\n            locked = false;\n            owner = std::thread::id{};\n            stateLock.release();\n            sem.release();\n            return;\n        }\n        stateLock.release();\n    }\n};",
+          "highlight_lines": [5, 8, 23, 27],
+          "annotations": [
+            {
+              "line": 5,
+              "note": "A bare PcoSemaphore(1) alone is NOT a mutex because it lacks ownership and counts extra releases!"
+            },
+            {
+              "line": 23,
+              "note": "Only the thread that acquired the lock may release it; extra unlocks are ignored."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-ch5-ex1-mutex-from-sem",
+          "block_type": "reflection_rubric",
+          "title": "Exercise 1 Self-Check: Why `PcoSemaphore(1)` Alone Is Not a Mutex",
+          "prompt": "Why is a single `PcoSemaphore sem(1)` insufficient to implement a true mutex (Slide 43, Exercise 1), and what extra state is required to preserve mutex semantics?",
+          "self_check_criteria": [
+            "Noted that a bare `PcoSemaphore(1)` has no concept of an owner thread, so another thread could call `release()`.",
+            "Noted that calling `release()` multiple times on a `PcoSemaphore(1)` increments its counter above 1 (allowing multiple threads into the critical section), whereas extra `unlock()` calls on a mutex have no effect.",
+            "Included tracking the `owner` thread ID and `locked` boolean (protected by an internal binary semaphore) so `unlock()` only releases `sem` when `locked && owner == currentThread`."
+          ],
+          "model_answer": "A bare `PcoSemaphore(1)` does not track ownership and counts every `release()` (so two `release()` calls would raise the counter to 2 and break mutual exclusion). To preserve mutex semantics, we store a `locked` flag and `owner` thread ID protected by a small internal `stateLock(1)` semaphore, and only call `sem.release()` in `unlock()` if `locked` is true and the caller is `owner`.",
+          "bookmarkable": true
+        },
+        {
+          "id": "code-ex2-local-vs-static",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Exercise 2 (Slide 43): Local PcoMutex vs. static PcoMutex",
+          "filename": "local_vs_static_mutex.cpp",
+          "code": "// === BROKEN: Local mutex per call (NO mutual exclusion!) ===\nvoid tache_broken() {\n    PcoMutex mutex; // Created on each thread's private stack!\n    mutex.lock();\n    std::cout << \"Section critique\" << std::endl;\n    mutex.unlock();\n}\n\n// === CORRECT: static mutex shared across all threads ===\nvoid tache_correct() {\n    static PcoMutex mutex; // Single shared instance across all threads\n    mutex.lock();\n    std::cout << \"Section critique\" << std::endl;\n    mutex.unlock();\n}",
+          "highlight_lines": [3, 11],
+          "annotations": [
+            {
+              "line": 3,
+              "note": "Each thread gets its own unlocked PcoMutex on its stack -> zero mutual exclusion!"
+            },
+            {
+              "line": 11,
+              "note": "static allocates one shared PcoMutex in static storage, synchronizing all threads calling tache_correct()."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "code-ex3-main-signal",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Exercise 3 (Slide 44): Main-Thread Start Signal for 2 Tasks",
+          "filename": "main_start_signal.cpp",
+          "code": "#include <iostream>\n#include <pcosynchro/pcosemaphore.h>\n#include <pcosynchro/pcothread.h>\n\nstatic PcoSemaphore start1(0);\nstatic PcoSemaphore start2(0);\n\nvoid task1() {\n    start1.acquire(); // Wait for main's signal\n    std::cout << \"Task 1 running\" << std::endl;\n}\n\nvoid task2() {\n    start2.acquire(); // Wait for main's signal\n    std::cout << \"Task 2 running\" << std::endl;\n}\n\nint main() {\n    PcoThread t1(task1);\n    PcoThread t2(task2);\n\n    // Main preparation work...\n    start1.release(); // Unblock task1\n    start2.release(); // Unblock task2\n\n    t1.join();\n    t2.join();\n    return 0;\n}",
+          "highlight_lines": [5, 6, 9, 14, 23, 24],
+          "annotations": [
+            {
+              "line": 5,
+              "note": "Alternatively, a single `PcoSemaphore start(0)` can be used if `main()` calls `start.release()` TWICE (once per waiting task)."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-ch5-ex2-ex3",
+          "block_type": "reflection_rubric",
+          "title": "Exercises 2 & 3 Self-Check: Shared Scope & Counting Signals",
+          "prompt": "1) Why does `PcoMutex mutex;` inside `void tache()` fail while `static PcoMutex mutex;` works? 2) In Exercise 3, if you used a single `PcoSemaphore start(0)` instead of two semaphores, what happens if `main()` only calls `start.release()` once?",
+          "self_check_criteria": [
+            "Explained that a local `PcoMutex` lives on each thread's private stack (separate objects), whereas `static PcoMutex` creates one shared object in static memory.",
+            "Explained that `release()` wakes only ONE waiting thread, so a single `start.release()` would leave the second task blocked forever—`main()` must call `release()` twice (or use two semaphores)."
+          ],
+          "model_answer": "1) A local variable is allocated on each thread's own stack, so every thread locks its own private mutex and enters the critical section simultaneously. `static` creates a single shared mutex instance. 2) Each `release()` increments the semaphore by 1 and wakes at most one blocked thread; with two tasks waiting on `start.acquire()`, calling `release()` only once leaves one task permanently blocked.",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch5-local-mutex",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "code-ex2-local-vs-static",
+          "question": "Two threads concurrently call `void tache() { PcoMutex mutex; mutex.lock(); std::cout << \"Section critique\" << std::endl; mutex.unlock(); }`. What happens?",
+          "options": [
+            "Both threads can enter the `std::cout` line simultaneously because each thread creates its own local `PcoMutex` on its stack.",
+            "Mutual exclusion is guaranteed because `PcoMutex` automatically shares state by variable name.",
+            "The second thread deadlocks on `mutex.lock()`.",
+            "A compiler error occurs because `PcoMutex` cannot be declared inside a function."
+          ],
+          "correct_answer": "Both threads can enter the `std::cout` line simultaneously because each thread creates its own local `PcoMutex` on its stack.",
+          "explanation": "Local variables inside a function are allocated per-call on each thread's private stack. To synchronize threads, the `PcoMutex` must be shared (`static`, global, or a shared object member).",
+          "hints": [
+            "Where do local variables live in memory for each thread?",
+            "Do the two threads lock the same `PcoMutex` instance or two different ones?"
           ],
           "bookmarkable": true
         }

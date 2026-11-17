@@ -1,8 +1,8 @@
 {
   "id": "pco-ch4-active-waiting-mutual-exclusion",
   "title": "Chapter 4: Mutual Exclusion by Active Waiting",
-  "description": "Critical resources, counter++ race condition (minimum value = 2), the 4 mutual exclusion rules, Dekker & Peterson algorithms, multi-core memory barriers, and active vs. passive waiting.",
-  "estimated_minutes": 45,
+  "description": "Critical resources, counter++ race condition (Slide 7 trace & minimum value = 2), the 4 mutual exclusion rules + Slide 16 fairness types, Attempts 1–5, Dekker's & Peterson's algorithms (single-core & multi-core barriers), active vs. passive waiting, and the Slide 35 broken-protocol exercise.",
+  "estimated_minutes": 60,
   "category": "Concurrent Programming",
   "track": "PCO - Programmation Concurrente (TE1)",
   "track_order": 4,
@@ -15,6 +15,7 @@
     "active-waiting",
     "deadlock",
     "starvation",
+    "livelock",
     "memory-barrier"
   ],
   "prerequisites": [
@@ -25,91 +26,340 @@
     {
       "title": "PCO Chapter 3: Exclusion mutuelle par attente active",
       "url_or_path": "sources/PCO-TE1/PCO_3_exclusion.pdf",
-      "notes": "Slides 1-35: Critical resources, counter++ interleaving, 4 properties, 4 failed attempts, Dekker, Peterson, memory barriers, final exercise."
+      "notes": "Slides 1-35: Critical resources, counter++ interleaving, 4 rules, fairness types, 5 failed attempts, Dekker, Peterson, memory barriers, active vs passive waiting, final exercise."
     }
   ],
   "sections": [
     {
       "id": "sec-critical-resource-race",
       "title": "1. Critical Resources & The `counter++` Race Condition",
-      "description": "How machine-level load/add/store interleaving causes lost updates.",
+      "description": "How machine-level load/add/store interleaving causes lost updates—and why N = 1,000,000 can yield a minimum of 2.",
       "blocks": [
         {
           "id": "th-counter-race",
           "block_type": "markdown",
           "title": "Anatomy of a Lost Update (`counter = counter + 1`)",
           "bookmarkable": true,
-          "content": "A **critical resource** (*ressource critique*) is a non-shareable resource accessed by multiple tasks (e.g., a global variable or a physical peripheral). The code accessing it is a **critical section** (*section critique*), bracketed by an **entry protocol** (*prélude*) and an **exit protocol** (*postlude*).\n\nWhen two threads each run `counter = counter + 1` $N = 1\\,000\\,000$ times, the statement compiles to three machine instructions:\n```asm\nmov counter, r1   ; 1. Load shared counter into private register r1\naddi 1, r1        ; 2. Increment local register r1\nmov r1, counter   ; 3. Store r1 back to shared counter\n```\nIf a context switch happens after step 1, both threads read the **same** value, increment it locally, and overwrite each other—causing **lost updates**.\n\n> [!IMPORTANT]\n> **Classic Exam Question:** With 2 threads each looping $1\\,000\\,000$ times, what is the **theoretical minimum** final value of `counter`? **Answer: `2`** (not `1,000,000`!).\n> *How?* T1 loads `0`, gets preempted. T2 runs $999\\,999$ iterations (`counter = 999,999`). T1 resumes and writes `1` (wiping out $999\\,999$!). T2 loads `1`, gets preempted. T1 finishes its remaining $999\\,999$ iterations, then T2 resumes and writes `2`!"
+          "content": "A **critical resource** (*ressource critique*) is a non-shareable resource accessed by multiple tasks—either a logical resource (e.g., a global variable read and written by multiple threads) or a physical resource (e.g., a peripheral). The portion of code accessing it is a **critical section** (*section critique*), bracketed by an **entry protocol** (*prélude*) and an **exit protocol** (*postlude*).\n\nWhen two threads each run `counter = counter + 1` $N = 1\\,000\\,000$ times, the single C++ statement compiles to three non-atomic machine instructions:\n\n```asm\nmov counter, r1   ; 1. Load shared counter into private register r1\naddi 1, r1        ; 2. Increment local register r1\nmov r1, counter   ; 3. Store r1 back to shared counter\n```\n\n### Slide 7 Trace: A Single Lost Update (`counter = 10`)\n\nSuppose `counter = 10` initially and both tasks execute one increment:\n\n1. **T1** executes `mov counter, r1` $\\rightarrow$ `T1.r1 = 10`.\n2. **Context switch** to T2 before T1 increments or writes back.\n3. **T2** executes all three instructions: `r1 <- 10`, `r1 <- r1 + 1` (`11`), `counter <- r1` (**`counter` becomes `11`**).\n4. **Context switch** back to T1.\n5. **T1** resumes with its stale `T1.r1 = 10`: `r1 <- r1 + 1` (`11`), `counter <- r1` (**`counter` is overwritten with `11`**).\n\nResult: **`counter` is `11` instead of `12`**—one update was completely lost."
+        },
+        {
+          "id": "th-min-two-proof",
+          "block_type": "markdown",
+          "title": "Classic Exam Proof: Why the Theoretical Minimum for N = 1,000,000 is `2`",
+          "bookmarkable": true,
+          "content": "With 2 threads each looping $N = 1\\,000\\,000$ times, what is the **theoretical minimum** final value of `counter`? **Answer: `2`** (not `1,000,000` and not `1`!).\n\n| Step | T1 (`r1`) | `counter` (Shared) | T2 (`r1`) | What Happens |\n| :--- | :---: | :---: | :---: | :--- |\n| **0 (Init)** | — | `0` | — | Initial state before either thread starts |\n| **1** | `0` | `0` | — | **T1** starts iteration 1: `mov counter, r1` (`r1 = 0`), then gets **preempted** |\n| **2** | `0` | `999,999` | `999,999` | **T2** runs `999,999` full iterations (1 iteration left!) |\n| **3** | `1` | `1` | `999,999` | **T1** resumes iteration 1: `addi 1, r1` (`1`), `mov r1, counter` (**wipes out 999,999!**) |\n| **4** | `1` | `1` | `1` | **T2** starts its final iteration (`1,000,000`th): `mov counter, r1` (`r1 = 1`), then gets **preempted** |\n| **5** | `1,000,000` | `1,000,000` | `1` | **T1** completes its remaining `999,999` iterations (`counter` reaches `1,000,000`) and exits |\n| **6** | `1,000,000` | **`2`** | `2` | **T2** resumes its final iteration: `addi 1, r1` (`2`), `mov r1, counter` (**writes `2`!**) |\n\n> [!TIP]\n> **Why is `1` impossible?** To end at `counter = 1`, the *very last* store in the entire execution must write `1`, meaning that thread loaded `0` on its **final** iteration. For $N > 1$, if a thread loads `0` on iteration 1 and gets preempted, it still has $N - 1$ iterations left after writing `1`—so it cannot both wipe out the other thread's work *and* have its very first write be the final write of the program. Thus the minimum for $N \\ge 2$ is always **`2`**."
+        },
+        {
+          "id": "diag-min-two-sequence",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Adversarial Interleaving Yielding counter = 2",
+          "caption": "Two strategic preemptions (Step 1 and Step 4) allow T1 and T2 to wipe out 1,999,998 increments.",
+          "source": "sequenceDiagram\n  participant T1 as \"T1 (r1)\"\n  participant M as \"counter (Shared)\"\n  participant T2 as \"T2 (r1)\"\n  Note over M: Initial counter = 0\n  T1->>M: \"1. Load counter (r1 = 0)\"\n  Note over T1: Preempted before add/store!\n  T2->>M: \"2. Run 999,999 full iterations\"\n  Note over M: counter = 999,999\n  T1->>M: \"3. Add 1 & Store r1=1 (wipes 999,999!)\"\n  Note over M: counter = 1\n  T2->>M: \"4. Final iter: Load counter (r1 = 1)\"\n  Note over T2: Preempted before add/store!\n  T1->>M: \"5. Run remaining 999,999 iterations\"\n  Note over M: counter = 1,000,000\n  T2->>M: \"6. Add 1 & Store r1=2 (overwrites!)\"\n  Note over M: Final counter = 2",
+          "bookmarkable": true
         },
         {
           "id": "th-four-properties",
           "block_type": "markdown",
-          "title": "The 4 Rules of a Valid Mutual Exclusion Algorithm",
+          "title": "The 4 Rules of Mutual Exclusion & Slide 16 Fairness Types",
           "bookmarkable": true,
-          "content": "1. **Mutual Exclusion (*Exclusion mutuelle*):** At any instant, at most **one** task may be in the critical section.\n2. **No Deadlock (*Absence d'interblocage / Liveness*):** If tasks are waiting to enter and no task is inside, one waiting task must enter in finite time.\n3. **Independence (*Pas de couplage*):** A task's behavior outside the critical section (e.g., crashing/stopping in the non-critical section) must **never** block other tasks.\n4. **Symmetry & Fairness (*Pas de famine / Starvation*):** No task plays a privileged role, and no waiting task is starved indefinitely."
+          "content": "Every valid mutual exclusion algorithm must satisfy **4 rules** (Slide 17):\n\n1. **Mutual Exclusion (*Exclusion mutuelle*):** At any instant, at most **one** task may be in the critical section.\n2. **No Deadlock (*Absence d'interblocage / Liveness*):** If several tasks are waiting to enter the critical section while no task is inside, one of them must be able to enter in finite time.\n3. **Independence (*Pas de couplage*):** The behavior of a task *outside* the critical section and its entry/exit protocols must have **no influence** on the mutual exclusion algorithm (e.g., crashing or stopping in the non-critical section must never block other tasks).\n4. **Symmetry (*Symétrie*):** No task plays a privileged role; the solution is identical for all tasks.\n\n### Starvation (*Famine*) & Waiting Fairness Types (Slide 16)\n\nBeyond avoiding deadlock, an algorithm must avoid **starvation** (*famine*), where a task is perpetually bypassed by others. When multiple tasks request a critical resource, the entry protocol's waiting fairness can be classified into **4 types**:\n\n| Fairness Type | Definition (Slide 16) |\n| :--- | :--- |\n| **FIFO** | Tasks enter strictly in the order they requested the resource (First-In, First-Out). |\n| **Linéaire** (*Linear*) | A task **cannot** access the resource **twice** if another task is currently waiting (at most 1 bypass). |\n| **Bornée par $f(n)$** (*Bounded by $f(n)$*) | For $n$ tasks, a waiting task cannot be overtaken by more than $f(n)$ other tasks. |\n| **Finie** (*Finite*) | The wait is **not bounded** by a function of $n$, **but not infinite** (guaranteed eventual entry). |"
         }
       ]
     },
     {
       "id": "sec-naive-attempts",
-      "title": "2. Why Naive Attempts Fail (Attempts 1–4)",
-      "description": "Diagnosing each classic failure mode: broken exclusion, strict coupling, and deadlock.",
+      "title": "2. Why Naive Attempts Fail (Attempts 1–5)",
+      "description": "Full C++ implementations and step-by-step failure traces for all 5 naive attempts from Slides 20–24.",
       "blocks": [
         {
-          "id": "th-attempts-table",
+          "id": "code-attempt-1",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Attempt 1 (Slide 20): Shared `bool occupe` — Fails: No Mutual Exclusion",
+          "filename": "attempt1_occupe.cpp",
+          "code": "bool occupe = false;\n\nvoid T0() {\n    while (true) {\n        while (occupe)\n            ;\n        occupe = true;\n        /* section critique */\n        occupe = false;\n        /* section non-critique */\n    }\n}\n\nvoid T1() {\n    while (true) {\n        while (occupe)\n            ;\n        occupe = true;\n        /* section critique */\n        occupe = false;\n        /* section non-critique */\n    }\n}",
+          "highlight_lines": [5, 6, 7],
+          "annotations": [
+            {
+              "line": 5,
+              "note": "Test and set are separate instructions! A preemption between line 5 and line 7 breaks exclusion."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "th-attempt-1-trace",
           "block_type": "markdown",
-          "title": "Summary of the 4 Failed Attempts (PCO_3_exclusion.pdf)",
-          "bookmarkable": true,
-          "content": "| Attempt | Mechanism | What Goes Wrong? |\n| :--- | :--- | :--- |\n| **1. `bool occupe`** | `while (occupe); occupe = true;` | **No Mutual Exclusion!** Both threads can see `occupe == false` before either sets `occupe = true`. |\n| **2. `int tour`** | `while (tour != 0); ... tour = 1;` | **Strict Alternation / Coupling!** If `T0` stops outside the CS, `T1` is blocked forever waiting for `tour = 1`. |\n| **3. `bool etat[2]` (check then set)** | `while (etat[1]); etat[0] = true;` | **No Mutual Exclusion!** Both see `etat[other] == false` and enter simultaneously. |\n| **4. `bool etat[2]` (set then check)** | `etat[0] = true; while (etat[1]);` | **Deadlock (*Interblocage*)!** Both set `etat[i] = true` simultaneously, then spin forever waiting for the other. |\n| **4b. Set, yield if busy** | Reset `etat[0] = false` inside `while (etat[1])` | **Livelock / Starvation (*Famine*)!** Both can infinitely set, clear, and retry in lockstep. |"
+          "title": "Attempt 1 Failure Trace",
+          "bookmarkable": false,
+          "content": "**Failure Mode:** **Pas d'exclusion** (No Mutual Exclusion).\n1. `occupe` is `false`.\n2. `T0` evaluates `while (occupe)` $\\rightarrow$ `false`, exits loop, and is **preempted** before `occupe = true`.\n3. `T1` evaluates `while (occupe)` $\\rightarrow$ still `false`! `T1` sets `occupe = true` and enters the **critical section**.\n4. `T0` resumes, sets `occupe = true`, and **also enters the critical section**."
+        },
+        {
+          "id": "code-attempt-2",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Attempt 2 (Slide 21): Strict Turn `int tour` — Fails: Coupling",
+          "filename": "attempt2_tour.cpp",
+          "code": "int tour = 0; // ou 1\n\nvoid T0() {\n    while (true) {\n        while (tour != 0)\n            ;\n        /* section critique */\n        tour = 1;\n        /* section non-critique */\n    }\n}\n\nvoid T1() {\n    while (true) {\n        while (tour != 1)\n            ;\n        /* section critique */\n        tour = 0;\n        /* section non-critique */\n    }\n}",
+          "highlight_lines": [5, 8, 15, 18],
+          "annotations": [
+            {
+              "line": 8,
+              "note": "If T0 stops or sleeps in its non-critical section when tour == 0, T1 is blocked forever!"
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "th-attempt-2-trace",
+          "block_type": "markdown",
+          "title": "Attempt 2 Failure Trace",
+          "bookmarkable": false,
+          "content": "**Failure Mode:** **Couplage** (Strict Alternation — violates Rule 3: Independence).\n1. `tour` starts at `0`. `T0` enters and exits the critical section, setting `tour = 1`.\n2. `T0` then **stops** (or runs very slowly) in its **non-critical section**.\n3. `T1` enters and exits the critical section, setting `tour = 0`.\n4. `T1` wants to enter the critical section a second time, but `tour == 0`—and `T0` will never set `tour = 1` because `T0` is in its non-critical section. **`T1` is blocked forever** even though the CS is free."
+        },
+        {
+          "id": "code-attempt-3",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Attempt 3 (Slide 22): `bool etat[2]` Check-Then-Set — Fails: No Mutual Exclusion",
+          "filename": "attempt3_etat_check_first.cpp",
+          "code": "bool etat[2] = {false, false};\n\nvoid T0() {\n    while (true) {\n        while (etat[1])\n            ;\n        etat[0] = true;\n        /* section critique */\n        etat[0] = false;\n        /* section non-critique */\n    }\n}\n\nvoid T1() {\n    while (true) {\n        while (etat[0])\n            ;\n        etat[1] = true;\n        /* section critique */\n        etat[1] = false;\n        /* section non-critique */\n    }\n}",
+          "highlight_lines": [5, 7, 16, 18],
+          "annotations": [
+            {
+              "line": 5,
+              "note": "Checking the other's flag before raising your own has the exact same race window as Attempt 1."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "th-attempt-3-trace",
+          "block_type": "markdown",
+          "title": "Attempt 3 Failure Trace",
+          "bookmarkable": false,
+          "content": "**Failure Mode:** **Pas d'exclusion** (No Mutual Exclusion).\n1. `etat = {false, false}`.\n2. `T0` checks `while (etat[1])` $\\rightarrow$ `false`, and is **preempted** before `etat[0] = true`.\n3. `T1` checks `while (etat[0])` $\\rightarrow$ still `false`! `T1` sets `etat[1] = true` and enters the **critical section**.\n4. `T0` resumes, sets `etat[0] = true`, and **also enters the critical section**."
+        },
+        {
+          "id": "code-attempt-4",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Attempt 4 (Slide 23): `bool etat[2]` Set-Then-Check — Fails: Deadlock",
+          "filename": "attempt4_deadlock.cpp",
+          "code": "bool etat[2] = {false, false};\n\nvoid T0() {\n    while (true) {\n        etat[0] = true;\n        while (etat[1])\n            ;\n        /* section critique */\n        etat[0] = false;\n        /* section non-critique */\n    }\n}\n\nvoid T1() {\n    while (true) {\n        etat[1] = true;\n        while (etat[0])\n            ;\n        /* section critique */\n        etat[1] = false;\n        /* section non-critique */\n    }\n}",
+          "highlight_lines": [5, 6, 16, 17],
+          "annotations": [
+            {
+              "line": 5,
+              "note": "Setting etat[0] = true first guarantees mutual exclusion, but if both set their flags simultaneously, both spin forever."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "th-attempt-4-trace",
+          "block_type": "markdown",
+          "title": "Attempt 4 Failure Trace",
+          "bookmarkable": false,
+          "content": "**Failure Mode:** **Interblocage** (Deadlock — violates Rule 2).\n1. `T0` sets `etat[0] = true` and is **preempted**.\n2. `T1` sets `etat[1] = true`.\n3. `T0` spins on `while (etat[1])` (true) and `T1` spins on `while (etat[0])` (true). Neither ever yields, so **both are deadlocked forever**."
+        },
+        {
+          "id": "code-attempt-5",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Attempt 5 / Tentative 5 (Slide 24): Set & Yield If Busy — Fails: Livelock / Starvation",
+          "filename": "attempt5_livelock.cpp",
+          "code": "bool etat[2] = {false, false};\n\nvoid T0() {\n    while (true) {\n        etat[0] = true;\n        while (etat[1]) {\n            etat[0] = false;\n            while (etat[1])\n                ;\n            etat[0] = true;\n        }\n        /* section critique */\n        etat[0] = false;\n        /* section non-critique */\n    }\n}\n\nvoid T1() {\n    while (true) {\n        etat[1] = true;\n        while (etat[0]) {\n            etat[1] = false;\n            while (etat[0])\n                ;\n            etat[1] = true;\n        }\n        /* section critique */\n        etat[1] = false;\n        /* section non-critique */\n    }\n}",
+          "highlight_lines": [7, 8, 9, 10, 22, 23, 24, 25],
+          "annotations": [
+            {
+              "line": 7,
+              "note": "Both threads back off when they see the other's flag, but without a tie-breaker they can loop in lockstep forever."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "th-attempt-5-trace",
+          "block_type": "markdown",
+          "title": "Attempt 5 Failure Trace & Summary Table",
+          "bookmarkable": false,
+          "content": "**Failure Mode:** **Famine / Livelock** (Starvation — violates Liveness).\n1. `T0` sets `etat[0] = true`; `T1` sets `etat[1] = true`.\n2. Both enter their outer `while` loop (`etat[other]` is `true`).\n3. Both back off simultaneously: `T0` sets `etat[0] = false` and `T1` sets `etat[1] = false`.\n4. Both see `etat[other] == false`, exit the inner `while`, and re-set `etat[0] = true` and `etat[1] = true` in lockstep.\n5. This symmetric dance can repeat **forever** without either thread ever entering the critical section.\n\n| Attempt | Mechanism | Failure Mode (Slides 20–24) |\n| :--- | :--- | :--- |\n| **1** | `while (occupe); occupe = true;` | **Pas d'exclusion** (Race between check and set) |\n| **2** | `while (tour != i); ... tour = other;` | **Couplage** (Strict alternation blocks if other stops in non-CS) |\n| **3** | `while (etat[other]); etat[i] = true;` | **Pas d'exclusion** (Race between check and set) |\n| **4** | `etat[i] = true; while (etat[other]);` | **Interblocage** (Deadlock when both set `true`) |\n| **5** | Set, then clear `etat[i] = false` inside `while (etat[other])` | **Famine** (Livelock in symmetric lockstep) |"
         }
       ]
     },
     {
       "id": "sec-dekker-peterson",
       "title": "3. Dekker's & Peterson's Algorithms + Multi-Core Barriers",
-      "description": "How Dekker and Peterson achieve software mutual exclusion, and why multi-core CPUs need memory fences.",
+      "description": "How Dekker and Peterson achieve software mutual exclusion, and why multi-core CPUs require memory fences.",
       "blocks": [
         {
-          "id": "code-peterson",
+          "id": "th-dekker-concept",
+          "block_type": "markdown",
+          "title": "Dekker's Algorithm: Conceptual Form & How the Backoff Loop Works (Slides 25–26)",
+          "bookmarkable": true,
+          "content": "**Dekker's Algorithm** fixes Attempt 5 by adding a **`tour` tie-breaker** so only *one* thread backs off during a tie:\n\n```cpp\n// Conceptual form (Slide 26)\nvoid T0() {\n    while (true) {\n        setEnSectionCritique();\n        while (autreEnSectionCritique()) {\n            if (pasMonTour()) {\n                clearEnSectionCritique();\n                while (pasMonTour())\n                    ;\n                setEnSectionCritique();\n            }\n        }\n        /* section critique */\n        passeMonTour();\n        clearEnSectionCritique();\n        /* section non-critique */\n    }\n}\n```\n\n**How the backoff loop works:** If both `T0` and `T1` raise `etat[i] = true` simultaneously, `tour` decides who yields. Suppose `tour == 1`: `T0` enters `if (tour == 1)`, **lowers** `etat[0] = false`, and waits politely in `while (tour == 1) ;`. Meanwhile, `T1` sees `tour != 0`, so `T1` **keeps** `etat[1] = true`, exits `while (etat[0])` as soon as `T0` lowers its flag, enters the critical section, and sets `tour = 0` on exit—unblocking `T0`!"
+        },
+        {
+          "id": "code-dekker-single",
           "block_type": "code",
           "language": "cpp",
-          "title": "Peterson's Algorithm (Single-Core vs. Multi-Core)",
-          "filename": "peterson.cpp",
-          "code": "#define BARRIER std::atomic_thread_fence(std::memory_order_acq_rel)\n\nbool intention[2] = {false, false};\nint tour = 0; // ou 1\n\nvoid T0() {\n    while (true) {\n        intention[0] = true;\n        tour = 1;\n        BARRIER; // Required on multi-core!\n        while (intention[1] && tour == 1)\n            ;\n        /* section critique */\n        intention[0] = false;\n        /* section non-critique */\n    }\n}",
-          "highlight_lines": [8, 9, 10, 11],
+          "title": "Dekker's Algorithm: Complete Single-Core C++ (Slide 27)",
+          "filename": "dekker_single_core.cpp",
+          "code": "bool etat[2] = {false, false};\nint tour = 0; // ou 1\n\nvoid T0() {\n    while (true) {\n        etat[0] = true;\n        while (etat[1]) {\n            if (tour == 1) {\n                etat[0] = false;\n                while (tour == 1)\n                    ;\n                etat[0] = true;\n            }\n        }\n        /* section critique */\n        tour = 1;\n        etat[0] = false;\n        /* section non-critique */\n    }\n}\n\nvoid T1() {\n    while (true) {\n        etat[1] = true;\n        while (etat[0]) {\n            if (tour == 0) {\n                etat[1] = false;\n                while (tour == 0)\n                    ;\n                etat[1] = true;\n            }\n        }\n        /* section critique */\n        tour = 0;\n        etat[1] = false;\n        /* section non-critique */\n    }\n}",
+          "highlight_lines": [8, 9, 10, 12, 16],
           "annotations": [
             {
               "line": 8,
-              "note": "Announce intention to enter."
+              "note": "Only the thread whose turn it is NOT backs off by clearing etat[0] = false."
             },
             {
-              "line": 9,
-              "note": "Politely yield priority to the other thread (tour = 1)."
-            },
-            {
-              "line": 10,
-              "note": "Memory barrier prevents CPU/compiler reordering and forces cache visibility across cores."
-            },
-            {
-              "line": 11,
-              "note": "Wait ONLY if the other thread wants in AND it is the other thread's turn."
+              "line": 16,
+              "note": "On exit, pass turn to the other thread before clearing etat[0]."
             }
           ],
           "bookmarkable": true
         },
         {
+          "id": "th-multicore-problem",
+          "block_type": "markdown",
+          "title": "Why Multi-Core CPUs Break Dekker & Peterson (Slide 31)",
+          "bookmarkable": true,
+          "content": "Mathematically, Dekker's and Peterson's algorithms are 100% correct. However, **modern multi-core processors** break them due to:\n1. **Cache coherency delays** (*Cohérence des mémoires caches*): writes sit in a core's local store buffer before reaching shared cache/RAM.\n2. **Out-of-order memory access reordering** (*Ordre des accès mémoires*): the CPU or compiler may execute a subsequent `load` (`while (etat[1])`) before an earlier `store` (`etat[0] = true`) is globally visible.\n\n**Fix in C++:** Insert a memory synchronization barrier:\n```cpp\n#define BARRIER std::atomic_thread_fence(std::memory_order_acq_rel)\n```\nThis guarantees that **all `load` and `store` operations before the barrier complete and are visible before any `load` or `store` after the barrier**."
+        },
+        {
+          "id": "code-dekker-multicore",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Dekker's Algorithm: Multi-Core C++ with Two BARRIERs (Slide 32)",
+          "filename": "dekker_multicore.cpp",
+          "code": "#define BARRIER std::atomic_thread_fence(std::memory_order_acq_rel)\n\nbool etat[2] = {false, false};\nint tour = 0; // ou 1\n\nvoid T0() {\n    while (true) {\n        etat[0] = true;\n        BARRIER;\n        while (etat[1]) {\n            if (tour == 1) {\n                etat[0] = false;\n                while (tour == 1)\n                    ;\n                etat[0] = true;\n                BARRIER;\n            }\n        }\n        /* section critique */\n        tour = 1;\n        etat[0] = false;\n        /* section non-critique */\n    }\n}\n\nvoid T1() {\n    while (true) {\n        etat[1] = true;\n        BARRIER;\n        while (etat[0]) {\n            if (tour == 0) {\n                etat[1] = false;\n                while (tour == 0)\n                    ;\n                etat[1] = true;\n                BARRIER;\n            }\n        }\n        /* section critique */\n        tour = 0;\n        etat[1] = false;\n        /* section non-critique */\n    }\n}",
+          "highlight_lines": [9, 16, 29, 36],
+          "annotations": [
+            {
+              "line": 9,
+              "note": "BARRIER #1: Ensures etat[0] = true is globally visible before reading etat[1]."
+            },
+            {
+              "line": 16,
+              "note": "BARRIER #2: Ensures re-asserted etat[0] = true is globally visible before re-checking while (etat[1])."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "code-peterson-single",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Peterson's Algorithm: Single-Core C++ (Slide 30)",
+          "filename": "peterson_single_core.cpp",
+          "code": "bool intention[2] = {false, false};\nint tour = 0; // ou 1\n\nvoid T0() {\n    while (true) {\n        intention[0] = true;\n        tour = 1;\n        while (intention[1] && tour == 1)\n            ;\n        /* section critique */\n        intention[0] = false;\n        /* section non-critique */\n    }\n}\n\nvoid T1() {\n    while (true) {\n        intention[1] = true;\n        tour = 0;\n        while (intention[0] && tour == 0)\n            ;\n        /* section critique */\n        intention[1] = false;\n        /* section non-critique */\n    }\n}",
+          "highlight_lines": [6, 7, 8, 18, 19, 20],
+          "annotations": [
+            {
+              "line": 6,
+              "note": "MUST come before tour = 1! Announce intention first."
+            },
+            {
+              "line": 7,
+              "note": "Politely yield priority to the other thread (tour = 1)."
+            },
+            {
+              "line": 8,
+              "note": "Spin ONLY if the other thread wants in AND it is the other thread's turn."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "code-peterson-multicore",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Peterson's Algorithm: Multi-Core C++ with BARRIER (Slide 33)",
+          "filename": "peterson_multicore.cpp",
+          "code": "#define BARRIER std::atomic_thread_fence(std::memory_order_acq_rel)\n\nbool intention[2] = {false, false};\nint tour = 0; // ou 1\n\nvoid T0() {\n    while (true) {\n        intention[0] = true;\n        tour = 1;\n        BARRIER;\n        while (intention[1] && tour == 1)\n            ;\n        /* section critique */\n        intention[0] = false;\n        /* section non-critique */\n    }\n}\n\nvoid T1() {\n    while (true) {\n        intention[1] = true;\n        tour = 0;\n        BARRIER;\n        while (intention[0] && tour == 0)\n            ;\n        /* section critique */\n        intention[1] = false;\n        /* section non-critique */\n    }\n}",
+          "highlight_lines": [10, 23],
+          "annotations": [
+            {
+              "line": 10,
+              "note": "Single BARRIER ensures both intention[0] = true and tour = 1 are visible before reading intention[1] and tour."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "th-peterson-order-and-comparison",
+          "block_type": "markdown",
+          "title": "Critical Trap: Why `intention[0] = true` MUST Precede `tour = 1` + Dekker vs. Peterson",
+          "bookmarkable": true,
+          "content": "> [!WARNING]\n> **Order-of-Operations Trap:** What happens if you swap lines 6–7 in Peterson's algorithm (`tour = 1;` *before* `intention[0] = true;`)?\n> 1. `T0` executes `tour = 1` and gets **preempted** before setting `intention[0] = true`.\n> 2. `T1` runs `tour = 0; intention[1] = true;` (or `intention[1] = true; tour = 0;`).\n> 3. `T1` checks `while (intention[0] && tour == 0)` $\\rightarrow$ `intention[0]` is still `false`, so **`T1` enters the CS**.\n> 4. `T0` resumes, sets `intention[0] = true`, and checks `while (intention[1] && tour == 1)` $\\rightarrow$ `tour` is `0` (not `1`!), so **`T0` ALSO enters the CS**!\n> **Mutual exclusion is broken!** Setting `intention[0] = true` *before* `tour = 1` ensures that if `T1` overwrites `tour = 0`, `T0`'s intention is already visible to `T1`.\n\n### Dekker vs. Peterson Comparison\n\n| Criterion | Dekker's Algorithm | Peterson's Algorithm |\n| :--- | :--- | :--- |\n| **Complexity** | Longer: nested `while` + `if (tour == other)` backoff | Concise: 2 assignments + 1 single `while` condition |\n| **Who yields?** | Only the thread whose turn it is not clears `etat[i]` | Both politely set `tour = other`; the last writer waits |\n| **Multi-core fences** | Requires **2** `BARRIER`s per task | Requires **1** `BARRIER` per task |\n| **4 Rules + Fairness** | Satisfies all 4 rules + bounded wait | Satisfies all 4 rules + linear wait (at most 1 bypass) |"
+        }
+      ]
+    },
+    {
+      "id": "sec-active-passive-and-exercise",
+      "title": "4. Active vs. Passive Waiting & Slide 35 Final Exercise",
+      "description": "Comparing busy-waiting to OS kernel primitives, plus the Slide 35 broken-protocol analysis.",
+      "blocks": [
+        {
           "id": "th-active-vs-passive",
           "block_type": "markdown",
-          "title": "Active Waiting vs. Passive Waiting",
+          "title": "Active Waiting vs. Passive Waiting (Slide 34)",
           "bookmarkable": true,
-          "content": "* **Active Waiting (*Attente active*):** The thread wastes CPU cycles spinning in a `while (...) ;` loop testing a condition (e.g., Dekker, Peterson).\n* **Passive Waiting (*Attente passive*):** The OS kernel suspends the waiting thread (`bloqué`), freeing the CPU for other ready threads. Requires kernel-supported primitives: **Mutexes**, **Semaphores**, and **Monitors**."
+          "content": "* **Active Waiting (*Attente active*):** Processor time is wasted testing a condition in a loop (`while (...) ;`) to block a process/thread (used by Dekker and Peterson).\n* **Passive Waiting (*Attente passive*):** A waiting process/thread is **blocked by the OS kernel**, leaving the CPU available for other ready tasks. Requires kernel-supported primitives:\n  * **Locks / Mutexes** (*Verrous*)\n  * **Semaphores** (*Sémaphores*)\n  * **Monitors** (*Moniteurs*)\n\n> [!CAUTION]\n> **Slide 34 Caveat:** Kernel primitives (*verrous, sémaphores, moniteurs*) make designing concurrent algorithms easier, **but they do NOT eliminate the risk of bugs!** Misplaced locks or wrong wait orders still cause deadlocks, race conditions, and starvation."
         },
+        {
+          "id": "code-slide35-exercise",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Slide 35 Exercise: Does This Protocol Guarantee Mutual Exclusion?",
+          "filename": "slide35_exercise.cpp",
+          "code": "bool intention[2] = {false, false};\nint tour = 0; // ou 1\n\nvoid T0() {\n    while (true) {\n        intention[0] = true;\n        while (tour != 0) {\n            while (intention[1])\n                ;\n            tour = 0;\n        }\n        /* section critique */\n        intention[0] = false;\n        /* section non-critique */\n    }\n}\n\nvoid T1() {\n    while (true) {\n        intention[1] = true;\n        while (tour != 1) {\n            while (intention[0])\n                ;\n            tour = 1;\n        }\n        /* section critique */\n        intention[1] = false;\n        /* section non-critique */\n    }\n}",
+          "highlight_lines": [7, 8, 10, 20, 21, 23],
+          "annotations": [
+            {
+              "line": 10,
+              "note": "Danger! A preemption right before tour = 0 (or tour = 1) creates a fatal race window."
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-slide35-exercise",
+          "block_type": "reflection_rubric",
+          "title": "Analyze the Slide 35 Protocol",
+          "prompt": "**Question (Slide 35):** *L'exclusion mutuelle est-elle garantie par les parties prélude et postlude des tâches ? Justifiez votre réponse.*\n\nTrace an execution starting from `tour = 0`, `intention = {false, false}` to prove whether mutual exclusion holds or fails.",
+          "self_check_criteria": [
+            "Answered NO: mutual exclusion is NOT guaranteed.",
+            "Identified the exact preemption point: T1 exits `while (intention[0])` while `intention[0]` is still `false`, and is preempted right before `tour = 1`.",
+            "Showed that T0 then sees `tour == 0`, skips its `while (tour != 0)` loop completely, and enters the critical section.",
+            "Showed that T1 resumes, executes `tour = 1`, exits `while (tour != 1)`, and ALSO enters the critical section simultaneously."
+          ],
+          "model_answer": "**No, mutual exclusion is NOT guaranteed.**\n\n**Counterexample (`tour = 0`, `intention = {false, false}`):**\n1. `T1` sets `intention[1] = true`.\n2. `T1` sees `tour != 1` (`tour == 0`), enters the outer `while`, and sees `intention[0] == false`, so it exits `while (intention[0])`.\n3. **Context switch** right before `T1` executes `tour = 1`.\n4. `T0` sets `intention[0] = true`, checks `while (tour != 0)` $\\rightarrow$ `false` (since `tour` is still `0`), and **enters the critical section**.\n5. `T1` resumes, sets `tour = 1`, re-evaluates `while (tour != 1)` $\\rightarrow$ `false`, and **also enters the critical section**! Both tasks are now in the critical section simultaneously."
+        },
+        {
+          "id": "diag-slide35-counterexample",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Slide 35 Counterexample: Both T0 and T1 Enter the Critical Section",
+          "caption": "Because T1 checks intention[0] before setting tour = 1, a preemption right before tour = 1 lets T0 enter on the stale tour = 0.",
+          "source": "sequenceDiagram\n  participant T0 as \"T0\"\n  participant S as \"Shared (tour=0, int={F,F})\"\n  participant T1 as \"T1\"\n  T1->>S: \"1. intention[1] = true\"\n  T1->>S: \"2. tour != 1 (0!=1) & intention[0] == false\"\n  Note over T1: Preempted right before tour = 1!\n  T0->>S: \"3. intention[0] = true\"\n  T0->>S: \"4. Check tour != 0 -> FALSE (tour is 0)\"\n  Note over T0: T0 ENTERS CRITICAL SECTION!\n  T1->>S: \"5. Resumes: tour = 1\"\n  T1->>S: \"6. Check tour != 1 -> FALSE (tour is 1)\"\n  Note over T1: T1 ALSO ENTERS CRITICAL SECTION!",
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-assessment-srs",
+      "title": "5. Diagnostic Quiz & Spaced Repetition Flashcards",
+      "description": "Verify mastery of counter++ minimum = 2, Attempts 1–5, fairness types, Peterson's trap, and multi-core barriers.",
+      "blocks": [
         {
           "id": "qz-ch4-min-counter",
           "block_type": "quiz_question",
           "question_type": "multiple_choice",
           "difficulty": 3,
-          "related_block_id": "th-counter-race",
+          "related_block_id": "th-min-two-proof",
           "question": "Two threads each increment a shared `static int counter = 0;` `1,000,000` times without synchronization (`counter = counter + 1`). What is the theoretical minimum possible final value of `counter`?",
           "options": [
             "2",
@@ -118,10 +368,73 @@
             "1,000,000"
           ],
           "correct_answer": "2",
-          "explanation": "Through adversarial context switching between `mov counter, r1` and `mov r1, counter`, T1 can load 0, let T2 run 999,999 times, overwrite counter with 1, let T2 load 1, finish T1's remaining 999,999 iterations, and then T2 writes 2.",
+          "explanation": "T1 loads 0 and is preempted; T2 runs 999,999 iterations; T1 writes 1; T2 loads 1 on its final iteration and is preempted; T1 finishes its remaining 999,999 iterations; T2 writes 2.",
           "hints": [
             "Consider what happens if T1 loads `counter = 0` into `r1` and is preempted before writing it back.",
             "Can the same trick be repeated once more on T2's final iteration?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch4-attempts-failure",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "code-attempt-5",
+          "question": "In **Attempt 5** (`etat[0] = true; while (etat[1]) { etat[0] = false; while (etat[1]); etat[0] = true; }`), what failure mode occurs?",
+          "options": [
+            "Livelock / Starvation (Famine): both threads can infinitely set, clear, and re-set their flags in lockstep without entering the CS.",
+            "Deadlock (Interblocage): both threads spin forever with etat[0] == true and etat[1] == true.",
+            "Broken mutual exclusion: both threads enter the critical section simultaneously.",
+            "Strict coupling (Couplage): a thread stopped in its non-critical section blocks the other."
+          ],
+          "correct_answer": "Livelock / Starvation (Famine): both threads can infinitely set, clear, and re-set their flags in lockstep without entering the CS.",
+          "explanation": "Attempt 5 adds a backoff (`etat[i] = false`) to avoid Attempt 4's deadlock, but without a `tour` tie-breaker, both threads can back off and retry in lockstep forever (livelock/starvation).",
+          "hints": [
+            "Notice that Attempt 5 clears `etat[0] = false` inside the loop, so it doesn't stay stuck in a static deadlock.",
+            "What happens if T0 and T1 execute the exact same instructions at the exact same pace?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch4-fairness-linear",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-four-properties",
+          "question": "According to Slide 16's waiting fairness taxonomy, what does **Linéaire** (*Linear*) waiting guarantee?",
+          "options": [
+            "A task cannot access the resource twice while another task is waiting.",
+            "Tasks strictly enter the critical section in exact FIFO arrival order.",
+            "Waiting time is finite, though a task may be overtaken an unbounded number of times.",
+            "For n tasks, a waiting task can be overtaken by at most n! tasks."
+          ],
+          "correct_answer": "A task cannot access the resource twice while another task is waiting.",
+          "explanation": "Slide 16 defines Linear waiting as: 'une tâche ne peut accéder deux fois la ressource si une autre est en attente'. FIFO is strictly arrival-ordered; Finie is unbounded but finite.",
+          "hints": [
+            "Compare FIFO, Linéaire, Bornée par f(n), and Finie from Slide 16.",
+            "Linear limits how many times a single competitor can re-enter ahead of a waiting task."
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch4-peterson-order",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-peterson-order-and-comparison",
+          "question": "In Peterson's algorithm, what happens if `T0` swaps the order of its first two lines to `tour = 1;` followed by `intention[0] = true;` (and `T1` does the same)?",
+          "options": [
+            "Mutual exclusion can be violated: both T0 and T1 can enter the critical section simultaneously.",
+            "Deadlock occurs immediately whenever both threads request the critical section.",
+            "It becomes identical to Dekker's algorithm.",
+            "It still works on single-core CPUs, only failing on multi-core CPUs."
+          ],
+          "correct_answer": "Mutual exclusion can be violated: both T0 and T1 can enter the critical section simultaneously.",
+          "explanation": "If T0 sets `tour = 1` and is preempted before `intention[0] = true`, T1 sees `intention[0] == false` and enters the CS (after setting `tour = 0`). When T0 resumes, `tour` is `0` (not `1`), so T0 also enters the CS.",
+          "hints": [
+            "Trace what happens if T0 is preempted right after `tour = 1`.",
+            "What does T1 see when it checks `intention[0]`?"
           ],
           "bookmarkable": true
         },
@@ -130,8 +443,8 @@
           "block_type": "quiz_question",
           "question_type": "multiple_choice",
           "difficulty": 2,
-          "related_block_id": "code-peterson",
-          "question": "Why do Dekker's and Peterson's algorithms fail on modern multi-core CPUs unless a memory barrier (`std::atomic_thread_fence`) is added?",
+          "related_block_id": "code-dekker-multicore",
+          "question": "Why do Dekker's and Peterson's algorithms fail on modern multi-core CPUs unless `std::atomic_thread_fence(std::memory_order_acq_rel)` (`BARRIER`) is added?",
           "options": [
             "CPU cache coherency delays and out-of-order memory access reordering can allow both threads to read stale values and enter the critical section simultaneously.",
             "C++ `bool` variables are not supported on multi-core processors.",
@@ -139,12 +452,78 @@
             "The `tour` variable overflows when two cores access it."
           ],
           "correct_answer": "CPU cache coherency delays and out-of-order memory access reordering can allow both threads to read stale values and enter the critical section simultaneously.",
-          "explanation": "Each core has its own store buffer and cache, and compilers/CPUs reorder independent loads and stores. `std::atomic_thread_fence(std::memory_order_acq_rel)` ensures all prior loads/stores complete and are visible before subsequent loads/stores.",
+          "explanation": "Each core has its own store buffer and cache, and CPUs/compilers reorder independent loads and stores. `BARRIER` guarantees all prior loads/stores complete before subsequent loads/stores.",
           "hints": [
             "What happens if Core 0 writes `intention[0] = true` to its local store buffer while reading `intention[1]` from cache?",
             "What does `std::atomic_thread_fence(std::memory_order_acq_rel)` guarantee?"
           ],
           "bookmarkable": true
+        },
+        {
+          "id": "qz-ch4-dekker-barriers-count",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "code-dekker-multicore",
+          "question": "In the multi-core C++ implementation of **Dekker's algorithm** (Slide 32), where must the **two** `BARRIER` calls be placed in `T0()`?",
+          "options": [
+            "Right after the initial `etat[0] = true;` AND right after re-setting `etat[0] = true;` inside the `if (tour == 1)` backoff block.",
+            "Once at the start of `while (true)` and once inside the critical section.",
+            "Right before `etat[0] = true;` and right after `etat[0] = false;`.",
+            "Only once, right after `tour = 1;` at exit."
+          ],
+          "correct_answer": "Right after the initial `etat[0] = true;` AND right after re-setting `etat[0] = true;` inside the `if (tour == 1)` backoff block.",
+          "explanation": "Every time `T0` sets `etat[0] = true` and is about to test `while (etat[1])`, a `BARRIER` is required so the store to `etat[0]` is globally visible before the load of `etat[1]`.",
+          "hints": [
+            "Look at every place where `etat[0] = true;` is followed by `while (etat[1])`.",
+            "How many times does `T0` set `etat[0] = true` in Slide 32?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "fc-ch4-four-rules",
+          "block_type": "flashcard",
+          "title": "The 4 Rules of Mutual Exclusion",
+          "front": "What are the **4 rules** (Slide 17) that every valid mutual exclusion algorithm must satisfy?",
+          "back": "1. **Mutual Exclusion:** At most 1 task in the CS at any instant.\n2. **No Deadlock:** If tasks wait and the CS is free, one enters in finite time.\n3. **Independence (No Coupling):** Behavior outside the CS never blocks other tasks.\n4. **Symmetry:** No task has a privileged role; identical algorithm for all.",
+          "hint": "Exclusion, Liveness, Independence, Symmetry.",
+          "tags": ["pco", "mutual-exclusion", "rules"]
+        },
+        {
+          "id": "fc-ch4-fairness-types",
+          "block_type": "flashcard",
+          "title": "Slide 16: 4 Waiting Fairness Types",
+          "front": "Name and define the **4 waiting fairness types** from Slide 16.",
+          "back": "1. **FIFO:** Strict arrival order.\n2. **Linéaire:** No task can enter twice while another is waiting.\n3. **Bornée par $f(n)$:** For $n$ tasks, a waiting task is overtaken by at most $f(n)$ tasks.\n4. **Finie:** Wait is unbounded by a function of $n$, but never infinite.",
+          "hint": "FIFO -> Linéaire -> Bornée par f(n) -> Finie.",
+          "tags": ["pco", "fairness", "starvation"]
+        },
+        {
+          "id": "fc-ch4-attempts-summary",
+          "block_type": "flashcard",
+          "title": "Attempts 1–5 Failure Modes",
+          "front": "What is the exact failure mode of each of **Attempts 1–5** (Slides 20–24)?",
+          "back": "- **Attempt 1 (`occupe`):** No mutual exclusion\n- **Attempt 2 (`tour`):** Coupling / strict alternation\n- **Attempt 3 (`etat`, check then set):** No mutual exclusion\n- **Attempt 4 (`etat`, set then check):** Deadlock (*interblocage*)\n- **Attempt 5 (`etat`, set & yield):** Livelock / Starvation (*famine*)",
+          "hint": "No excl -> Coupling -> No excl -> Deadlock -> Livelock.",
+          "tags": ["pco", "attempts", "deadlock", "livelock"]
+        },
+        {
+          "id": "fc-ch4-peterson-trap",
+          "block_type": "flashcard",
+          "title": "Peterson's Algorithm & Order Trap",
+          "front": "In Peterson's algorithm, what are the 3 lines of `T0`'s entry protocol, and why must `intention[0] = true` precede `tour = 1`?",
+          "back": "```cpp\nintention[0] = true;\ntour = 1;\nwhile (intention[1] && tour == 1) ;\n```\nIf `tour = 1` came first and `T0` were preempted before `intention[0] = true`, `T1` would see `intention[0] == false` and enter, while `T0` would later see `tour == 0` and **also enter**.",
+          "hint": "Announce intention BEFORE yielding the turn.",
+          "tags": ["pco", "peterson", "mutual-exclusion"]
+        },
+        {
+          "id": "fc-ch4-active-vs-passive",
+          "block_type": "flashcard",
+          "title": "Active vs. Passive Waiting + Caveat",
+          "front": "What is the difference between **active waiting** and **passive waiting**, and what caveat does Slide 34 emphasize?",
+          "back": "- **Active (*Attente active*):** Wastes CPU cycles spinning in a loop.\n- **Passive (*Attente passive*):** OS kernel blocks the thread, freeing the CPU (via **locks/mutexes, semaphores, monitors**).\n- **Caveat:** Kernel primitives simplify design, **but do NOT eliminate the risk of bugs** (deadlock, starvation, races).",
+          "hint": "Busy loop vs. Kernel-blocked; primitives != bug-free.",
+          "tags": ["pco", "active-waiting", "passive-waiting"]
         }
       ]
     }

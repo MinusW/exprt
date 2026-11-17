@@ -1,8 +1,8 @@
 {
   "id": "pco-ch3-critical-sections",
   "title": "Chapter 3: Critical Sections — Where & When?",
-  "description": "Diagnosing when shared global variables require mutual exclusion: atomic vs. compound writes, structs, read-modify-write (var++), floats/doubles, std::vector<bool>, and multi-core cache hazards.",
-  "estimated_minutes": 30,
+  "description": "Complete analysis of all 12 C++ concurrent access scenarios (Slides 5–16), data corruption vs. instruction ordering, single-core vs. multi-core cache coherency, and the Golden Rule (Slide 17).",
+  "estimated_minutes": 45,
   "category": "Concurrent Programming",
   "track": "PCO - Programmation Concurrente (TE1)",
   "track_order": 3,
@@ -12,6 +12,7 @@
     "critical-section",
     "data-race",
     "atomicity",
+    "toctou",
     "multicore",
     "vector-bool"
   ],
@@ -23,28 +24,63 @@
     {
       "title": "PCO Chapter 3: Section critique: Où et quand?",
       "url_or_path": "sources/PCO-TE1/PCO_3_sectioncritique.pdf",
-      "notes": "Slides 1-17: 12 concrete C++ concurrent access scenarios and multi-core cache synchronization conclusion."
+      "notes": "Slides 1-17: Slide 3 problem framing, 12 concrete C++ concurrent access scenarios (Slides 5-16), and Slide 17 multi-core cache synchronization conclusion."
     }
   ],
   "sections": [
     {
-      "id": "sec-single-core-scenarios",
-      "title": "1. Analyzing Concurrent Access Scenarios (Single-Core)",
-      "description": "Evaluating when data corruption can occur on a single-core CPU.",
+      "id": "sec-framing-single-core",
+      "title": "1. Framing the Question: Corruption vs. Ordering (Slide 3)",
+      "description": "What we are protecting against and the single-core assumption used to analyze Slides 5–16.",
       "blocks": [
         {
           "id": "th-sc-goal",
           "block_type": "markdown",
-          "title": "What Are We Protecting Against?",
+          "title": "What Are We Protecting Against? (Slide 3)",
           "bookmarkable": true,
-          "content": "In `PCO_3_sectioncritique.pdf`, we examine **12 concrete C++ scenarios** on a **single-core CPU** (*processeur simple cœur*), asking:\n\n> *Is mutual exclusion required to avoid **data corruption** or **broken behavior** (ignoring instruction ordering)?*\n\n### Category A: Simple `int` Writes & Reads (Slides 5–6, 13)\n* **Case 1:** `TacheA: var = a;` and `TacheB: var = b;` (`static int var;`). On a 32-bit/64-bit CPU, a single aligned `int` store is one machine instruction—`var` ends up holding either `a` or `b` (never half-`a`, half-`b`).\n* **Case 2:** `taskA: var = a;` and `taskB: b = var;`. Similarly, `b` reads either the old or new `var`.\n\n### Category B: Compound Data & Read-Modify-Write (Slides 7–12)\n* **Case 3 & 4 (`struct_t var` with `var.a`, `var.b`):** Writing/reading two fields is **not atomic**! A context switch between `var.a = a` and `var.b = b` causes **torn structs** (mixing `TacheA`'s `a` with `TacheB`'s `b`). **Needs mutual exclusion!**\n* **Case 5 (`var++` vs `var++`):** `var++` compiles to 3 instructions (`load`, `add 1`, `store`). Interleaving loses updates! **Needs mutual exclusion!**\n* **Case 6 (`var++` vs `b = var`):** `b` reads a valid integer (before or after increment), though in C++ a data race is still Undefined Behavior.\n* **Case 7 (`TacheA: var++`, `TacheB: var++`, `TacheC: c = var`):** Both `var++` tasks corrupt each other -> **Needs mutual exclusion!**\n* **Case 8 (`taskA: var++`, `taskB: if (b > 10) var = 0; else var++;`):** Both modify `var` non-atomically -> **Needs mutual exclusion!**"
+          "content": "In `PCO_3_sectioncritique.pdf` (Slide 3), we ask a precise question:\n\n> *Quand est-il nécessaire de garantir l'exclusion mutuelle sur l'accès à une variable globale ?*\n\nTo analyze the **12 concrete C++ scenarios (Slides 5–16)** cleanly, the course makes two explicit framing choices:\n\n1. **Data Corruption / Broken Behavior vs. Instruction Ordering:**\n   * We do **not** care about *instruction ordering* (*la séquentialité des instructions* — i.e., whether `TacheA` happens to run before `TacheB` or vice versa). In concurrent programming, different valid schedules naturally produce different orderings.\n   * We **do** care about **not corrupting data or program behavior** (*ne pas corrompre des données ou le fonctionnement*): torn values, lost updates, lost assignments, or inconsistent multi-field states that could *never* occur in any sequential execution.\n2. **The Single-Core Assumption (*processeur simple cœur*):**\n   * Slides 5–16 assume a **32-bit single-core CPU** with **1 shared L1 cache**.\n   * Only one task executes at any instant; a context switch (preemption) can **only** happen **between** individual machine instructions, never in the middle of one.\n   * Why start here? Because any scenario that **already breaks on a single core** is guaranteed to be broken everywhere—and as Slide 17 will show, even scenarios that look \"safe\" on a single core break on **multi-core** hardware!"
+        }
+      ]
+    },
+    {
+      "id": "sec-scenarios-int-struct",
+      "title": "2. Scenarios 1–8: Primitives, Structs, RMW & Check-Then-Act (Slides 5–12)",
+      "description": "Step-by-step analysis of Slides 5 through 12 on a 32-bit single-core CPU.",
+      "blocks": [
+        {
+          "id": "th-slides-5-8",
+          "block_type": "markdown",
+          "title": "Simple `int` Accesses & Multi-Field `struct_t` (Slides 5–8)",
+          "bookmarkable": true,
+          "content": "### Slide 5 — Two Writers to a Simple `int`\n```cpp\nstatic int var;\n\nvoid TacheA() { int a; ... var = a; ... }\nvoid TacheB() { int b; ... var = b; ... }\n```\n* **Single-Core Verdict:** **SAFE** (against data corruption).\n* **Why:** On a 32-bit/64-bit CPU, writing an aligned `int` compiles to a **single machine store instruction**. Preemption can only occur before or after that instruction, so `var` ends up holding either `a` or `b`—never half-`a`, half-`b`. Which task wins is just *instruction ordering*.\n\n---\n\n### Slide 6 — One Writer, One Reader on a Simple `int`\n```cpp\nstatic int var;\n\nvoid taskA() { int a; ... var = a; ... }\nvoid taskB() { int b; ... b = var; ... }\n```\n* **Single-Core Verdict:** **SAFE** (against data corruption).\n* **Why:** Both `var = a` (1 store) and `b = var` (1 load) are single machine instructions. `b` reads either the old value of `var` or `a`, never a torn value.\n\n---\n\n### Slide 7 — Two Writers to a `struct_t`\n```cpp\ntypedef struct { int a; int b; } struct_t;\nstatic struct_t var;\n\nvoid TacheA() { int a, b; ... var.a = a; var.b = b; ... }\nvoid TacheB() { int a, b; ... var.a = a; var.b = b; ... }\n```\n* **Single-Core Verdict:** **UNSAFE** (Needs mutual exclusion!).\n* **Why:** Updating `var` requires **two** separate store instructions (`var.a`, then `var.b`). If `TacheA` writes `var.a`, gets preempted, `TacheB` writes both `var.a` and `var.b`, and `TacheA` resumes to write `var.b`, then `var` becomes a **torn struct**: `TacheB`'s `a` paired with `TacheA`'s `b`.\n\n---\n\n### Slide 8 — One Writer, One Reader on a `struct_t`\n```cpp\ntypedef struct { int a; int b; } struct_t;\nstatic struct_t var;\n\nvoid taskA() { int a, b; ... var.a = a; var.b = b; ... }\nvoid taskB() { int a, b; ... a = var.a; b = var.b; ... }\n```\n* **Single-Core Verdict:** **UNSAFE** (Needs mutual exclusion!).\n* **Why (Critical Exam Trap!):** Even with **only 1 writer and 1 reader**, a multi-field struct is **still unsafe**! Reading `var` takes two instructions. If `taskB` reads `a = var.a` (old), gets preempted while `taskA` updates both `var.a` and `var.b` (new), and `taskB` resumes to read `b = var.b` (new), `taskB` observes a **torn struct** `(old a, new b)` that never existed at any point in time."
+        },
+        {
+          "id": "th-slides-9-12",
+          "block_type": "markdown",
+          "title": "Read-Modify-Write (`var++`) & Check-Then-Act (Slides 9–12)",
+          "bookmarkable": true,
+          "content": "### Slide 9 — Two Concurrent Increments (`var++` vs. `var++`)\n```cpp\nstatic int var;\n\nvoid TacheA() { ... var++; ... }\nvoid TacheB() { ... var++; ... }\n```\n* **Single-Core Verdict:** **UNSAFE** (Needs mutual exclusion!).\n* **Why:** `var++` is **not** one instruction; it is a **Read-Modify-Write (RMW)** sequence of 3 instructions: `load var -> reg`, `add reg, 1`, `store reg -> var`. If `TacheA` loads `5`, gets preempted, `TacheB` loads `5`, adds `1`, and stores `6`, then `TacheA` resumes with its stale register `5`, adds `1`, and stores `6`. **Lost update!** `var` is `6` instead of `7`.\n\n---\n\n### Slide 10 — One Increment, One Reader (`var++` vs. `b = var`)\n```cpp\nstatic int var;\n\nvoid taskA() { ... var++; ... }\nvoid taskB() { int b; ... b = var; ... }\n```\n* **Single-Core Verdict:** **SAFE** (against data corruption on 32-bit single-core).\n* **Why:** `taskB` executes a single atomic `load` (`b = var`) and **never writes** to `var`. Even if `taskB` preempts `taskA` mid-`var++`, `taskB` reads the valid pre-increment value of `var`, and `taskA` resumes to finish its increment without any lost update. *(Contrast this carefully with Slide 13 below!)*\n\n---\n\n### Slide 11 — Two Increments + One Reader (`var++` / `var++` / `c = var`)\n```cpp\nstatic int var = 0;\n\nvoid TacheA() { ... var++; ... }\nvoid TacheB() { ... var++; ... }\nvoid TacheC() { int c; ... c = var; ... }\n```\n* **Single-Core Verdict:** **UNSAFE** (Needs mutual exclusion!).\n* **Why:** Although `TacheC` (`c = var`) is a harmless single-instruction reader on a single core, `TacheA` and `TacheB` both run `var++` concurrently, reproducing the exact **lost update** race from Slide 9.\n\n---\n\n### Slide 12 — Check-Then-Act / TOCTOU (All 3 Tasks)\n```cpp\nstatic int var;\n\nvoid taskA() { ... var++; ... }\nvoid taskB() {\n    int b;\n    b = var;\n    if (b > 10) {\n        var = 0;\n    } else {\n        var++;\n    }\n}\nvoid taskC() { int c; ... c = var; ... }\n```\n* **Single-Core Verdict:** **UNSAFE** (Needs mutual exclusion!).\n* **Why:** This is a textbook **Check-Then-Act (TOCTOU — Time-of-Check to Time-of-Use)** race combined with concurrent `var++`:\n  1. Suppose `var == 11`: `taskB` reads `b = 11`, passes `if (b > 10)`, and is preempted *before* `var = 0`. `taskA` runs `var++` (`var` becomes `12`). `taskB` resumes and overwrites `var = 0`—losing `taskA`'s increment.\n  2. Suppose `var <= 10`: `taskB` enters `else { var++; }`, which races directly with `taskA`'s `var++` (lost update, as in Slide 9)."
+        }
+      ]
+    },
+    {
+      "id": "sec-scenarios-traps",
+      "title": "3. Scenarios 9–12: The Subtle Traps (Slides 13–16)",
+      "description": "Why Slide 13 is UNSAFE (unlike Slide 10), architecture-dependent floats/doubles, and std::vector<bool> bit-packing.",
+      "blocks": [
+        {
+          "id": "th-slide-13-trap",
+          "block_type": "markdown",
+          "title": "Slide 13: `var++` vs. `var = b` — UNSAFE! (Lost Assignment)",
+          "bookmarkable": true,
+          "content": "### Slide 13 — One Increment, One Assignment (`var++` vs. `var = b`)\n```cpp\nstatic int var;\n\nvoid TacheA() { ... var++; ... }\nvoid TacheB() { int b; ... var = b; ... }\n```\n* **Single-Core Verdict:** **UNSAFE** (Needs mutual exclusion!)\n* **Why (Do NOT confuse with Slide 10!):** In Slide 10, `taskB` only *read* `var` (`b = var`). Here, `TacheB` **writes** `var = b`! Trace this interleaving starting with `var = 5` and `b = 100`:\n  1. `TacheA` executes `load var` into register `R0` (`R0 = 5`).\n  2. **Context switch!** `TacheB` executes `var = b` (`var` becomes `100`).\n  3. `TacheA` resumes with its stale `R0 = 5`, computes `R0 + 1 = 6`, and stores `var = 6`!\n* **Result:** `TacheB`'s assignment (`100`) is **completely lost**! `var` ends up as `6`, which is neither `100` nor `101`—corrupting program behavior."
         },
         {
           "id": "th-sc-hidden-traps",
           "block_type": "markdown",
-          "title": "Hidden Non-Atomic Traps: `double` & `std::vector<bool>`",
+          "title": "Slides 14–16: `float`, `double`, and `std::vector<bool>`",
           "bookmarkable": true,
-          "content": "Even seemingly innocent single-line assignments can corrupt data on a single core:\n\n| Scenario | Safe on 32-bit Single-Core? | Why? |\n| :--- | :---: | :--- |\n| `static float var;` (`var = a` / `var = b`) | Depends on arch (usually 32-bit) | A 32-bit `float` fits in a single 32-bit bus transfer. |\n| `static double var;` (`var = a` / `var = b`) | **NO (on 32-bit CPU)** | A 64-bit `double` requires **two** 32-bit memory writes! A preemption mid-write produces a **corrupted half-old, half-new `double`**. |\n| `std::vector<bool> vec;` (`vec[0] = a` / `vec[1] = b` or `vec[0] = b`) | **NO** | `std::vector<bool>` packs 8 booleans into **1 byte** (bitfield)! Modifying `vec[0]` performs a **read-modify-write** on the entire byte, clobbering adjacent bits! |"
+          "content": "### Slide 14 — Concurrent `float` Writes\n```cpp\nstatic float var;\n\nvoid taskA() { float a; ... var = a; ... }\nvoid taskB() { float b; ... var = b; ... }\n```\n* **Single-Core Verdict:** **Depends on architecture** — **SAFE** on 32-bit/64-bit CPUs; **UNSAFE** on 8-bit/16-bit microcontrollers.\n* **Why:** An IEEE-754 `float` is **32 bits**. On a 32-bit or 64-bit bus, it transfers in a single store instruction. On an 8-bit or 16-bit embedded MCU, writing 32 bits requires 2–4 instructions, allowing a preemption mid-write to produce a **torn `float`**.\n\n---\n\n### Slide 15 — Concurrent `double` Writes\n```cpp\nstatic double var;\n\nvoid TacheA() { double a; ... var = a; ... }\nvoid TacheB() { double b; ... var = b; ... }\n```\n* **Single-Core Verdict:** **UNSAFE on 32-bit (and 8/16-bit) CPUs**; SAFE only on aligned 64-bit CPUs.\n* **Why:** An IEEE-754 `double` is **64 bits**. On a 32-bit CPU, storing a `double` requires **two** separate 32-bit store instructions. A context switch between them leaves `var` with 32 bits from `TacheA` and 32 bits from `TacheB`—a **torn, corrupted `double`**.\n\n---\n\n### Slide 16 — `std::vector<bool>` Bit-Packing Race\n```cpp\nstd::vector<bool> vec;\n\nvoid TacheA() { bool a; ... vec[0] = a; ... }\nvoid TacheB() { bool b; ... vec[0] = b; ... }\n```\n* **Single-Core Verdict:** **UNSAFE!** (Needs mutual exclusion!)\n* **Why:** `std::vector<bool>` is a space-optimized C++ specialization that packs **8 booleans into 1 byte** (1 bit each). CPUs cannot write a single bit directly to RAM—so `vec[0] = a` compiles to a **non-atomic read-modify-write** on the whole byte (`load byte`, `mask/set bit 0`, `store byte`).\n* **Crucial Corollary (`vec[0]` vs. `vec[1]`):** Even if `TacheA` only writes `vec[0] = a` and `TacheB` only writes `vec[1] = b` (**different indices!**), they still share the **same underlying byte**, so `TacheA` can clobber `TacheB`'s bit 1 and vice versa!"
         },
         {
           "id": "diag-vector-bool-trap",
@@ -54,20 +90,170 @@
           "caption": "Even writing to DIFFERENT indices (vec[0] and vec[1]) in std::vector<bool> is a race condition because both share the same underlying byte.",
           "source": "graph LR\n  Byte[\"Shared Byte in Memory (8 bits)\"]\n  TA[\"Thread A: vec[0] = true\\n1. Read byte\\n2. Set bit 0\\n3. Write byte\"]\n  TB[\"Thread B: vec[1] = true\\n1. Read byte\\n2. Set bit 1\\n3. Write byte\"]\n  Byte -->|read| TA\n  Byte -->|read| TB\n  TA -->|clobbers bit 1!| Byte\n  TB -->|clobbers bit 0!| Byte\n  classDef warn fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px;\n  class Byte,TA,TB warn;",
           "bookmarkable": true
+        },
+        {
+          "id": "th-12-scenarios-summary",
+          "block_type": "markdown",
+          "title": "Master Reference: All 12 Scenarios (32-Bit Single-Core)",
+          "bookmarkable": true,
+          "content": "| Slide | Code Pattern | 32-bit Single-Core Verdict | Primary Reason |\n| :---: | :--- | :---: | :--- |\n| **5** | `var = a` / `var = b` (`int`) | **SAFE** | Single aligned 32-bit store instruction |\n| **6** | `var = a` / `b = var` (`int`) | **SAFE** | Single store + single load |\n| **7** | `var.a = a; var.b = b;` (×2) | **UNSAFE** | Two stores -> **torn struct** |\n| **8** | `var.a = a; var.b = b;` / `a = var.a; b = var.b;` | **UNSAFE** | 1 writer + 1 reader still sees **torn struct** |\n| **9** | `var++` / `var++` | **UNSAFE** | RMW (`load-add-store`) -> **lost update** |\n| **10** | `var++` / `b = var` | **SAFE** | Reader does 1 load, never writes `var` |\n| **11** | `var++` / `var++` / `c = var` | **UNSAFE** | Two `var++` tasks lose updates |\n| **12** | `var++` / `b=var; if(b>10) var=0; else var++;` / `c=var` | **UNSAFE** | **Check-Then-Act (TOCTOU)** + concurrent `var++` |\n| **13** | `var++` / `var = b` | **UNSAFE** | RMW + write -> **lost assignment** |\n| **14** | `var = a` / `var = b` (`float`) | **SAFE** (32-bit) / **UNSAFE** (8/16-bit) | 32-bit `float` fits in 1 transfer on 32-bit CPU |\n| **15** | `var = a` / `var = b` (`double`) | **UNSAFE** (32-bit) | 64-bit `double` takes two 32-bit stores -> **torn double** |\n| **16** | `std::vector<bool>`: `vec[0] = a` / `vec[0] = b` (or `vec[1] = b`) | **UNSAFE** | Bit-packed byte RMW -> **clobbers adjacent bits** |"
         }
       ]
     },
     {
       "id": "sec-multicore-golden-rule",
-      "title": "2. Multi-Core Caches & The Golden Rule",
-      "description": "Why single-core assumptions collapse on multi-core hardware.",
+      "title": "4. Single-Core vs. Multi-Core & The Golden Rule (Slide 17)",
+      "description": "Why single-core safety collapses on multi-core CPUs and why we must protect all concurrent accesses.",
       "blocks": [
         {
           "id": "th-multicore-caches",
           "block_type": "markdown",
-          "title": "Multi-Core Processors & Cache Coherency",
+          "title": "Single-Core vs. Multi-Core: Why Everything Changes",
           "bookmarkable": true,
-          "content": "Even if an operation looks single-instruction on a single core, **modern processors are multi-core**:\n\n* **Private Core Caches:** Each CPU core has its own local L1/L2 cache.\n* **No Automatic Sync Without Synchronization:** Nothing forces cores to immediately flush/synchronize caches unless explicit synchronization primitives (mutexes, atomics, memory barriers) are used.\n* **C++ Standard:** Concurrent unsynchronized read/write (or write/write) to the same memory location is a **Data Race = Undefined Behavior**.\n\n> [!CAUTION]\n> **The Golden Rule of PCO (Slide 17):**\n> *\"Dans le doute... **Protégez tous les accès concurrents !**\"* (When in doubt, protect **all** concurrent accesses!)"
+          "content": "Even the few scenarios marked **SAFE** on a 32-bit single-core CPU (Slides 5, 6, 10, 14) **cannot be left unprotected** in real systems. Slide 17 explains why:\n\n| Dimension | Single-Core CPU (Slides 5–16) | Multi-Core CPU (Slide 17) |\n| :--- | :--- | :--- |\n| **Execution** | Only 1 thread runs at a time; preemption happens *only between* machine instructions. | Multiple threads execute **simultaneously** on different cores. |\n| **Caches** | **1 shared L1 cache** — every thread sees the same cache state immediately after an instruction. | Each core has **private L1/L2 caches** and **store buffers**. |\n| **Synchronization** | Implicitly coherent for single-instruction aligned accesses. | *\"Rien ne les oblige à synchroniser les caches si on ne le demande pas\"* — cores may delay flushing or reading updates without memory barriers/mutexes. |\n| **C++ Standard** | Compiler still assumes no data races! | Concurrent unsynchronized access (at least one write) is a **Data Race = Undefined Behavior (UB)** — the compiler may hoist loads out of loops or cache `var` in a register forever. |\n\n> [!CAUTION]\n> **The Golden Rule of PCO (Slide 17):**\n> *\"Dans le doute... **Protégez tous les accès concurrents !**\"*\n> (When in doubt, **protect all concurrent accesses**—with mutexes, semaphores, or `std::atomic`—which also emit the hardware memory barriers needed to synchronize multi-core caches!)"
+        }
+      ]
+    },
+    {
+      "id": "sec-active-recall",
+      "title": "5. Active Recall: Flashcards, Reflection & Exam Quiz",
+      "description": "Test your mastery of all 12 scenarios, subtle traps, and multi-core cache coherency.",
+      "blocks": [
+        {
+          "id": "fc-slide-8-struct",
+          "block_type": "flashcard",
+          "front": "32-bit Single-Core — Safe or Unsafe?\n\n`taskA`: `var.a = a; var.b = b;`\n`taskB`: `a = var.a; b = var.b;` (where `var` is `struct_t`)",
+          "back": "**UNSAFE!** (Slide 8)\n\nEven with only 1 writer and 1 reader, reading two `int` fields takes two instructions. Preemption between `var.a` and `var.b` causes `taskB` to read a **torn struct** (old `a` + new `b`).",
+          "hint": "Think about whether taskB reads both fields in one machine instruction.",
+          "tags": [
+            "pco-ch3",
+            "torn-struct"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "fc-slide-10-vs-13",
+          "block_type": "flashcard",
+          "front": "32-bit Single-Core — Safe or Unsafe?\n\nCompare:\n1) `var++` vs `b = var`\n2) `var++` vs `var = b`",
+          "back": "1) `var++` vs `b = var` (Slide 10): **SAFE** — `b = var` is 1 load and never modifies `var`.\n2) `var++` vs `var = b` (Slide 13): **UNSAFE!** — `TacheA` can load old `var`, get preempted while `TacheB` writes `var = b`, and overwrite `b` with `old_var + 1` (**lost assignment**).",
+          "hint": "Which one modifies `var` while `var++` is mid-RMW?",
+          "tags": [
+            "pco-ch3",
+            "slide-10",
+            "slide-13"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "fc-slide-12-toctou",
+          "block_type": "flashcard",
+          "front": "32-bit Single-Core — Safe or Unsafe?\n\n`taskA`: `var++;`\n`taskB`: `b = var; if (b > 10) var = 0; else var++;`\n`taskC`: `c = var;`",
+          "back": "**UNSAFE!** (Slide 12)\n\n1. **Check-Then-Act (TOCTOU):** `taskB` checks `b > 10`, gets preempted by `taskA` (`var++`), and then overwrites `var = 0` (losing `taskA`'s increment).\n2. **Concurrent `var++`:** `taskB`'s `else` branch races with `taskA`'s `var++`.",
+          "hint": "Can `var` change between `b = var` and `var = 0`?",
+          "tags": [
+            "pco-ch3",
+            "toctou"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "fc-slide-14-15-float-double",
+          "block_type": "flashcard",
+          "front": "32-bit Single-Core — Safe or Unsafe?\n\n1) `static float var;` (`var = a` / `var = b`)\n2) `static double var;` (`var = a` / `var = b`)",
+          "back": "1) `float` (Slide 14): **SAFE on 32-bit/64-bit** (1 store), **UNSAFE on 8/16-bit MCUs**.\n2) `double` (Slide 15): **UNSAFE on 32-bit** — a 64-bit `double` takes **two** 32-bit stores, risking a **torn `double`**.",
+          "hint": "Compare the bit-width of `float` (32) and `double` (64) to a 32-bit CPU bus.",
+          "tags": [
+            "pco-ch3",
+            "float",
+            "double"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "fc-slide-16-vector-bool",
+          "block_type": "flashcard",
+          "front": "32-bit Single-Core — Safe or Unsafe?\n\n`std::vector<bool> vec;`\n`TacheA`: `vec[0] = a;`\n`TacheB`: `vec[1] = b;` (different indices!)",
+          "back": "**UNSAFE!** (Slide 16)\n\n`std::vector<bool>` packs 8 booleans into **1 byte**. Writing `vec[0]` performs a non-atomic **read-modify-write** on the whole byte, clobbering `vec[1]`'s bit!",
+          "hint": "How many bits does `std::vector<bool>` store per byte?",
+          "tags": [
+            "pco-ch3",
+            "vector-bool"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "refl-slide10-vs-slide13",
+          "block_type": "reflection_rubric",
+          "prompt": "Explain why Slide 10 (`var++` vs. `b = var`) is SAFE against data corruption on a 32-bit single-core CPU, whereas Slide 13 (`var++` vs. `var = b`) is UNSAFE—and then explain why BOTH still require synchronization on a multi-core CPU.",
+          "self_check_criteria": [
+            "Identifies that `var++` is a 3-instruction Read-Modify-Write (`load`, `add`, `store`).",
+            "Explains that in Slide 10, `b = var` is a single read-only `load` that never modifies `var`, so `var++` cannot lose an update.",
+            "Traces the Slide 13 interleaving (`TacheA` loads old `var` -> `TacheB` writes `var = b` -> `TacheA` stores `old + 1`), showing `TacheB`'s assignment is lost.",
+            "Explains multi-core hazards: private L1/L2 caches, store buffers, no automatic cache synchronization without barriers, and C++ Data Race Undefined Behavior (Slide 17)."
+          ],
+          "model_answer": "On a 32-bit single-core CPU, `var++` compiles to `load`, `add 1`, `store`. In Slide 10 (`var++` vs `b = var`), `taskB` only executes a single `load` instruction and never writes to `var`; even if `taskB` preempts `taskA` mid-`var++`, `taskB` gets a valid integer and `taskA` finishes its increment cleanly. In Slide 13 (`var++` vs `var = b`), `TacheA` can `load` the old `var`, get preempted while `TacheB` stores `var = b`, and then resume to store `old_var + 1`—completely losing `TacheB`'s assignment! Finally, on a multi-core CPU, both are unsafe without synchronization because each core has private L1/L2 caches (and store buffers) that are not forced to synchronize without explicit primitives (mutexes/atomics), and unsynchronized concurrent read+write is Undefined Behavior in C++ (Slide 17: 'Protégez tous les accès concurrents !').",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch3-struct-reader",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-slides-5-8",
+          "question": "In Slide 8, `taskA` writes `var.a = a; var.b = b;` and `taskB` only reads `a = var.a; b = var.b;` on a single-core CPU. Why is mutual exclusion STILL required?",
+          "options": [
+            "Reading two fields takes two instructions, so `taskB` can be preempted mid-read and observe a torn struct (old `a` with new `b`).",
+            "Reading a `struct` always modifies its fields in memory.",
+            "Single-core CPUs cannot execute `taskB` while `taskA` exists.",
+            "Local variables `a` and `b` inside `taskB` are shared globally."
+          ],
+          "correct_answer": "Reading two fields takes two instructions, so `taskB` can be preempted mid-read and observe a torn struct (old `a` with new `b`).",
+          "explanation": "Even with 1 writer and 1 reader, `taskB` reads `var.a` and `var.b` in two separate instructions. If `taskA` updates both fields between `taskB`'s two reads, `taskB` gets an inconsistent half-old, half-new struct.",
+          "hints": [
+            "Is reading two separate `int` fields atomic?",
+            "What happens if `taskA` runs between `a = var.a;` and `b = var.b;`?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch3-slide13-lost-assign",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-slide-13-trap",
+          "question": "Initially `var = 5` and `b = 100`. `TacheA` runs `var++;` and `TacheB` runs `var = b;` concurrently on a single-core CPU (Slide 13). Which final value of `var` proves data corruption / broken behavior?",
+          "options": [
+            "`var == 6` (because `TacheA` loaded `5` before `TacheB` wrote `100`, then overwrote `100` with `6`).",
+            "`var == 100` (because `TacheA` finished `var++` before `TacheB` ran `var = 100`).",
+            "`var == 101` (because `TacheB` ran `var = 100` before `TacheA` ran `var++`).",
+            "None of the above — Slide 13 is safe on a single-core CPU."
+          ],
+          "correct_answer": "`var == 6` (because `TacheA` loaded `5` before `TacheB` wrote `100`, then overwrote `100` with `6`).",
+          "explanation": "`var == 100` and `var == 101` are valid sequential orderings. `var == 6` is impossible in any sequential execution: `TacheB`'s assignment `var = 100` was completely lost because `TacheA` was preempted after loading `5` and later stored `5 + 1 = 6`.",
+          "hints": [
+            "Trace `TacheA` loading `var` into a register, getting preempted, and resuming after `TacheB` writes `100`."
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch3-slide12-toctou",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-slides-9-12",
+          "question": "In Slide 12, `taskB` executes `b = var; if (b > 10) var = 0; else var++;` while `taskA` executes `var++;`. What concurrency bug does `taskB` exhibit?",
+          "options": [
+            "A Check-Then-Act (TOCTOU) race: `var` can change between `b = var` and `var = 0` (or `var++`).",
+            "Deadlock between `taskB` and `taskC`.",
+            "Stack overflow from `if (b > 10)`.",
+            "No bug, because `b` is a local variable."
+          ],
+          "correct_answer": "A Check-Then-Act (TOCTOU) race: `var` can change between `b = var` and `var = 0` (or `var++`).",
+          "explanation": "`taskB` checks a snapshot (`b = var`) and then acts on `var` later. `taskA` can modify `var` between the check and the write, causing lost increments or stale decisions.",
+          "hints": [
+            "Does `if (b > 10)` lock `var` until `var = 0` finishes?"
+          ],
+          "bookmarkable": true
         },
         {
           "id": "qz-ch3-double-trap",
@@ -75,7 +261,7 @@
           "question_type": "multiple_choice",
           "difficulty": 2,
           "related_block_id": "th-sc-hidden-traps",
-          "question": "Why can `static double var; var = a;` (executed concurrently by two threads) corrupt `var` on a 32-bit single-core CPU?",
+          "question": "Why can `static double var; var = a;` (executed concurrently by two threads, Slide 15) corrupt `var` on a 32-bit single-core CPU?",
           "options": [
             "A 64-bit `double` requires two 32-bit memory writes, so a context switch between them produces a torn value.",
             "Floating-point registers are shared across all threads in the same process.",
@@ -96,7 +282,7 @@
           "question_type": "multiple_choice",
           "difficulty": 3,
           "related_block_id": "th-sc-hidden-traps",
-          "question": "Why is concurrent modification of `std::vector<bool>` dangerous even when Thread A only writes `vec[0]` and Thread B only writes `vec[1]`?",
+          "question": "Why is concurrent modification of `std::vector<bool>` (Slide 16) dangerous even when Thread A only writes `vec[0]` and Thread B only writes `vec[1]`?",
           "options": [
             "`std::vector<bool>` packs multiple booleans as bits inside the same byte, requiring a non-atomic read-modify-write of that byte.",
             "`std::vector<bool>` allocates each boolean on a separate heap page.",
@@ -108,6 +294,26 @@
           "hints": [
             "How does `std::vector<bool>` optimize memory usage in C++?",
             "Can a CPU write a single bit in RAM without reading and writing the surrounding byte?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch3-multicore-rule",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-multicore-caches",
+          "question": "According to Slide 17, why is a simple `var = a` / `b = var` on `int` STILL unsafe without synchronization on a multi-core processor?",
+          "options": [
+            "Each core has its own private cache (and store buffer), and nothing forces caches to synchronize without explicit synchronization operations (plus it is C++ Undefined Behavior).",
+            "Multi-core CPUs do not support the `int` data type.",
+            "Multi-core CPUs execute all threads on Core 0 only.",
+            "Context switches happen inside individual machine instructions on multi-core CPUs."
+          ],
+          "correct_answer": "Each core has its own private cache (and store buffer), and nothing forces caches to synchronize without explicit synchronization operations (plus it is C++ Undefined Behavior).",
+          "explanation": "On multi-core hardware, each core has private L1/L2 caches. Without mutexes, atomics, or memory barriers, updates may stay in a core's cache/store buffer unseen by other cores, and C++ treats unsynchronized concurrent read+write as Undefined Behavior. Hence the Golden Rule: 'Protégez tous les accès concurrents !'",
+          "hints": [
+            "Recall Slide 17: 'Chaque cœur a sa propre mémoire cache...'"
           ],
           "bookmarkable": true
         }
