@@ -8,6 +8,8 @@ import {
   Sparkles,
   RotateCcw,
   StickyNote,
+  Link2,
+  Check,
 } from 'lucide-react';
 import {
   type Guide,
@@ -82,6 +84,7 @@ export const GuideViewer: React.FC<Props> = ({
   const sections = useMemo(() => getGuideSections(guide), [guide]);
 
   const [selectedSectionId, setSelectedSectionId] = useState<string>('');
+  const [linkCopied, setLinkCopied] = useState(false);
   const [showRemediationModal, setShowRemediationModal] = useState(false);
   const [showSideNotes, setShowSideNotes] = useState<boolean>(() => {
     try {
@@ -418,6 +421,29 @@ export const GuideViewer: React.FC<Props> = ({
               <h2 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
                 {guide.title}
               </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  const shareUrl = `${window.location.origin}${window.location.pathname}#/guide/${encodeURIComponent(guide.id)}`;
+                  navigator.clipboard.writeText(shareUrl);
+                  setLinkCopied(true);
+                  setTimeout(() => setLinkCopied(false), 1800);
+                }}
+                className="flex items-center space-x-1 px-2 py-0.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-[11px] text-slate-500 hover:text-slate-900 transition flex-shrink-0"
+                title="Copy shareable link to this guide"
+              >
+                {linkCopied ? (
+                  <>
+                    <Check className="w-3 h-3 text-emerald-600" />
+                    <span className="text-emerald-700 font-medium">Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Link2 className="w-3 h-3" />
+                    <span className="hidden md:inline">Share</span>
+                  </>
+                )}
+              </button>
             </div>
 
             {/* Window Sizing & Notes Controls */}
@@ -538,6 +564,10 @@ export const GuideViewer: React.FC<Props> = ({
                     key={sec.id}
                     onClick={() => {
                       setSelectedSectionId(sec.id);
+                      const nextHash = `#/guide/${encodeURIComponent(guide.id)}?section=${encodeURIComponent(sec.id)}`;
+                      if (window.location.hash !== nextHash) {
+                        window.history.replaceState(null, '', nextHash);
+                      }
                       const el = document.getElementById(`section-${sec.id}`);
                       if (el) el.scrollIntoView({ behavior: 'smooth' });
                     }}
