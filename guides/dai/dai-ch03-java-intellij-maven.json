@@ -39,7 +39,7 @@
           "block_type": "markdown",
           "title": "Write Once, Run Anywhere: Bytecode, JVM, JRE & JDK",
           "bookmarkable": true,
-          "content": "If you compile a C program on Linux, the compiler emits **native machine instructions** (x86-64 or ARM64 ELF binaries) that will crash or refuse to run on Windows or macOS. You must recompile separately for every target OS and CPU architecture.\n\nJava solves this with a two-step indirection—**Write Once, Run Anywhere (WORA)**:\n1. The Java compiler (`javac`) translates your `.java` source code into **bytecode** (`.class` files)—an intermediate instruction set not tied to any physical CPU.\n2. The **Java Virtual Machine (JVM)** on the target machine reads that bytecode and executes it.\n\nAs long as the target machine has a JVM at least as recent as the Java version you compiled for, the **exact same compiled `.class` or `.jar` file** runs unchanged on Linux, macOS, and Windows.\n\n### Nested Components: JVM ⊂ JRE ⊂ JDK\nThese three acronyms are **nested layers**, not competing alternatives:\n\n| Layer | Contains | Who needs it? |\n| :--- | :--- | :--- |\n| **JVM** (Java Virtual Machine) | Bytecode execution engine + Garbage Collector | Core runtime engine |\n| **JRE** (Java Runtime Environment) | JVM + Java Standard Library | End-users who only **run** Java apps |\n| **JDK** (Java Development Kit) | JRE + `javac` compiler + `jar`, debugger & dev tools | **Developers** who compile & build apps |\n\nIn this course, we install an **Eclipse Temurin** JDK distribution, which gives you all three.\n\n> [!WARNING]\n> **Common Misconception (Non-Example):** Bytecode (`.class`) is *not* human-readable source code, nor is it native CPU machine code. And having only a JRE lets you run `java`, but `javac` will not exist—you need a **JDK** to compile."
+          "content": "If you compile a C program on Linux, the compiler emits **native machine instructions** (x86-64 or ARM64 ELF binaries) that will crash or refuse to run on Windows or macOS. You must recompile separately for every target OS and CPU architecture.\n\nJava solves this with a two-step indirection—**Write Once, Run Anywhere (WORA)**:\n1. The Java compiler (`javac`) translates your `.java` source code into **bytecode** (`.class` files)—an intermediate instruction set not tied to any physical CPU.\n2. The **Java Virtual Machine (JVM)** on the target machine reads that bytecode and executes it.\n\nAs long as the target machine has a JVM at least as recent as the Java version you compiled for, the **exact same compiled `.class` or `.jar` file** runs unchanged on Linux, macOS, and Windows.\n\n### Nested Components: JVM ⊂ JRE ⊂ JDK\nThese three acronyms are **nested layers**, not competing alternatives:\n\n| Layer | Contains | Who needs it? |\n| :--- | :--- | :--- |\n| **JVM** (Java Virtual Machine) | Bytecode execution engine + Garbage Collector | Core runtime engine |\n| **JRE** (Java Runtime Environment) | JVM + Java Standard Library | End-users who only **run** Java apps |\n| **JDK** (Java Development Kit) | JRE + `javac` compiler + `jar`, debugger & dev tools | **Developers** who compile & build apps |\n\nDistributions such as **Eclipse Temurin** provide a complete, open-source JDK.\n\n> [!WARNING]\n> **Common Misconception (Non-Example):** Bytecode (`.class`) is *not* human-readable source code, nor is it native CPU machine code. And having only a JRE lets you run `java`, but `javac` will not exist—you need a **JDK** to compile."
         },
         {
           "id": "diag-jvm-pipeline",
@@ -55,7 +55,7 @@
           "block_type": "markdown",
           "title": "LTS Versions, SDKMAN!, JARs & Garbage Collection",
           "bookmarkable": true,
-          "content": "### Java LTS Releases & SDKMAN!\nJava releases a new version every 6 months, with a **Long Term Support (LTS)** release every **2 years** (e.g., Java 17, Java 21, **Java 25**—the current LTS used in this course).\n\nBecause different projects require different Java versions, developers use **SDKMAN!** to install and switch JDKs cleanly:\n- `sdk list java` — list available and locally installed JDK distributions (e.g., `-tem` for Eclipse Temurin).\n- `sdk install java 21.0.6-tem` — install Java 21 alongside Java 25.\n- `sdk use java 21.0.6-tem` — switch to Java 21 in the **current terminal session only**.\n- `sdk default java 25-tem` — set Java 25 as the **global default** for all new terminals.\n\n### Compiling, Running & JARs\nFor a single file `HelloWorld.java`:\n```bash\njavac HelloWorld.java   # produces HelloWorld.class\njava HelloWorld         # runs the main() method on the JVM\n```\nReal applications are packaged into a **JAR (Java ARchive)**—a standard ZIP file containing compiled `.class` bytecode, resources, and a `META-INF/MANIFEST.MF` file declaring the entry point (`Main-Class`). You run an executable JAR with:\n```bash\njava -Xmx1024M -Xms1024M -jar minecraft_server.1.21.jar nogui\n```\nHere `-Xmx` sets the **maximum** heap memory and `-Xms` sets the **initial** heap memory.\n\n### Automatic Garbage Collection (GC)\nUnlike C/C++, Java does not require `malloc()` and `free()`. The JVM's **Garbage Collector (GC)** automatically reclaims heap objects that your program can no longer reach. An object becomes *eligible* for collection when its last reference leaves scope or is set to `null`—though the exact moment it is freed is decided by the JVM."
+          "content": "### Java LTS Releases & SDKMAN!\nJava releases a new version every 6 months, with a **Long Term Support (LTS)** release every **2 years** (e.g., Java 17, Java 21, **Java 25**).\n\nBecause different projects require different Java versions, developers use **SDKMAN!** to install and switch JDKs cleanly:\n- `sdk list java` — list available and locally installed JDK distributions (e.g., `-tem` for Eclipse Temurin).\n- `sdk install java 21.0.6-tem` — install Java 21 alongside Java 25.\n- `sdk use java 21.0.6-tem` — switch to Java 21 in the **current terminal session only**.\n- `sdk default java 25-tem` — set Java 25 as the **global default** for all new terminals.\n\n### Compiling, Running & JARs\nFor a single file `HelloWorld.java`:\n```bash\njavac HelloWorld.java   # produces HelloWorld.class\njava HelloWorld         # runs the main() method on the JVM\n```\nReal applications are packaged into a **JAR (Java ARchive)**—a standard ZIP file containing compiled `.class` bytecode, resources, and a `META-INF/MANIFEST.MF` file declaring the entry point (`Main-Class`). You run an executable JAR with:\n```bash\njava -Xmx1024M -Xms1024M -jar minecraft_server.1.21.jar nogui\n```\nHere `-Xmx` sets the **maximum** heap memory and `-Xms` sets the **initial** heap memory.\n\n### Automatic Garbage Collection (GC)\nUnlike C/C++, Java does not require `malloc()` and `free()`. The JVM's **Garbage Collector (GC)** automatically reclaims heap objects that your program can no longer reach. An object becomes *eligible* for collection when its last reference leaves scope or is set to `null`—though the exact moment it is freed is decided by the JVM."
         },
         {
           "id": "exp-sandbox-java-basics",
@@ -125,7 +125,7 @@
           "block_type": "markdown",
           "title": "What Belongs in Git vs .gitignore?",
           "bookmarkable": true,
-          "content": "**IntelliJ IDEA** (Community Edition, or Ultimate with a free student license) is the reference IDE for Java in this course. When you open a project, IntelliJ creates a `.idea/` directory.\n\nNot all files inside `.idea/` are created equal:\n- **Shared project configuration** (e.g., code style, Run/Debug configurations stored as project files, VCS mappings) helps every team member and grader get the exact same setup. **Commit these.**\n- **Local machine configuration** (e.g., `.idea/workspace.xml` tracking which tabs you have open, `.idea/shelf/`, `.idea/libraries/`, `*.iml`, `*.iws`, `*.ipr`) is specific to your computer and causes constant merge conflicts if committed. **Ignore these in `.gitignore`.**\n\n> [!TIP]\n> **Clean Up IntelliJ's Default `.gitignore`:** IntelliJ often generates a `.idea/.gitignore` file or a bloated root `.gitignore` full of rules for tools you don't use. Delete `.idea/.gitignore` and maintain a clean, intentional root `.gitignore` covering local `.idea/` files, Maven's `target/` build directory, and OS clutter (`.DS_Store`, `Thumbs.db`, `*~`)."
+          "content": "When you open a Java project in **IntelliJ IDEA**, it creates a `.idea/` directory. Not all files inside `.idea/` are created equal:\n- **Shared project configuration** (e.g., code style, Run/Debug configurations stored as project files, VCS mappings) helps every team member get the exact same setup. **Commit these.**\n- **Local machine configuration** (e.g., `.idea/workspace.xml` tracking which tabs you have open, `.idea/shelf/`, `.idea/libraries/`, `*.iml`, `*.iws`, `*.ipr`) is specific to your computer and causes constant merge conflicts if committed. **Ignore these in `.gitignore`.**\n\n> [!TIP]\n> **Clean Up IntelliJ's Default `.gitignore`:** IntelliJ often generates a `.idea/.gitignore` file or a bloated root `.gitignore` full of rules for tools you don't use. Delete `.idea/.gitignore` and maintain a clean, intentional root `.gitignore` covering local `.idea/` files, Maven's `target/` build directory, and OS clutter (`.DS_Store`, `Thumbs.db`, `*~`)."
         },
         {
           "id": "code-gitignore-maven",
@@ -237,7 +237,7 @@
           "block_type": "markdown",
           "title": "Lifecycles, Phases & Goals",
           "bookmarkable": true,
-          "content": "Maven organizes builds into **three standard lifecycles**:\n1. **`default`**: builds, tests, and packages the project.\n2. **`clean`**: deletes the `target/` build directory.\n3. **`site`**: generates project documentation (not used in this course).\n\nEach lifecycle is an ordered sequence of **phases**, and each phase executes one or more plugin **goals**:\n\n| Phase | Bound Goal (Default) | What it does |\n| :--- | :--- | :--- |\n| `validate` | *(core)* | Checks that the project and `pom.xml` are valid and complete |\n| `compile` | `compiler:compile` | Compiles `src/main/java` into `.class` files in `target/classes` |\n| `test` | `surefire:test` | Compiles and runs JUnit tests in `src/test/java` |\n| `package` | `jar:jar` *(or `shade:shade`)* | Packages compiled bytecode into a `.jar` in `target/` |\n| `verify` | *(integration checks)* | Runs verification checks on integration tests |\n| `install` | `install:install` | Copies the JAR into your local `~/.m2` repository |\n| `deploy` | `deploy:deploy` | Publishes the JAR to a remote repository |\n\n> [!IMPORTANT]\n> **The Golden Rule of Maven:** Running any phase automatically runs **all preceding phases** of that lifecycle in order. Running `./mvnw package` executes `validate` $\\rightarrow$ `compile` $\\rightarrow$ `test` $\\rightarrow$ `package`. Chaining two lifecycles like `./mvnw clean package` deletes `target/` first, then runs the `default` lifecycle up to `package`.\n\nYou can also invoke a **goal directly** outside any lifecycle, such as `./mvnw dependency:tree`, `./mvnw dependency:go-offline`, or `mvn wrapper:wrapper`."
+          "content": "Maven organizes builds into **three standard lifecycles**:\n1. **`default`**: builds, tests, and packages the project.\n2. **`clean`**: deletes the `target/` build directory.\n3. **`site`**: generates project documentation.\n\nEach lifecycle is an ordered sequence of **phases**, and each phase executes one or more plugin **goals**:\n\n| Phase | Bound Goal (Default) | What it does |\n| :--- | :--- | :--- |\n| `validate` | *(core)* | Checks that the project and `pom.xml` are valid and complete |\n| `compile` | `compiler:compile` | Compiles `src/main/java` into `.class` files in `target/classes` |\n| `test` | `surefire:test` | Compiles and runs JUnit tests in `src/test/java` |\n| `package` | `jar:jar` *(or `shade:shade`)* | Packages compiled bytecode into a `.jar` in `target/` |\n| `verify` | *(integration checks)* | Runs verification checks on integration tests |\n| `install` | `install:install` | Copies the JAR into your local `~/.m2` repository |\n| `deploy` | `deploy:deploy` | Publishes the JAR to a remote repository |\n\n> [!IMPORTANT]\n> **The Golden Rule of Maven:** Running any phase automatically runs **all preceding phases** of that lifecycle in order. Running `./mvnw package` executes `validate` $\\rightarrow$ `compile` $\\rightarrow$ `test` $\\rightarrow$ `package`. Chaining two lifecycles like `./mvnw clean package` deletes `target/` first, then runs the `default` lifecycle up to `package`.\n\nYou can also invoke a **goal directly** outside any lifecycle, such as `./mvnw dependency:tree`, `./mvnw dependency:go-offline`, or `mvn wrapper:wrapper`."
         },
         {
           "id": "diag-maven-lifecycle",
@@ -541,7 +541,7 @@
           "difficulty": 3,
           "related_block_id": "code-picocli-subcommands",
           "bookmarkable": true,
-          "question": "Given the `Main` and `Hello` picocli classes from the chapter (where `Main` has positional parameter `name` with `defaultValue = \"World\"` and `scope = ScopeType.INHERIT`, and `Hello` has option `-g`/`--greetings` with `defaultValue = \"Hello\"`), what does running the following command print?\n\n```bash\njava -jar app.jar \"Alice\" hello -g \"Salut\"\n```",
+          "question": "Suppose a picocli `Main` command has positional parameter `name` (`defaultValue = \"World\"`, `scope = ScopeType.INHERIT`), and its `hello` subcommand has option `-g`/`--greetings` (`defaultValue = \"Hello\"`) and prints `greetings + \" \" + parent.getName() + \"!\"`. What does running the following command print?\n\n```bash\njava -jar app.jar \"Alice\" hello -g \"Salut\"\n```",
           "options": [
             "Salut Alice!",
             "Hello Alice!",
@@ -553,36 +553,6 @@
           "hints": [
             "Trace which argument binds to `Main` (index 0) and which binds to `Hello` (`-g`).",
             "Check `scope = ScopeType.INHERIT` and `@ParentCommand`."
-          ]
-        },
-        {
-          "id": "qz-maven-test-scope-blank",
-          "block_type": "quiz_question",
-          "question_type": "fill_in_the_blank",
-          "difficulty": 1,
-          "related_block_id": "th-junit5-testing",
-          "bookmarkable": true,
-          "question": "To ensure JUnit 5 is available when running `./mvnw test` but is NOT packaged into your production JAR, set `<scope>___</scope>` on its dependency in `pom.xml`.",
-          "correct_answer": "test",
-          "explanation": "Setting `<scope>test</scope>` tells Maven to include the dependency only when compiling and executing tests in `src/test/java`, keeping it out of the final packaged JAR.",
-          "hints": [
-            "It is a single lowercase word matching the `src/test/java` directory.",
-            "Other common Maven scopes are `compile` (default), `provided`, and `runtime`."
-          ]
-        },
-        {
-          "id": "qz-maven-layout-blank",
-          "block_type": "quiz_question",
-          "question_type": "fill_in_the_blank",
-          "difficulty": 1,
-          "related_block_id": "diag-maven-tree",
-          "bookmarkable": true,
-          "question": "In Maven's standard directory layout, application Java source files live in `src/main/java`, while configuration files and non-code assets live in `src/main/___`.",
-          "correct_answer": "resources",
-          "explanation": "Maven places non-Java assets (config files, templates, images) in `src/main/resources` so they are copied onto the classpath during packaging.",
-          "hints": [
-            "Look at the `main/` branch of the Maven directory tree diagram.",
-            "It is the plural English noun for assets like config files, templates, or images."
           ]
         }
       ]

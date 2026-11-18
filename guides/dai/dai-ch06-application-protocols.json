@@ -197,12 +197,12 @@
           "filename": "sms-protocol-spec.md",
           "title": "SMS Protocol Specification (Condensed Model)",
           "code": "## 1. Overview\nSimple Messaging Service (SMS) lets users with unique usernames\nsend short text messages (max 100 characters) via a central server.\n\n## 2. Transport\n- Protocol: TCP, Port: 6435, Encoding: UTF-8\n- Framing: One message per line, terminated by '\\n' (no '\\n' in payloads)\n- Turn-taking: Client connects and speaks first (JOIN).\n- Closing: Client closes TCP connection to leave (no QUIT command).\n- Unknown command: Server replies 'ERROR 4 Unknown command' and keeps connection open.\n\n## 3. Messages\n### Join the server\n- Request:  JOIN <username>   (no spaces)\n- Success:  OK\n- Errors:   ERROR 1 Username already taken\n            ERROR 3 Invalid username\n\n### List connected users\n- Request:  LIST\n- Success:  USERS <u1> <u2> ...\n- Errors:   ERROR 2 Must JOIN first\n\n### Send a message\n- Request:  SEND <recipient> <message>  (message <= 100 chars)\n- Success:  OK  (and server pushes 'RECEIVE <sender> <message>' to recipient)\n- Errors:   ERROR 2 Must JOIN first | ERROR 3 Recipient offline or msg too long",
-          "highlight_lines": [5, 6, 8, 12, 26],
+          "highlight_lines": [6, 7, 9, 13, 26],
           "annotations": [
-            { "line": 5, "note": "Explicitly settles Transport (TCP), Port (6435 in 1024–32767), and Encoding (UTF-8)." },
-            { "line": 6, "note": "Delimiter framing ('\\n') requires forbidding '\\n' inside message bodies." },
-            { "line": 8, "note": "A crashed client looks identical to a normal disconnect—no QUIT needed." },
-            { "line": 12, "note": "Action-grouped format: JOIN request and its OK/ERROR responses appear together." },
+            { "line": 6, "note": "Explicitly settles Transport (TCP), Port (6435 in 1024–32767), and Encoding (UTF-8)." },
+            { "line": 7, "note": "Delimiter framing ('\\n') requires forbidding '\\n' inside message bodies." },
+            { "line": 9, "note": "A crashed client looks identical to a normal disconnect—no QUIT needed." },
+            { "line": 13, "note": "Action-grouped format: JOIN request and its OK/ERROR responses appear together." },
             { "line": 26, "note": "Server-initiated push: RECEIVE can arrive asynchronously at any time!" }
           ]
         },
@@ -234,7 +234,7 @@
           "runtime": "java",
           "title": "Java Lab: Reconstructing '\\n'-Delimited Messages from Arbitrary TCP Chunks",
           "instructions": "Simulate a TCP stream where chunks arrive split mid-message or coalesced together. Complete the `feedChunk` method so it appends each chunk to `buffer`, extracts every complete `'\\n'`-terminated message, and prints each extracted message on its own line.",
-          "starter_code": "public class Main {\n    private StringBuilder buffer = new StringBuilder();\n\n    public void feedChunk(String chunk) {\n        buffer.append(chunk);\n        // TODO: While buffer contains '\\n', extract substring before '\\n',\n        // print \"MSG: \" + msg, and delete up to and including '\\n'.\n        int newlineIdx;\n        while ((newlineIdx = buffer.indexOf(\"\\n\")) != -1) {\n            String msg = buffer.substring(0, newlineIdx);\n            System.out.println(\"MSG: \" + msg);\n            buffer.delete(0, newlineIdx + 1);\n        }\n    }\n\n    public static void main(String[] args) {\n        Main framer = new Main();\n        String[] tcpChunks = {\n            \"JOIN ali\",\n            \"ce\\nSEND b\",\n            \"ob Hello!\\nLIST\\n\"\n        };\n        for (String chunk : tcpChunks) {\n            framer.feedChunk(chunk);\n        }\n        System.out.println(\"REMAINING: \" + framer.buffer.length());\n    }\n}",
+          "starter_code": "public class Main {\n    private StringBuilder buffer = new StringBuilder();\n\n    public void feedChunk(String chunk) {\n        buffer.append(chunk);\n        // TODO: While buffer contains '\\n', extract substring before '\\n',\n        // print \"MSG: \" + msg, and delete up to and including '\\n'.\n    }\n\n    public static void main(String[] args) {\n        Main framer = new Main();\n        String[] tcpChunks = {\n            \"JOIN ali\",\n            \"ce\\nSEND b\",\n            \"ob Hello!\\nLIST\\n\"\n        };\n        for (String chunk : tcpChunks) {\n            framer.feedChunk(chunk);\n        }\n        System.out.println(\"REMAINING: \" + framer.buffer.length());\n    }\n}",
           "expected_output": "MSG: JOIN alice\nMSG: SEND bob Hello!\nMSG: LIST\nREMAINING: 0",
           "solution": "public class Main {\n    private StringBuilder buffer = new StringBuilder();\n\n    public void feedChunk(String chunk) {\n        buffer.append(chunk);\n        int newlineIdx;\n        while ((newlineIdx = buffer.indexOf(\"\\n\")) != -1) {\n            String msg = buffer.substring(0, newlineIdx);\n            System.out.println(\"MSG: \" + msg);\n            buffer.delete(0, newlineIdx + 1);\n        }\n    }\n\n    public static void main(String[] args) {\n        Main framer = new Main();\n        String[] tcpChunks = {\n            \"JOIN ali\",\n            \"ce\\nSEND b\",\n            \"ob Hello!\\nLIST\\n\"\n        };\n        for (String chunk : tcpChunks) {\n            framer.feedChunk(chunk);\n        }\n        System.out.println(\"REMAINING: \" + framer.buffer.length());\n    }\n}",
           "hints": [
@@ -406,7 +406,7 @@
           "difficulty": 3,
           "related_block_id": "th-decisions-transport-port-turn",
           "title": "Choosing a Safe Custom Protocol Port",
-          "question": "You are designing a custom TCP protocol for a course project that will run on Linux without root privileges. Which port should you choose?",
+          "question": "You are designing a custom TCP protocol that will run on Linux without root privileges. Which port should you choose?",
           "options": [
             "Port 80 (System port)",
             "Port 40000 (Inside Linux's ephemeral range)",
@@ -505,18 +505,24 @@
           ]
         },
         {
-          "id": "qz-fill-framing-types",
+          "id": "qz-tcp-vs-udp-choice",
           "block_type": "quiz_question",
-          "question_type": "fill_in_the_blank",
-          "difficulty": 1,
-          "related_block_id": "th-decisions-encoding-framing",
-          "title": "HTTP/1.1 Body Framing",
-          "question": "While HTTP/1.1 headers use `\\r\\n` delimiters, the message body of an HTTP/1.1 request or response typically uses the `Content-Length` header, which is an example of ___ framing.",
-          "correct_answer": "length prefix",
-          "explanation": "`Content-Length` declares the exact number of bytes in the body before the body is transmitted, which is **length prefix** (or length-prefixed) framing. This allows HTTP bodies to contain arbitrary binary data (like images or `\\r\\n` sequences) without escaping.",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "th-decisions-transport-port-turn",
+          "title": "Choosing TCP vs. UDP & Specifying UDP Rules",
+          "question": "You are designing a protocol for IoT temperature sensors that broadcast a reading every 5 seconds on a LAN, where a lost reading is simply superseded by the next one. Which transport choice and specification requirement are most appropriate?",
+          "options": [
+            "UDP, and the spec must define a maximum datagram size (plus timeout/retry rules if any command requires confirmation) without needing stream delimiters.",
+            "UDP, and the spec must add `\\n` delimiter framing to split each datagram out of the byte stream.",
+            "TCP, because UDP cannot carry UTF-8 text.",
+            "TCP, because UDP delivers half-datagrams across multiple `read()` calls."
+          ],
+          "correct_answer": "UDP, and the spec must define a maximum datagram size (plus timeout/retry rules if any command requires confirmation) without needing stream delimiters.",
+          "explanation": "UDP suits periodic sensor updates where occasional loss is acceptable. Because UDP preserves datagram boundaries (one message arrives whole or not at all), it does not need stream delimiters—but the spec must define a maximum datagram size so receivers allocate sufficient buffers, plus timeout/retry rules if reliability is needed for specific commands.",
           "hints": [
-            "Recall the three TCP framing strategies: delimiter, connection close, and ___.",
-            "You announce how many bytes follow before sending the payload."
+            "Does UDP merge or split messages across `receive()` calls like TCP does?",
+            "What two extra things must a UDP protocol specify that TCP handles or doesn't?"
           ]
         },
         {
@@ -563,15 +569,6 @@
           "back": "TCP is an unframed **stream of bytes** (writes can merge or split). Three strategies:\n1. **Delimiter** (e.g., `\\n`, `\\r\\n` — requires forbidding or escaping delimiter in payload).\n2. **Length prefix** (e.g., `Content-Length` or 4-byte uint32).\n3. **Connection close** (EOF ends the single message, e.g., Daytime).",
           "hint": "Sentinel character, upfront byte count, or EOF.",
           "tags": ["tcp", "framing"]
-        },
-        {
-          "id": "fc-utf8-length-trap",
-          "block_type": "flashcard",
-          "title": "UTF-8 Characters vs. Bytes",
-          "front": "If a protocol specifies UTF-8 encoding and a max message length of **100 characters**, how many **bytes** can that message take?",
-          "back": "Up to **400 bytes** (because a single UTF-8 Unicode character can take 1 to 4 bytes). Specifications should always state whether limits count characters or bytes.",
-          "hint": "Max bytes per UTF-8 code point is 4.",
-          "tags": ["encoding", "utf-8"]
         },
         {
           "id": "fc-smtp-multiline",

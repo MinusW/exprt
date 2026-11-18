@@ -38,7 +38,7 @@
           "block_type": "markdown",
           "title": "The Problem Containers Solve",
           "bookmarkable": true,
-          "content": "Your CLI from Practical Work 1 runs on your laptop because you installed **Java 25** and **Maven** in the exact versions it expects. Now imagine deploying three applications on the same server:\n\n* App A requires **Java 25**.\n* App B requires **Java 17**.\n* App C requires **PostgreSQL 14**, while App D requires **PostgreSQL 16**.\n\nInstalling everything directly on one machine causes **version collisions**. Worse, every project has its own ritual to build and launch (`./mvnw package && java -jar app.jar`, `pip install && python app.py`, or a custom shell script). **\"It works on my machine\" is not a deployment plan.**\n\nContainers solve this by packaging an application together with its exact runtime, libraries, and startup command, giving you three guarantees:\n\n| Guarantee | What It Means in Practice |\n| :--- | :--- |\n| **One recipe** | A single `Dockerfile` describes how to build the environment and what the container runs by default. |\n| **One artefact** | Each version of your app becomes one immutable **image**, built once and identical on every machine. |\n| **One interface** | The same `docker build`, `docker run`, `docker stop`, and `docker logs` commands work for Java, Python, Go, or Nginx. |"
+          "content": "Suppose a Java CLI runs on your laptop because you installed **Java 25** and **Maven** in the exact versions it expects. Now imagine deploying three applications on the same server:\n\n* App A requires **Java 25**.\n* App B requires **Java 17**.\n* App C requires **PostgreSQL 14**, while App D requires **PostgreSQL 16**.\n\nInstalling everything directly on one machine causes **version collisions**. Worse, every project has its own ritual to build and launch (`./mvnw package && java -jar app.jar`, `pip install && python app.py`, or a custom shell script). **\"It works on my machine\" is not a deployment plan.**\n\nContainers solve this by packaging an application together with its exact runtime, libraries, and startup command, giving you three guarantees:\n\n| Guarantee | What It Means in Practice |\n| :--- | :--- |\n| **One recipe** | A single `Dockerfile` describes how to build the environment and what the container runs by default. |\n| **One artefact** | Each version of your app becomes one immutable **image**, built once and identical on every machine. |\n| **One interface** | The same `docker build`, `docker run`, `docker stop`, and `docker logs` commands work for Java, Python, Go, or Nginx. |"
         },
         {
           "id": "th-three-ways-to-run",
@@ -116,7 +116,7 @@
           "block_type": "markdown",
           "title": "Images vs Containers vs Registries (The OOP Analogy)",
           "bookmarkable": true,
-          "content": "The Open Container Initiative (**OCI**) standard defines three core concepts:\n\n* **Image:** A **read-only** package containing an application, its dependencies, and startup metadata. Once built, an image never mutates; rebuilding creates a new image.\n* **Container:** A **runtime instance** of an image (running or stopped), isolated from the host and other containers.\n* **Registry:** A server that stores and distributes images—such as **Docker Hub** (default) or **GitHub Container Registry (`ghcr.io`)** used in DAI.\n\nIf you know object-oriented programming, the relationship is exact:\n\n$$\\text{Image} \\iff \\text{Class} \\qquad\\qquad \\text{Container} \\iff \\text{Object} \\qquad\\qquad \\texttt{docker run} \\iff \\texttt{new}$$\n\nYou can instantiate ten independent containers from one image, and deleting a container leaves the image untouched."
+          "content": "The Open Container Initiative (**OCI**) standard defines three core concepts:\n\n* **Image:** A **read-only** package containing an application, its dependencies, and startup metadata. Once built, an image never mutates; rebuilding creates a new image.\n* **Container:** A **runtime instance** of an image (running or stopped), isolated from the host and other containers.\n* **Registry:** A server that stores and distributes images—such as **Docker Hub** (default) or **GitHub Container Registry (`ghcr.io`)**.\n\nIf you know object-oriented programming, the relationship is exact:\n\n$$\\text{Image} \\iff \\text{Class} \\qquad\\qquad \\text{Container} \\iff \\text{Object} \\qquad\\qquad \\texttt{docker run} \\iff \\texttt{new}$$\n\nYou can instantiate ten independent containers from one image, and deleting a container leaves the image untouched."
         },
         {
           "id": "th-daemon-tags-arch",
@@ -226,7 +226,7 @@
         {
           "id": "th-entrypoint-vs-cmd",
           "block_type": "markdown",
-          "title": "`ENTRYPOINT` vs `CMD` (Classic Exam Question)",
+          "title": "`ENTRYPOINT` vs `CMD`: Fixed Executable vs Default Arguments",
           "bookmarkable": true,
           "content": "Confusing `ENTRYPOINT` and `CMD` is one of the most common Docker mistakes:\n\n* **`ENTRYPOINT`** defines the **fixed program** the container runs.\n* **`CMD`** supplies **default arguments** to `ENTRYPOINT` (or the whole default command if `ENTRYPOINT` is absent).\n* Arguments passed after `docker run <image>` **replace `CMD`**, **not `ENTRYPOINT`**.\n\n```dockerfile\nENTRYPOINT [\"java\", \"-jar\", \"/app/app.jar\"]\nCMD [\"--help\"]\n```\n\n* `docker run my-image` $\\rightarrow$ executes `java -jar /app/app.jar --help`\n* `docker run my-image --loop` $\\rightarrow$ executes `java -jar /app/app.jar --loop`\n* Need a shell inside an `ENTRYPOINT` image? Override it explicitly: `docker run --rm -it --entrypoint sh my-image`.\n\n**Rule of thumb:** Use `ENTRYPOINT` + `CMD` when packaging a single application; use `CMD` alone for a utility/tool box image (like `alpine`) so users can easily run `docker run --rm my-box echo hello`."
         },
@@ -648,18 +648,24 @@
           "bookmarkable": true
         },
         {
-          "id": "qz-ephemeral-writable",
+          "id": "qz-volume-vs-bind-mount",
           "block_type": "quiz_question",
-          "question_type": "fill_in_the_blank",
-          "difficulty": 2,
+          "question_type": "multiple_choice",
+          "difficulty": 3,
           "related_block_id": "th-volumes-vs-bind-mounts",
-          "title": "Persisting Database Data",
-          "question": "To ensure PostgreSQL data survives `docker rm` or `docker compose down`, you should mount a Docker-managed named ___ to `/var/lib/postgresql/data`.",
-          "correct_answer": "volume",
-          "explanation": "Writes inside a container without a mount go to its ephemeral writable layer and are lost when the container is removed. A Docker-managed named `volume` persists independently of the container lifecycle and is the recommended choice for database storage.",
+          "title": "Named Volume vs Bind Mount",
+          "question": "In a `compose.yaml` file, you want to (1) persist PostgreSQL's internal `/var/lib/postgresql/data` directory across container recreations and (2) inject a local `./init.sql` file from your project folder. Which mount configuration is most appropriate?",
+          "options": [
+            "A Docker-managed named volume (`db-data:/var/lib/postgresql/data`) for the database state, and a bind mount (`./init.sql:/docker-entrypoint-initdb.d/init.sql`) for the local SQL file.",
+            "A bind mount for both, because named volumes cannot survive `docker rm`.",
+            "No mount for the database state, because the container's writable layer persists after `docker compose down`.",
+            "A named volume for `./init.sql` so Docker automatically copies it from your host's current working directory without a path."
+          ],
+          "correct_answer": "A Docker-managed named volume (`db-data:/var/lib/postgresql/data`) for the database state, and a bind mount (`./init.sql:/docker-entrypoint-initdb.d/init.sql`) for the local SQL file.",
+          "explanation": "Named volumes are managed by Docker and are ideal for database state that must persist cleanly across platforms and `docker rm`. Bind mounts map an explicit host path (`./init.sql`) into the container, making them ideal for sharing source code or local config/seed files.",
           "hints": [
-            "What top-level section in `compose.yaml` declares `db-data:`?",
-            "Singular noun: `docker ____ create my-data`."
+            "Which mount type uses a host filesystem path like `./init.sql`, and which is managed by Docker?",
+            "What happens to data in a container's writable layer when the container is removed?"
           ],
           "bookmarkable": true
         },

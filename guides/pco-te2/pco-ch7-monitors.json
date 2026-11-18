@@ -1,0 +1,345 @@
+{
+  "id": "pco-ch7-monitors",
+  "title": "Chapter 7: Monitors (Hoare, Mesa, PcoConditionVariable & Java)",
+  "description": "High-level synchronization with monitors: Hoare vs. Mesa semantics, why Mesa requires a while() loop, PcoConditionVariable API, building a Hoare monitor from semaphores (PcoHoareMonitor) with 3-step optimizations, and Java synchronized monitors.",
+  "estimated_minutes": 60,
+  "category": "Concurrent Programming",
+  "track": "PCO - Programmation Concurrente (TE2)",
+  "track_order": 1,
+  "difficulty_level": "intermediate",
+  "tags": [
+    "pco",
+    "te2",
+    "monitors",
+    "hoare",
+    "mesa",
+    "condition-variable",
+    "pcoconditionvariable",
+    "pcohoaremonitor",
+    "java-synchronized"
+  ],
+  "prerequisites": [
+    "pco-ch5-locks-and-semaphores",
+    "pco-ch6-producer-consumer"
+  ],
+  "layout_mode": "single-page",
+  "sources": [
+    {
+      "title": "PCO Chapter 7: Moniteurs",
+      "url_or_path": "sources/PCO-TE2/PCO_7_moniteurs.pdf",
+      "notes": "Slides 1-65: Hoare vs Mesa monitors, PcoConditionVariable, 5-step semaphore implementation & optimizations, PcoHoareMonitor, Java monitors."
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-monitor-foundations",
+      "title": "1. Monitor Foundations & Hoare's Original Model",
+      "description": "Why monitors were invented (Brinch Hansen 1973, Hoare 1974), how condition variables differ from semaphores, and Hoare-style examples.",
+      "blocks": [
+        {
+          "id": "th-monitor-intro",
+          "block_type": "markdown",
+          "title": "What Is a Monitor?",
+          "bookmarkable": true,
+          "content": "Introduced by **Per Brinch Hansen (1973)** and **C.A.R. Hoare (1974)**, a **monitor** (*moniteur*) is a higher-level synchronization abstraction than semaphores. It bundles:\n\n1. **Shared state variables** (protected inside the monitor).\n2. **Automatic mutual exclusion** across its entry procedures (*procédures d'entrée*)—at most **one thread at a time** may execute inside the monitor.\n3. **Condition variables (*variables de condition*)** to wait for and signal state changes.\n\n### Condition Variables vs. Semaphores (Crucial Difference!)\n| Operation | Semaphore (`P` / `V`) | Condition Variable (`wait` / `signal`) |\n| :--- | :--- | :--- |\n| **Wait (`acquire` / `wait`)** | Blocks **only if** counter is `0`; otherwise decrements and continues. | **Always blocks unconditionally** and releases the monitor's mutual exclusion! |\n| **Signal (`release` / `signal`)** | **Has memory:** increments counter even if no thread is waiting. | **No memory:** wakes one waiting thread if any; **no-op if nobody is waiting!** |"
+        },
+        {
+          "id": "code-hoare-formal-and-examples",
+          "block_type": "code",
+          "language": "pascal",
+          "title": "Hoare Monitor Examples: MutexMonitor & Bounded Buffer (Slides 12–13)",
+          "filename": "hoare_monitors.mon",
+          "code": "monitor MutexMonitor\n    var locked: boolean;\n    var access: condition;\n\n    entry procedure Lock\n    begin\n        if locked then access.wait;\n        locked := true;\n    end Lock;\n\n    entry procedure Unlock\n    begin\n        locked := false;\n        access.signal;\n    end Unlock;\nbegin\n    locked := false;\nend MutexMonitor;\n\n// --- Producer-Consumer in Hoare Monitor ---\nmonitor Buffer\n    var place: array [0..N-1] of ARTICLE;\n    var head, tail, nbElements: integer;\n    var notFull, notEmpty: condition;\n\n    entry procedure put(a: ARTICLE)\n    begin\n        if nbElements = N then notFull.wait;\n        nbElements := nbElements + 1;\n        place[head] := a;\n        head := (head + 1) mod N;\n        notEmpty.signal;\n    end put;\n\n    entry procedure get(var a: ARTICLE)\n    begin\n        if nbElements = 0 then notEmpty.wait;\n        a := place[tail];\n        nbElements := nbElements - 1;\n        tail := (tail + 1) mod N;\n        notFull.signal;\n    end get;\nbegin\n    nbElements := 0; tail := 0; head := 0;\nend Buffer;",
+          "highlight_lines": [7, 28, 37],
+          "annotations": [
+            {
+              "line": 7,
+              "note": "In a Hoare monitor, `if` suffices because the woken thread immediately receives the monitor lock upon `signal`."
+            },
+            {
+              "line": 28,
+              "note": "Only 1 thread is inside the monitor at a time; `notFull.wait` suspends the producer and releases the monitor."
+            }
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-hoare-vs-mesa",
+      "title": "2. Hoare vs. Mesa Semantics & `PcoConditionVariable`",
+      "description": "The critical scheduling difference between Hoare and Mesa monitors, why Mesa demands a `while` loop, and the C++ PCO API.",
+      "blocks": [
+        {
+          "id": "th-hoare-vs-mesa",
+          "block_type": "markdown",
+          "title": "Hoare Monitors vs. Mesa Monitors (Slides 14–15, 28–31)",
+          "bookmarkable": true,
+          "content": "When Thread A calls `cond.signal()` while Thread B is waiting on `cond`, **who gets the monitor's mutex next?**\n\n* **Hoare Monitor (Signal-and-Urgent-Wait):**\n  * Thread A **immediately yields** the mutex to the woken Thread B (and A waits in an urgent/signaled queue until B leaves or waits).\n  * **Consequence:** No other thread can sneak in before B runs! Therefore, the condition is guaranteed to still hold when B resumes → **`if (!condition) cond.wait();` is safe.**\n  * *(Not native in C++11/Java/pthreads—implemented in C++ via semaphores.)*\n\n* **Mesa Monitor (Signal-and-Continue):**\n  * Thread A **keeps** the mutex until it unlocks/exits; Thread B is moved from the condition queue to the mutex's ready/entry queue and **must re-compete** for the mutex with any other arriving threads!\n  * Used by: **C++11 (`std::condition_variable`)**, **Java (`synchronized`/`wait`/`notify`)**, **POSIX (`pthread_cond_t`)**, **Qt (`QWaitCondition`)**, and **`PcoConditionVariable`**.\n\n> [!CAUTION]\n> **Why `while (!theCondition)` Is MANDATORY in Mesa Monitors (Slides 28 & 65):**\n> Because Thread B must re-compete for the mutex after `notifyOne()`/`notifyAll()`, a Thread C could enter the monitor first, consume the item (making `theCondition` false again!), and unlock before Thread B gets the mutex. (Plus OS spurious wakeups!) Using `if` instead of `while` causes **silent state corruption**."
+        },
+        {
+          "id": "diag-mesa-vs-hoare",
+          "block_type": "kroki",
+          "diagram_type": "mermaid",
+          "title": "Mesa vs. Hoare Execution Flow (Slides 30–31)",
+          "caption": "In Mesa (top), the notified thread re-enters the entry competition for the mutex. In Hoare (bottom), the signaled thread takes over the monitor immediately while the signaler waits in the signaled queue.",
+          "source": "graph LR\n  subgraph Mesa[\"Mesa Monitor (PcoConditionVariable / C++11 / Java)\"]\n    ME[\"enter -> mutex.lock()\"] --> MW[\"c.wait(&mutex)\"]\n    MW --> MQ[\"c.queue (waiting)\"]\n    MQ -->|\"c.notifyOne()\"| MN[\"notified (re-competes for mutex!)\"]\n    MN --> ME\n  end\n  subgraph Hoare[\"Hoare Monitor (PcoHoareMonitor)\"]\n    HE[\"enter -> monitorIn()\"] --> HW[\"c.wait()\"]\n    HW --> HQ[\"c.queue (waiting)\"]\n    HQ -->|\"c.signal()\"| HS[\"triggered (runs IMMEDIATELY!)\"]\n    HE -->|\"calls c.signal()\"| HT[\"signaler waits in signaled queue\"]\n  end\n  classDef mesa fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px;\n  classDef hoare fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;\n  class ME,MW,MQ,MN mesa;\n  class HE,HW,HQ,HS,HT hoare;",
+          "bookmarkable": true
+        },
+        {
+          "id": "th-pcocondvar-api",
+          "block_type": "markdown",
+          "title": "`PcoConditionVariable` API (Slides 20–25)",
+          "bookmarkable": true,
+          "content": "* `void PcoConditionVariable::wait(PcoMutex * lockedMutex)`\n  * Prerequisite: `lockedMutex` **must** already be locked by the calling thread.\n  * **Atomically** unlocks `lockedMutex` and suspends the thread (passive wait) until signaled.\n  * Upon wakeup, **automatically re-locks** `lockedMutex` (competing with all other threads requesting the lock!).\n* `void PcoConditionVariable::notifyOne()`\n  * Wakes **one** thread waiting on the condition variable (no-op if none waiting).\n  * **No FIFO guarantee:** The OS scheduler chooses which waiting thread wakes.\n* `void PcoConditionVariable::notifyAll()`\n  * Wakes **all** waiting threads (no-op if none waiting). They continue **one at a time** as each re-acquires `mutex` in an unpredictable scheduler order."
+        },
+        {
+          "id": "code-mesa-prodcons",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "Mesa Monitor in PCO: Producer-Consumer `Buffer` (Slide 29)",
+          "filename": "mesa_buffer.cpp",
+          "code": "class Buffer {\nprivate:\n    PcoMutex mutex;\n    PcoConditionVariable isFree, isFull;\n    std::string buffer;\n    bool bufferFull;\n\npublic:\n    Buffer() : bufferFull(false) {}\n\n    void put(std::string msg) {\n        mutex.lock();\n        while (bufferFull)\n            isFree.wait(&mutex);\n        buffer = msg;\n        bufferFull = true;\n        isFull.notifyOne();\n        mutex.unlock();\n    }\n\n    std::string get() {\n        std::string result;\n        mutex.lock();\n        while (!bufferFull)\n            isFull.wait(&mutex);\n        result = buffer;\n        bufferFull = false;\n        mutex.unlock();\n        isFree.notifyOne();\n        return result;\n    }\n};",
+          "highlight_lines": [13, 17, 24, 29],
+          "annotations": [
+            {
+              "line": 13,
+              "note": "Always `while`, never `if`, in a Mesa monitor!"
+            },
+            {
+              "line": 17,
+              "note": "Signaling before or after `mutex.unlock()` is valid in Mesa; signaling after `unlock()` (as in `get()`) can avoid waking a thread only to have it immediately block on `mutex`."
+            }
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-hoare-from-semaphores",
+      "title": "3. Implementing a Hoare Monitor with Semaphores (`PcoHoareMonitor`)",
+      "description": "The 5-step mechanical translation from Hoare monitors to semaphores, the 3 optimizations, and the C++ `PcoHoareMonitor` base class.",
+      "blocks": [
+        {
+          "id": "th-hoare-5steps",
+          "block_type": "markdown",
+          "title": "The 5-Step Translation & 3 Optimizations (Slides 33–46)",
+          "bookmarkable": true,
+          "content": "If a platform only provides semaphores, you can build a **true Hoare monitor** using 5 mechanical rules:\n\n1. **Monitor struct (`T_Moniteur`):** `mutex(1)` (entry lock), `signaled(0)` (queue for threads that just called `signal()` and yielded priority), `nbSignaled = 0`.\n2. **Entry/Exit wrapper (`monitorIn` / `monitorOut`):** Acquire `mon.mutex` on entry; on exit, if `mon.nbSignaled > 0` release `mon.signaled` (priority to waiting signalers!), else release `mon.mutex`.\n3. **Condition struct (`T_Condition`):** `waitingSem(0)` + `nbWaiting = 0`.\n4. **`cond.wait`:** Increment `cond.nbWaiting`; release `mon.signaled` if `mon.nbSignaled > 0` else release `mon.mutex`; then `cond.waitingSem.acquire()`; then decrement `cond.nbWaiting`.\n5. **`cond.signal`:** Only if `cond.nbWaiting > 0`: increment `mon.nbSignaled`, call `cond.waitingSem.release()`, block on `mon.signaled.acquire()` (yielding priority to the woken thread!), and decrement `mon.nbSignaled`.\n\n### The 3-Step Optimization (Slides 42–46)\nWhen `cond.signal()` is the **last** operation before leaving the monitor:\n1. **Opt 1 (Slides 42–44):** Combine `signal()` + `monitorOut()`—instead of waiting on `mon.signaled` only to immediately exit, transfer the baton directly (`if (cond.nbWaiting > 0) cond.waitingSem.release(); else if (mon.nbSignaled > 0) mon.signaled.release(); else mon.mutex.release();`).\n2. **Opt 2 (Slide 45):** Since no procedure ever blocks on `mon.signaled` anymore, remove `else if (mon.nbSignaled > 0) mon.signaled.release();` at the end of `put()`/`get()` (leaving just `else mon.mutex.release();`).\n3. **Opt 3 (Slide 46):** Remove `if (mon.nbSignaled > 0) mon.signaled.release();` inside `wait()` as well—`mon.signaled` and `mon.nbSignaled` vanish completely, leaving **exact passing-the-baton (`BufferN`)** from Chapter 6!\n\n*(Note: `PcoHoareMonitor` below keeps `monitorSignaled` because it is a general-purpose base class where `signal()` is not guaranteed to be the final statement before `monitorOut()`.)*"
+        },
+        {
+          "id": "code-pcohoaremonitor",
+          "block_type": "code",
+          "language": "cpp",
+          "title": "`PcoHoareMonitor` Base Class & `ProdConsoHoare` Usage (Slides 48–50)",
+          "filename": "pco_hoare_monitor.cpp",
+          "code": "class PcoHoareMonitor {\nprotected:\n    class Condition {\n        friend PcoHoareMonitor;\n    public:\n        Condition() : waitingSem(0), nbWaiting(0) {}\n    private:\n        PcoSemaphore waitingSem;\n        int nbWaiting;\n    };\n\n    PcoHoareMonitor() : monitorMutex(1), monitorSignaled(0), monitorNbSignaled(0) {}\n    void monitorIn()  { monitorMutex.acquire(); }\n    void monitorOut() {\n        if (monitorNbSignaled > 0) monitorSignaled.release();\n        else monitorMutex.release();\n    }\n    void wait(Condition &cond) {\n        cond.nbWaiting += 1;\n        if (monitorNbSignaled > 0) monitorSignaled.release();\n        else monitorMutex.release();\n        cond.waitingSem.acquire();\n        cond.nbWaiting -= 1;\n    }\n    void signal(Condition &cond) {\n        if (cond.nbWaiting > 0) {\n            monitorNbSignaled += 1;\n            cond.waitingSem.release();\n            monitorSignaled.acquire();\n            monitorNbSignaled -= 1;\n        }\n    }\nprivate:\n    PcoSemaphore monitorMutex, monitorSignaled;\n    int monitorNbSignaled;\n};\n\n// Usage (note: Hoare semantics allow `if`!):\nclass ProdConsoHoare : public PcoHoareMonitor {\n    ITEM items[N];\n    int head = 0, tail = 0, nbElements = 0;\n    Condition notFull, notEmpty;\npublic:\n    void put(ITEM item) {\n        monitorIn();\n        if (nbElements == N) wait(notFull);\n        nbElements += 1;\n        items[head] = item;\n        head = (head + 1) % N;\n        signal(notEmpty);\n        monitorOut();\n    }\n    void get(ITEM *item) {\n        monitorIn();\n        if (nbElements == 0) wait(notEmpty);\n        *item = items[tail];\n        nbElements -= 1;\n        tail = (tail + 1) % N;\n        signal(notFull);\n        monitorOut();\n    }\n};",
+          "highlight_lines": [25, 29, 46, 55],
+          "annotations": [
+            {
+              "line": 25,
+              "note": "If nobody is waiting (`cond.nbWaiting == 0`), `signal()` is a no-op."
+            },
+            {
+              "line": 29,
+              "note": "Signaler suspends on `monitorSignaled` so the woken thread runs immediately inside the monitor."
+            },
+            {
+              "line": 46,
+              "note": "Hoare semantics: `if` is safe because `put` wakes `get` (or vice versa) with direct baton transfer."
+            }
+          ],
+          "bookmarkable": true
+        }
+      ]
+    },
+    {
+      "id": "sec-java-and-final-remarks",
+      "title": "4. Monitors in Java & Final Remarks",
+      "description": "Java's built-in `synchronized`/`wait`/`notify`/`notifyAll`, weak semaphore example, and practical trade-offs.",
+      "blocks": [
+        {
+          "id": "code-java-monitors",
+          "block_type": "code",
+          "language": "java",
+          "title": "Java Monitors: `synchronized` & Weak Semaphore Implementation (Slides 54, 61)",
+          "filename": "JavaMonitorExamples.java",
+          "code": "// 1. Mutual exclusion with `synchronized` methods\nclass UniqueID {\n    private int id;\n    public synchronized int getNewID() { return id++; }\n    public synchronized void decrID()  { id--; }\n}\n\n// 2. Weak Semaphore implemented with Java's Mesa monitor\npublic class Semaphore {\n    private int value;\n    public Semaphore(int initVal) { value = initVal; }\n\n    public synchronized void semWait() throws InterruptedException {\n        while (value <= 0) { // MUST be `while` (Mesa semantics!)\n            wait();          // Suspends caller & releases object monitor lock\n        }\n        value--;\n    }\n\n    public synchronized void semPost() {\n        value++;\n        notify();            // Wakes one arbitrary thread (not FIFO!)\n    }\n}",
+          "highlight_lines": [14, 15, 22],
+          "annotations": [
+            {
+              "line": 14,
+              "note": "Java uses Mesa semantics: woken threads must re-acquire the monitor lock and re-check `value <= 0`."
+            },
+            {
+              "line": 22,
+              "note": "Why is this semaphore 'weak'? Neither `wait()`/`notify()` nor monitor re-entry guarantees FIFO ordering!"
+            }
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "th-monitor-tradeoffs",
+          "block_type": "markdown",
+          "title": "Final Remarks: Pros, Cons & Java `Lock`/`Condition` (Slides 62–65)",
+          "bookmarkable": true,
+          "content": "* **Java Extras (`wait` / `notify` / `notifyAll`):** Every Java object has **one** implicit monitor lock and **one** implicit condition queue (`wait()`, `notify()` to wake one thread, `notifyAll()` to wake all waiting threads—all without FIFO guarantee). You can synchronize just a block (`synchronized(obj) { ... }`), and `java.util.concurrent.locks` provides `Lock` + `Condition` when you need **multiple** condition queues (like `PcoConditionVariable`), though **FIFO** still requires explicit queue management.\n* **Advantages of Monitors:** Mutual exclusion is tied to the monitor, cleaner and less code than raw semaphores, and widely supported.\n* **Limitations:** Still relatively low-level; semantic differences across languages (Hoare vs. Mesa); in C++11/pthreads/`PcoConditionVariable`, the compiler does **not** prevent threads from accessing shared variables outside the monitor's entry methods; and Mesa semantics make `while` loops mandatory."
+        }
+      ]
+    },
+    {
+      "id": "sec-ch7-assessment",
+      "title": "5. Active Recall & Diagnostic Assessment",
+      "description": "Flashcards, Feynman synthesis, and diagnostic quiz questions on Hoare vs. Mesa monitors.",
+      "blocks": [
+        {
+          "id": "fc-condvar-vs-sem",
+          "block_type": "flashcard",
+          "title": "Condition Variable vs. Semaphore",
+          "front": "What happens if `cond.signal()` / `notifyOne()` is called when **no** thread is waiting, compared to `sem.release()`?",
+          "back": "`cond.signal()` / `notifyOne()` has **no memory**—it is a no-op if no thread is currently waiting. By contrast, `sem.release()` increments the semaphore's counter, remembering the signal for a future `acquire()`.",
+          "hint": "Think about what happens if the producer signals before the consumer calls wait().",
+          "tags": ["pco", "monitors", "condition-variable"]
+        },
+        {
+          "id": "fc-mesa-while",
+          "block_type": "flashcard",
+          "title": "Why `while` Instead of `if` in Mesa Monitors?",
+          "front": "Why must `PcoConditionVariable::wait(&mutex)` (and C++11/Java `wait()`) always be wrapped in a `while (!cond)` loop instead of `if (!cond)`?",
+          "back": "Under **Mesa semantics**, `notifyOne()`/`notifyAll()` does **not** hand the mutex directly to the woken thread. Another thread can acquire the mutex first and invalidate the condition before the woken thread resumes (plus spurious wakeups).",
+          "hint": "What happens between `notifyOne()` and `wait()` returning with `mutex` re-locked?",
+          "tags": ["pco", "monitors", "mesa"]
+        },
+        {
+          "id": "fc-hoare-vs-mesa",
+          "block_type": "flashcard",
+          "title": "Hoare vs. Mesa Ownership on `signal()`",
+          "front": "In a **Hoare** monitor vs. a **Mesa** monitor, which thread holds the monitor's mutex immediately after `signal()`?",
+          "back": "* **Hoare:** The **woken** thread takes the mutex immediately (the signaler waits in `monitorSignaled`).\n* **Mesa:** The **signaler** keeps the mutex until it unlocks; the woken thread must re-compete for the mutex.",
+          "hint": "Who gets to run inside the monitor right away?",
+          "tags": ["pco", "monitors", "hoare", "mesa"]
+        },
+        {
+          "id": "fc-pcohoare-opt3",
+          "block_type": "flashcard",
+          "title": "Hoare Optimization 3 Result",
+          "front": "When `signal()` is always the last statement before exiting a `PcoHoareMonitor` procedure, what happens to `monitorSignaled` and `monitorNbSignaled` after Optimization 3?",
+          "back": "They disappear completely! Because the signaler never needs to wait and resume inside the monitor, it directly transfers mutex ownership (*passage de témoin*) to the woken thread.",
+          "hint": "If the signaler has nothing left to do after `signal()`, why would it block on `monitorSignaled`?",
+          "tags": ["pco", "monitors", "hoare", "optimization"]
+        },
+        {
+          "id": "ref-ch7-feynman",
+          "block_type": "feynman_prompt",
+          "concept": "Mesa vs. Hoare Monitors & The `while` Loop Requirement",
+          "target_audience": "a teammate who only knows semaphores",
+          "prompt": "Explain why `PcoConditionVariable::wait(&mutex)` must be called inside a `while` loop rather than an `if` statement, whereas `PcoHoareMonitor::wait(cond)` can safely use an `if` statement.",
+          "key_points_to_cover": [
+            "Mesa semantics: signaler keeps mutex, woken thread re-competes",
+            "Intervening thread can steal the resource/invalidate the condition",
+            "Hoare semantics: direct handoff of monitor ownership to woken thread"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "ref-ch7-hoare-trace",
+          "block_type": "reflection_rubric",
+          "title": "Tracing `PcoHoareMonitor` Signaler Priority",
+          "prompt": "In `PcoHoareMonitor`, suppose Thread A is waiting inside `put()` on `notFull`, Thread B calls `get()` and invokes `signal(notFull)`, and Thread C is simultaneously blocked at `monitorIn()`. In what order do A, B, and C execute inside the monitor, and why?",
+          "self_check_criteria": [
+            "Thread B sets `monitorNbSignaled = 1`, calls `notFull.waitingSem.release()`, and blocks on `monitorSignaled.acquire()`.",
+            "Thread A wakes up and runs immediately inside the monitor while Thread C stays blocked on `monitorMutex`.",
+            "When Thread A calls `monitorOut()`, it sees `monitorNbSignaled > 0` and releases `monitorSignaled` (waking Thread B BEFORE Thread C!).",
+            "Thread B finishes `get()` and calls `monitorOut()`, which finally sees `monitorNbSignaled == 0` and releases `monitorMutex` for Thread C."
+          ],
+          "model_answer": "Execution order is **A → B → C**:\n1. B calls `signal(notFull)`, increments `monitorNbSignaled` to 1, wakes A via `notFull.waitingSem.release()`, and blocks on `monitorSignaled.acquire()`.\n2. A runs immediately inside the monitor (C is still blocked on `monitorMutex`).\n3. When A finishes `put()`, `monitorOut()` checks `if (monitorNbSignaled > 0)` and releases `monitorSignaled`—giving priority to B over C!\n4. B resumes, finishes `get()`, and calls `monitorOut()`. Now `monitorNbSignaled == 0`, so B releases `monitorMutex`, allowing C to finally enter.",
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch7-mesa-if-bug",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-hoare-vs-mesa",
+          "question": "In `Buffer::get()` using `PcoConditionVariable` (Mesa monitor), a developer replaces `while (!bufferFull) isFull.wait(&mutex);` with `if (!bufferFull) isFull.wait(&mutex);`. What bug can occur with 1 producer and 2 consumers?",
+          "options": [
+            "Consumer 1 is notified, but Consumer 2 enters `get()` first, consumes the item (`bufferFull = false`), and then Consumer 1 resumes past the `if` and reads an empty/stale buffer.",
+            "The producer deadlocks on `isFull.notifyOne()` because `isFull` is already 1.",
+            "`wait(&mutex)` throws an exception because `mutex` is already locked.",
+            "Nothing—`PcoConditionVariable` automatically re-checks `!bufferFull` before returning from `wait()`."
+          ],
+          "correct_answer": "Consumer 1 is notified, but Consumer 2 enters `get()` first, consumes the item (`bufferFull = false`), and then Consumer 1 resumes past the `if` and reads an empty/stale buffer.",
+          "explanation": "Under Mesa semantics, `notifyOne()` moves Consumer 1 to compete for `mutex`, while the producer keeps `mutex` until `unlock()`. Consumer 2 can acquire `mutex` before Consumer 1, set `bufferFull = false`, and leave. With `if`, Consumer 1 does not re-check `!bufferFull` and reads invalid data.",
+          "hints": [
+            "Who gets `mutex` immediately after `notifyOne()` in a Mesa monitor?",
+            "Can another consumer enter `get()` between `isFull.notifyOne()` and Consumer 1 re-acquiring `mutex`?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch7-condvar-no-memory",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 1,
+          "related_block_id": "th-monitor-intro",
+          "question": "Thread A calls `cond.notifyOne()` BEFORE Thread B calls `cond.wait(&mutex)`. Assuming no other `notifyOne()` is ever called, what happens when Thread B calls `cond.wait(&mutex)`?",
+          "options": [
+            "Thread B blocks indefinitely because condition variables have no memory of past signals.",
+            "Thread B returns immediately because `notifyOne()` incremented the condition variable's counter to 1.",
+            "Thread B deadlocks `mutex` without releasing it.",
+            "Thread B wakes Thread A."
+          ],
+          "correct_answer": "Thread B blocks indefinitely because condition variables have no memory of past signals.",
+          "explanation": "Unlike semaphores, condition variables do not store a counter. A `signal()`/`notifyOne()` with no waiting threads is a no-op. That is why monitors always pair condition variables with a shared state variable (e.g., `bool bufferFull`) checked before calling `wait()`.",
+          "hints": [
+            "Compare `cond.notifyOne()` with `sem.release()` when nobody is waiting.",
+            "Does a condition variable have an integer counter like a semaphore?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch7-wait-atomicity",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 2,
+          "related_block_id": "th-pcocondvar-api",
+          "question": "What does `PcoConditionVariable::wait(&mutex)` do atomically when called?",
+          "options": [
+            "Unlocks `mutex` and suspends the calling thread on the condition variable until signaled, then re-locks `mutex` before returning.",
+            "Locks `mutex` and suspends all other threads in the monitor.",
+            "Suspends the calling thread while keeping `mutex` locked so no other thread can modify the condition.",
+            "Decrements `mutex` and returns immediately if `mutex` is locked."
+          ],
+          "correct_answer": "Unlocks `mutex` and suspends the calling thread on the condition variable until signaled, then re-locks `mutex` before returning.",
+          "explanation": "Atomically releasing `mutex` and entering the wait queue prevents a lost wakeup (where another thread signals between `unlock()` and `sleep()`). Upon wakeup, `wait()` re-acquires `mutex` before returning to the caller.",
+          "hints": [
+            "What would happen if `wait()` kept `mutex` locked while sleeping?",
+            "What must happen before `wait()` returns to the caller inside the monitor?"
+          ],
+          "bookmarkable": true
+        },
+        {
+          "id": "qz-ch7-java-weak-sem",
+          "block_type": "quiz_question",
+          "question_type": "multiple_choice",
+          "difficulty": 3,
+          "related_block_id": "code-java-monitors",
+          "question": "Why is the Java `Semaphore` class on Slide 61 (implemented using `synchronized`, `while (value <= 0) wait();`, and `notify()`) classified as a **weak** semaphore?",
+          "options": [
+            "Because neither `notify()` nor monitor lock re-acquisition guarantees FIFO wake-up order among waiting threads.",
+            "Because `synchronized` only works on single-core CPUs.",
+            "Because `notify()` wakes all waiting threads instead of one.",
+            "Because `value` cannot be initialized to a positive integer."
+          ],
+          "correct_answer": "Because neither `notify()` nor monitor lock re-acquisition guarantees FIFO wake-up order among waiting threads.",
+          "explanation": "A strong semaphore wakes threads in strict FIFO arrival order (like `PcoSemaphore`). In Java's built-in monitor, `notify()` wakes an arbitrary waiting thread and woken threads re-compete for the monitor lock in an arbitrary scheduler order.",
+          "hints": [
+            "What distinguishes a strong semaphore from a weak semaphore (Chapter 5)?",
+            "Does Java's `notify()` guarantee FIFO order?"
+          ],
+          "bookmarkable": true
+        }
+      ]
+    }
+  ]
+}

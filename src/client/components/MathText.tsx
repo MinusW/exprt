@@ -73,7 +73,7 @@ export function renderLatexString(text: string): string {
     const langHeader = block.lang
       ? `<div class="px-3 py-1 bg-slate-800 border-b border-slate-700 text-[10px] font-mono uppercase tracking-wider text-slate-400 select-none">${escapeHtml(block.lang)}</div>`
       : '';
-    return `<div class="my-2.5 rounded-lg overflow-hidden border border-slate-700 bg-slate-950 text-slate-100 shadow-sm text-left">${langHeader}<pre class="p-3 overflow-x-auto font-mono text-xs sm:text-[13px] leading-6 text-slate-100 whitespace-pre"><code>${highlightCodeToHtml(block.code, block.lang)}</code></pre></div>`;
+    return `<div class="my-2.5 rounded-lg overflow-hidden border border-slate-700 bg-slate-950 text-slate-100 shadow-sm text-left">${langHeader}<pre class="hljs-dark p-3 overflow-x-auto font-mono text-xs sm:text-[13px] leading-6 whitespace-pre"><code>${highlightCodeToHtml(block.code, block.lang)}</code></pre></div>`;
   });
   html = html.replace(/%%%MATH_BLOCK_(\d+)%%%/g, (_, idxStr) => {
     const idx = parseInt(idxStr, 10);

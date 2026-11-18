@@ -40,7 +40,7 @@
           "block_type": "markdown",
           "title": "The Socket API & The File Analogy",
           "bookmarkable": true,
-          "content": "In Chapter 06 and 07 you designed and tested application protocols using existing tools like `ncat`. Now you will implement your own networked clients and servers in Java using the **Socket API** (`java.net` package in `java.base`).\n\nOriginally developed in C for Unix at UC Berkeley, the Socket API is the universal abstraction for transport-layer communication across operating systems and languages.\n\n### The Concrete Intuition: A Socket is Like a File\nAt its core, a TCP socket behaves almost identically to a file:\n1. **Open** it (connect to a remote IP + port, or accept an incoming connection).\n2. **Read** from its input stream (`InputStream`).\n3. **Write** to its output stream (`OutputStream`).\n4. **Close** it when done.\n\nJust like file I/O from Chapter 04, you decorate raw socket byte streams with `InputStreamReader`, `OutputStreamWriter`, `BufferedReader`, and `BufferedWriter` using `StandardCharsets.UTF_8`."
+          "content": "To implement custom networked clients and servers in Java (beyond manual testing with tools like `ncat`), you use the **Socket API** (`java.net` package in `java.base`).\n\nOriginally developed in C for Unix at UC Berkeley, the Socket API is the universal abstraction for transport-layer communication across operating systems and languages.\n\n### The Concrete Intuition: A Socket is Like a File\nAt its core, a TCP socket behaves almost identically to a file:\n1. **Open** it (connect to a remote IP + port, or accept an incoming connection).\n2. **Read** from its input stream (`InputStream`).\n3. **Write** to its output stream (`OutputStream`).\n4. **Close** it when done.\n\nJust like standard Java file I/O, you decorate raw socket byte streams with `InputStreamReader`, `OutputStreamWriter`, `BufferedReader`, and `BufferedWriter` using `StandardCharsets.UTF_8`."
         },
         {
           "id": "th-tcp-properties",
@@ -153,7 +153,7 @@
           "block_type": "markdown",
           "title": "Debugging Broken Protocols with ncat",
           "bookmarkable": true,
-          "content": "When a TCP client and server hang, both sides might be waiting on `readLine()`. `ncat` (from Chapter 07) isolates which side is at fault by replacing either peer:\n\n```bash\n# Replace the client: type lines manually and watch the server\nncat localhost 6430\n\n# Replace the server: inspect raw bytes sent by the client\nncat -l 6430\n```\n\n### Diagnosing the Classic `BrokenEcho` Bug\nSuppose `BrokenEchoClient` and `BrokenEchoServer` both omit `\"\\n\"` and `out.flush()`:\n1. **Client vs `ncat -l 6430`:** Nothing appears in `ncat` while the client runs! Only when the client exits and `try-with-resources` closes `out` does the buffer flush, printing `Hello 1Hello 2Hello 3` glued onto a single line.\n2. **`ncat localhost 6430` vs Server:** The server prints `Received: ...` for each line you type, but `ncat` receives nothing back until you press `Ctrl+D` (EOF). Closing the server's `out` flushes all echoed lines glued together.\n\n**Fix on both sides:** Change `out.write(line)` to `out.write(line + \"\\n\")` followed by `out.flush()`."
+          "content": "When a TCP client and server hang, both sides might be waiting on `readLine()`. `ncat` isolates which side is at fault by replacing either peer:\n\n```bash\n# Replace the client: type lines manually and watch the server\nncat localhost 6430\n\n# Replace the server: inspect raw bytes sent by the client\nncat -l 6430\n```\n\n### Diagnosing Missing `\\n` and `flush()` Bugs\nSuppose a buggy TCP client and server both omit `\"\\n\"` and `out.flush()`:\n1. **Client vs `ncat -l 6430`:** Nothing appears in `ncat` while the client runs! Only when the client exits and `try-with-resources` closes `out` does the buffer flush, printing `Hello 1Hello 2Hello 3` glued onto a single line.\n2. **`ncat localhost 6430` vs Server:** The server prints `Received: ...` for each line you type, but `ncat` receives nothing back until you press `Ctrl+D` (EOF). Closing the server's `out` flushes all echoed lines glued together.\n\n**Fix on both sides:** Change `out.write(line)` to `out.write(line + \"\\n\")` followed by `out.flush()`."
         },
         {
           "id": "sbx-tcp-framing-partial-reads",
@@ -182,7 +182,7 @@
           "block_type": "markdown",
           "title": "UDP Datagrams: The Postcard Analogy",
           "bookmarkable": true,
-          "content": "**UDP (User Datagram Protocol)** is a minimalist, **connectionless** transport protocol. Think of it like sending **postcards**:\n* You write a destination address and message on each postcard and drop it in the mailbox—no handshake or connection setup.\n* Postcards travel independently: one may arrive out of order, or get lost entirely, with no automatic retransmission.\n\n### Datagram Structure & The 65,507-Byte Limit\nEach UDP **datagram** is a self-contained chunk with a header (source port, destination port, length, checksum) and a payload:\n\n$$\\text{Max UDP Payload} = 65{,}535\\text{ B (16-bit IPv4 length)} - 20\\text{ B (IPv4 header)} - 8\\text{ B (UDP header)} = 65{,}507\\text{ bytes}$$\n\n> [!WARNING]\n> **Fragmentation & Silent Truncation Pitfalls:**\n> 1. **All-or-Nothing IP Fragmentation:** If a datagram exceeds the network MTU (typically 1500 bytes), IP splits it into fragments. If *even one* fragment is lost, IP discards the entire datagram.\n> 2. **Undersized Receive Buffer:** If your Java `byte[] buffer` is smaller than the incoming datagram, `DatagramSocket.receive()` **silently truncates** the extra bytes! Always size your buffer from the application protocol specification (e.g., 256 bytes for Temperature Monitoring)."
+          "content": "**UDP (User Datagram Protocol)** is a minimalist, **connectionless** transport protocol. Think of it like sending **postcards**:\n* You write a destination address and message on each postcard and drop it in the mailbox—no handshake or connection setup.\n* Postcards travel independently: one may arrive out of order, or get lost entirely, with no automatic retransmission.\n\n### Datagram Structure & The 65,507-Byte Limit\nEach UDP **datagram** is a self-contained chunk with a header (source port, destination port, length, checksum) and a payload:\n\n$$\\text{Max UDP Payload} = 65{,}535\\text{ B (16-bit IPv4 length)} - 20\\text{ B (IPv4 header)} - 8\\text{ B (UDP header)} = 65{,}507\\text{ bytes}$$\n\n> [!WARNING]\n> **Fragmentation & Silent Truncation Pitfalls:**\n> 1. **All-or-Nothing IP Fragmentation:** If a datagram exceeds the network MTU (typically 1500 bytes), IP splits it into fragments. If *even one* fragment is lost, IP discards the entire datagram.\n> 2. **Undersized Receive Buffer:** If your Java `byte[] buffer` is smaller than the incoming datagram, `DatagramSocket.receive()` **silently truncates** the extra bytes! Always size your buffer from the application protocol specification (e.g., 256 or 1024 bytes depending on maximum message size)."
         },
         {
           "id": "th-udp-reliability-usecases",
@@ -325,7 +325,7 @@
           "block_type": "markdown",
           "title": "UDP Messaging Patterns & Multi-Emitter Behavior",
           "bookmarkable": true,
-          "content": "Because UDP has no built-in session model, your application defines its messaging pattern:\n\n1. **Fire-and-Forget:** One-way communication. An emitter sends a datagram and never expects an acknowledgement or reply (e.g., periodic sensor readings).\n2. **Request-Response (Request-Reply):** Two-way communication. Every received `DatagramPacket` carries the sender's IP (`packet.getAddress()`) and port (`packet.getPort()`). The receiver extracts these to send a **unicast** reply back to the exact requester.\n\n### Single-Threaded TCP vs UDP Concurrency (Exercises 8 & 9)\n* **TCP Server:** A single-threaded TCP server loops inside `while ((line = in.readLine()) != null)` for Client 1. Until Client 1 disconnects, the server never returns to `accept()`, so Client 2 sits waiting in the OS backlog queue (Chapter 09 solves this with threads).\n* **UDP Receiver:** A single `DatagramSocket` has **no connection state**. Every `receive()` simply returns the next incoming datagram regardless of which emitter sent it—so multiple UDP emitters work out of the box with one receiver socket!"
+          "content": "Because UDP has no built-in session model, your application defines its messaging pattern:\n\n1. **Fire-and-Forget:** One-way communication. An emitter sends a datagram and never expects an acknowledgement or reply (e.g., periodic sensor readings).\n2. **Request-Response (Request-Reply):** Two-way communication. Every received `DatagramPacket` carries the sender's IP (`packet.getAddress()`) and port (`packet.getPort()`). The receiver extracts these to send a **unicast** reply back to the exact requester.\n\n### Single-Threaded TCP vs UDP Concurrency\n* **TCP Server:** A single-threaded TCP server loops inside `while ((line = in.readLine()) != null)` for Client 1. Until Client 1 disconnects, the server never returns to `accept()`, so Client 2 sits waiting in the OS backlog queue (multi-threading solves this by spawning a handler per accepted `Socket`).\n* **UDP Receiver:** A single `DatagramSocket` has **no connection state**. Every `receive()` simply returns the next incoming datagram regardless of which emitter sent it—so multiple UDP emitters work out of the box with one receiver socket!"
         },
         {
           "id": "th-service-discovery",
@@ -472,8 +472,8 @@
           "question_type": "multiple_choice",
           "difficulty": 3,
           "related_block_id": "th-ncat-debugging",
-          "title": "Diagnosing `BrokenEchoClient` with `ncat -l 6430`",
-          "question": "You run `BrokenEchoClient` (which calls `out.write(\"Hello \" + i)` without `\\n` or `flush()`) against `ncat -l 6430`. What does `ncat` display while the client is running and right as it exits?",
+          "title": "Diagnosing Missing `\\n` and `flush()` with `ncat -l 6430`",
+          "question": "You run a TCP client that calls `out.write(\"Hello \" + i)` three times in a `try-with-resources` block without appending `\\n` or calling `flush()`, targeting `ncat -l 6430`. What does `ncat` display while the client is running and right as it exits?",
           "options": [
             "Nothing appears while the client runs; when the client closes its streams on exit, `ncat` prints `Hello 1Hello 2Hello 3` on a single line.",
             "`ncat` prints `Hello 1`, `Hello 2`, and `Hello 3` on three separate lines immediately.",
@@ -652,21 +652,6 @@
             "Compare how many sockets are involved on the server/receiver side in TCP vs UDP.",
             "What prevents the single-threaded TCP server from reaching `serverSocket.accept()`?"
           ]
-        },
-        {
-          "id": "qz-repl-purpose",
-          "block_type": "quiz_question",
-          "question_type": "fill_in_the_blank",
-          "difficulty": 2,
-          "related_block_id": "code-tcp-repl",
-          "title": "Read-Eval-Print Loop (REPL)",
-          "question": "A ___ lets a client send multiple sequential commands over a single persistent TCP connection and receive each result without closing and reopening the socket.",
-          "correct_answer": "REPL",
-          "explanation": "A **REPL (Read-Eval-Print Loop)** reads a command, evaluates it, prints/sends the result, and loops until an exit command (like `QUIT`) or EOF, avoiding repeated connection setup overhead.",
-          "hints": [
-            "It stands for Read-Eval-Print Loop.",
-            "4-letter acronym."
-          ]
         }
       ]
     },
@@ -773,15 +758,6 @@
           "back": "- **Advertisement (Passive):** Provider periodically broadcasts/multicasts its presence; consumers listen.\n- **Query (Active):** Consumer broadcasts/multicasts a request; providers reply in **unicast**.",
           "hint": "Who speaks first?",
           "tags": ["udp", "service-discovery"]
-        },
-        {
-          "id": "fc-repl-definition",
-          "block_type": "flashcard",
-          "title": "REPL in Networked Apps",
-          "front": "What is a **REPL** in a TCP client/server application?",
-          "back": "A **Read-Eval-Print Loop**: the server reads commands, evaluates them, and writes/flushes responses in a loop over a **single persistent connection** until the user exits (e.g., `QUIT`).",
-          "hint": "Read-Eval-Print Loop.",
-          "tags": ["tcp", "repl"]
         }
       ]
     }

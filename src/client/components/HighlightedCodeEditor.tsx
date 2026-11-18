@@ -1,9 +1,5 @@
-import React, { useRef } from 'react';
-import {
-  tokenizeCodeLine,
-  DARK_TOKEN_CLASSES,
-  LIGHT_TOKEN_CLASSES,
-} from '../utils/syntaxHighlight.js';
+import React, { useMemo, useRef } from 'react';
+import { highlightCodeToHtml } from '../utils/syntaxHighlight.js';
 
 interface Props {
   value: string;
@@ -16,9 +12,8 @@ interface Props {
 }
 
 /**
- * Lightweight syntax-highlighted code editor using a synchronized
- * transparent-textarea overlay over tokenized code lines.
- * Supports 4-space Tab indentation.
+ * Live syntax-highlighted code editor using highlight.js grammars and a
+ * synchronized transparent-textarea overlay. Supports 4-space Tab indentation.
  */
 export const HighlightedCodeEditor: React.FC<Props> = ({
   value,
@@ -33,8 +28,10 @@ export const HighlightedCodeEditor: React.FC<Props> = ({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const isLight = theme === 'light';
-  const tokenClasses = isLight ? LIGHT_TOKEN_CLASSES : DARK_TOKEN_CLASSES;
-  const lines = value.split('\n');
+  const highlightedHtml = useMemo(() => {
+    const html = highlightCodeToHtml(value, language);
+    return value.endsWith('\n') ? `${html} ` : html;
+  }, [value, language]);
 
   const syncScroll = () => {
     if (!preRef.current || !textareaRef.current) return;
@@ -69,24 +66,11 @@ export const HighlightedCodeEditor: React.FC<Props> = ({
       <pre
         ref={preRef}
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 m-0 p-3 overflow-hidden font-mono text-xs sm:text-[13px] leading-6 whitespace-pre"
-      >
-        {lines.map((line, idx) => {
-          const tokens = tokenizeCodeLine(line, language);
-          return (
-            <div key={idx} className="min-h-[1.5rem]">
-              {tokens.length === 0
-                ? ' '
-                : tokens.map((tok, tIdx) => (
-                    <span key={tIdx} className={tokenClasses[tok.type]}>
-                      {tok.value}
-                    </span>
-                  ))}
-            </div>
-          );
-        })}
-        {value.endsWith('\n') && <div className="min-h-[1.5rem]"> </div>}
-      </pre>
+        className={`pointer-events-none absolute inset-0 m-0 p-3 overflow-hidden font-mono text-xs sm:text-[13px] leading-6 whitespace-pre ${
+          isLight ? 'hljs-light' : 'hljs-dark'
+        }`}
+        dangerouslySetInnerHTML={{ __html: highlightedHtml || ' ' }}
+      />
 
       {/* Transparent interactive textarea */}
       <textarea

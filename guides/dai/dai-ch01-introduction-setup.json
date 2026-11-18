@@ -1,24 +1,22 @@
 {
   "id": "dai-ch01-introduction-setup",
-  "title": "Chapter 00–01: Course Introduction & Environment Setup",
-  "description": "Orient yourself in HEIG-VD's DAI course—goals, weekly rhythm, grading formula, and AI policy—and build a rock-solid Unix, Git, Java 25 LTS, Maven, and IntelliJ IDEA development environment.",
-  "estimated_minutes": 60,
+  "title": "Chapter 00–01: Unix Environment & Java Toolchain Setup",
+  "description": "Build a rock-solid Unix development environment—understanding WSL2 filesystem boundaries, essential terminal navigation, Git identity, SDKMAN!, Java 25 LTS, and Maven.",
+  "estimated_minutes": 30,
   "category": "Internet Applications (DAI)",
   "track": "DAI - Développement d'Applications Internet (TE1)",
   "track_order": 1,
   "difficulty_level": "beginner",
   "tags": [
     "dai",
-    "introduction",
     "environment-setup",
     "wsl2",
-    "homebrew",
     "terminal",
+    "unix",
     "git",
     "sdkman",
     "java-25",
-    "maven",
-    "intellij"
+    "maven"
   ],
   "prerequisites": [],
   "layout_mode": "single-page",
@@ -26,148 +24,27 @@
     {
       "title": "DAI Chapter 00: Environment Setup",
       "url_or_path": "https://heigvd-dai-26.github.io/chapters/00-environment-setup.html",
-      "notes": "OS setup (macOS Homebrew, Windows WSL2 + Ubuntu LTS), terminal basics, Git, SDKMAN!, Java 25 LTS, Maven, IntelliJ IDEA."
-    },
-    {
-      "title": "DAI Chapter 01: Introduction",
-      "url_or_path": "https://heigvd-dai-26.github.io/chapters/01-introduction.html",
-      "notes": "Course goals, weekly structure, grading formula, AI tools policy, and week-1 checklist."
+      "notes": "Unix environment (Linux, macOS, WSL2), terminal basics, Git, SDKMAN!, Java 25 LTS, and Maven."
     }
   ],
   "sections": [
     {
-      "id": "sec-course-overview",
-      "title": "1. What DAI Is About & How the Course Works",
-      "description": "Understand the four core pillars of Développement d'Applications Internet (DAI) and how theory, labs, and practical works fit together.",
-      "blocks": [
-        {
-          "id": "th-course-goals",
-          "block_type": "markdown",
-          "title": "The Four Pillars of DAI",
-          "content": "The Internet runs on programs talking to each other. In **Développement d'Applications Internet (DAI)**, you learn to build those programs from the ground up—not by treating the network as magic, but by understanding every layer from raw bytes to production web infrastructure.\n\nBy the end of the semester, you will master four interconnected skills:\n\n1. **Network Programming (I/O, Encodings, TCP & UDP):** Build client-server applications using the Socket API, starting from raw byte streams and character encodings.\n2. **Application-Level Protocols:** Understand how real Internet protocols work (`SMTP`, `SSH`, `HTTP`, …) and then design and implement your own custom protocol.\n3. **Web Infrastructures:** Deploy your applications the way they run in production using **reverse proxies**, **load balancers**, and **sticky sessions**.\n4. **Technical Documentation:** Read specifications accurately and write clear `README`s and technical reports—the meta-skill behind all engineering collaboration.\n\nAlong the way, you will adopt industry-standard tooling: **Git & GitHub**, **Docker** (introduced in Chapter 05), **Maven**, and the **Unix terminal**.",
-          "bookmarkable": true
-        },
-        {
-          "id": "th-course-workflow",
-          "block_type": "markdown",
-          "title": "How the Course Works: Rhythm, Communication & Callouts",
-          "content": "Each week combines a short **cours** (theory) and a **labo** (practice—where most of your learning happens). Keep these operational rules in mind:\n\n- **Chapters:** Contain the core theory, exercises with solutions, and collapsible **Go further** boxes for the curious. Evaluations only cover the **core content**.\n- **Practical Works (PW):** Three multi-week group projects that anchor theory in real applications. You choose your own subject (validated by the teaching team).\n- **Communication:** Everything happens on **GitHub Discussions** (questions, answers, announcements). There is **no Cyberlearn** and **no Teams**.\n- **Languages:** Course material is in **English** (the language of software engineering), while classes and evaluations are in **French**.\n\n### How to Read Chapter Callouts\n\n| Callout Type | Meaning |\n| :--- | :--- |\n| **Note** | Worth knowing, even when skimming |\n| **Tip** | Optional helper or shortcut |\n| **Important** | Essential requirement needed to succeed |\n| **Warning** | Risk ahead—proceed carefully |\n| **Caution** | Negative consequences if ignored (e.g., data/permission issues) |",
-          "bookmarkable": true
-        },
-        {
-          "id": "diag-course-architecture",
-          "block_type": "kroki",
-          "diagram_type": "mermaid",
-          "title": "Semester Learning & Evaluation Architecture",
-          "caption": "Weekly theory and labs feed into three Practical Works (PW) and two in-semester evaluations (TE1, TE2). There is no final exam session.",
-          "source": "flowchart LR\n  subgraph Weekly [\"Weekly Cycle\"]\n    Cours[\"Cours (Short Theory)\"] --> Labo[\"Labo (Hands-on Practice)\"]\n    Chapters[\"Chapters (Core + Exercises)\"] --> Labo\n    GHD[\"GitHub Discussions (Q&A)\"] -.-> Labo\n  end\n\n  subgraph Deliverables [\"In-Semester Assessments (No Exam Session)\"]\n    PW[\"3 Practical Works (Group Projects)\"]\n    TE1[\"TE1 (Mid-Term Eval)\"]\n    TE2[\"TE2 (Final Eval)\"]\n  end\n\n  Labo --> PW\n  Cours --> TE1\n  Cours --> TE2\n  PW --> Final[\"Final DAI Grade\"]\n  TE1 --> Final\n  TE2 --> Final\n\n  classDef cycle fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;\n  classDef assess fill:#ede9fe,stroke:#6366f1,stroke-width:1.5px;\n  classDef result fill:#ecfdf5,stroke:#059669,stroke-width:2px;\n  class Cours,Labo,Chapters,GHD cycle;\n  class PW,TE1,TE2 assess;\n  class Final result;",
-          "bookmarkable": true
-        }
-      ]
-    },
-    {
-      "id": "sec-grading-and-ai",
-      "title": "2. Grading Formula & Responsible AI Policy",
-      "description": "Explore how your final grade is weighted across TE1, TE2, and PW, and understand the ground rules for using AI assistants.",
-      "blocks": [
-        {
-          "id": "th-grading-formula",
-          "block_type": "markdown",
-          "title": "The DAI Grading Formula",
-          "content": "There is **no exam session** in DAI—everything happens during the semester. Your final grade is computed as:\n\n$$\\text{final grade} = \\underbrace{(\\text{TE1} \\times 0.4 + \\text{TE2} \\times 0.6)}_{\\text{cours (80\\%)}} \\times 0.8 + \\underbrace{\\text{PW}}_{\\text{labo (20\\%)}} \\times 0.2$$\n\nWhere:\n- **TE1:** Mid-term evaluation (effective weight: $0.4 \\times 0.8 = 32\\%$ of the final grade).\n- **TE2:** Final evaluation (effective weight: $0.6 \\times 0.8 = 48\\%$ of the final grade).\n- **PW:** Average of your **three** practical works, each graded on its report and deliverables using published rubrics (effective weight: $20\\%$ of the final grade).\n\n> **Non-Example (Common Mistake):** Treating PW as \"only 20%\" and neglecting reports. On a 1.0–6.0 Swiss grading scale, losing 2 points on PW costs $2.0 \\times 0.2 = 0.4$ full grade points—often the difference between passing and failing. Similarly, TE2 alone carries nearly half ($48\\%$) of your entire course grade!",
-          "bookmarkable": true
-        },
-        {
-          "id": "sim-final-grade",
-          "block_type": "simulation",
-          "title": "Interactive DAI Final Grade Simulator",
-          "description": "Adjust your expected TE1, TE2, and PW average scores (on the 1.0–6.0 Swiss scale) to see how each component impacts your final DAI grade.",
-          "formula": "\\text{Final Grade} = (\\text{TE1} \\times 0.4 + \\text{TE2} \\times 0.6) \\times 0.8 + \\text{PW} \\times 0.2",
-          "variables": [
-            {
-              "id": "te1",
-              "name": "TE1 (Mid-Term, 32% effective)",
-              "min": 1.0,
-              "max": 6.0,
-              "step": 0.1,
-              "default": 4.5,
-              "unit": "/6"
-            },
-            {
-              "id": "te2",
-              "name": "TE2 (Final, 48% effective)",
-              "min": 1.0,
-              "max": 6.0,
-              "step": 0.1,
-              "default": 5.0,
-              "unit": "/6"
-            },
-            {
-              "id": "pw",
-              "name": "PW Average (3 Projects, 20% effective)",
-              "min": 1.0,
-              "max": 6.0,
-              "step": 0.1,
-              "default": 5.5,
-              "unit": "/6"
-            }
-          ],
-          "compute_expression": "Math.round(((te1 * 0.4 + te2 * 0.6) * 0.8 + pw * 0.2) * 100) / 100",
-          "chart_type": "gauge",
-          "output_label": "Final DAI Grade",
-          "output_unit": "/6",
-          "bookmarkable": true
-        },
-        {
-          "id": "diag-grading-weights",
-          "block_type": "kroki",
-          "diagram_type": "graphviz",
-          "title": "Effective Weight Breakdown of the Final Grade",
-          "caption": "Expanding the nested formula reveals that TE2 accounts for nearly half (48%) of your final grade.",
-          "source": "digraph GradingWeights {\n  rankdir=LR;\n  node [fontname=\"Helvetica\", shape=box, style=\"rounded,filled\", fillcolor=\"#f1f5f9\", color=\"#64748b\"];\n  edge [fontname=\"Helvetica\", fontsize=10];\n\n  TE1 [label=\"TE1 (Mid-Term)\\n0.4 × 0.8 = 32%\", fillcolor=\"#e0e7ff\", color=\"#4f46e5\"];\n  TE2 [label=\"TE2 (Final)\\n0.6 × 0.8 = 48%\", fillcolor=\"#ede9fe\", color=\"#7c3aed\"];\n  PW1 [label=\"PW 1\"];\n  PW2 [label=\"PW 2\"];\n  PW3 [label=\"PW 3\"];\n  PWAvg [label=\"PW Average\\n20%\", fillcolor=\"#f0f9ff\", color=\"#0284c7\"];\n  Cours [label=\"Cours Subtotal\\n80%\", fillcolor=\"#e0e7ff\", color=\"#4f46e5\"];\n  Final [label=\"Final DAI Grade\\n100%\", fillcolor=\"#ecfdf5\", color=\"#059669\"];\n\n  PW1 -> PWAvg;\n  PW2 -> PWAvg;\n  PW3 -> PWAvg;\n  TE1 -> Cours [label=\"× 0.4\"];\n  TE2 -> Cours [label=\"× 0.6\"];\n  Cours -> Final [label=\"× 0.8\"];\n  PWAvg -> Final [label=\"× 0.2\"];\n}",
-          "bookmarkable": true
-        },
-        {
-          "id": "th-ai-policy",
-          "block_type": "markdown",
-          "title": "AI Tools Policy: Understand, Don't Outsource",
-          "content": "AI assistants (GitHub Copilot, ChatGPT, Claude, …) are part of modern software engineering, and DAI takes a pragmatic stance: you may use them responsibly within school guidelines.\n\nThree non-negotiable ground rules apply:\n\n1. **Use AI to understand, not to bypass thinking:** Ask it to explain a compiler error, clarify a protocol concept, or compare two design approaches—never to generate a solution you do not comprehend.\n2. **Line-by-line accountability:** You are accountable for everything you submit. **If you cannot explain your code line by line, it is not your code.**\n3. **Evaluations have zero AI assistance:** Both TE1 and TE2 happen without AI. If you let an assistant do the learning during labs, the gap will show immediately during evaluations.",
-          "bookmarkable": true
-        },
-        {
-          "id": "exp-sandbox-grade-calc",
-          "block_type": "sandbox",
-          "runtime": "javascript",
-          "title": "Practice: Compute the Target TE2 Score",
-          "instructions": "Suppose a student has `te1 = 4.0` and `pw = 5.5`. They want a `targetGrade = 5.0`. Using the DAI grading formula `final = (te1 * 0.4 + te2 * 0.6) * 0.8 + pw * 0.2`, solve for `te2` and print the required TE2 grade formatted to 2 decimal places (`toFixed(2)`).",
-          "starter_code": "const te1 = 4.0;\nconst pw = 5.5;\nconst targetGrade = 5.0;\n\n// TODO: Solve for te2 from: targetGrade = (te1 * 0.4 + te2 * 0.6) * 0.8 + pw * 0.2\nconst te2 = 0;\n\nconsole.log(te2.toFixed(2));",
-          "expected_output": "5.46",
-          "solution": "const te1 = 4.0;\nconst pw = 5.5;\nconst targetGrade = 5.0;\n\nconst coursNeeded = (targetGrade - pw * 0.2) / 0.8;\nconst te2 = (coursNeeded - te1 * 0.4) / 0.6;\n\nconsole.log(te2.toFixed(2));",
-          "hints": [
-            "First isolate the `cours` component by subtracting `pw * 0.2` from `targetGrade`, then dividing by `0.8`.",
-            "Next, isolate `te2` from `coursNeeded = te1 * 0.4 + te2 * 0.6` by subtracting `te1 * 0.4` and dividing by `0.6`."
-          ],
-          "bookmarkable": true
-        }
-      ]
-    },
-    {
       "id": "sec-os-environment",
-      "title": "3. OS Environment Setup: macOS, Linux & Windows (WSL2)",
-      "description": "Prepare a genuine Unix environment on your machine before Week 1, and understand why WSL2 filesystem boundaries matter.",
+      "title": "1. Unix Shell & WSL2 Filesystem Architecture",
+      "description": "Understand why network programming relies on a real Unix shell and how WSL2 separates native Linux storage from the Windows filesystem.",
       "blocks": [
         {
           "id": "th-unix-rationale",
           "block_type": "markdown",
-          "title": "Why Every OS Needs a Unix Shell",
-          "content": "Every command in DAI runs in a Unix terminal. How you get there depends on your OS (estimated setup time: ~30 min on macOS/Linux, 1–2 hours on Windows):\n\n- **Linux:** You already have a native Unix shell and `apt` (or your distro's package manager). Skip straight to Terminal basics.\n- **macOS:** Install **Homebrew** (https://brew.sh), the de-facto package manager for macOS (equivalent to Ubuntu's `apt`). After running the one-line installer, **run the \"Next steps\" commands** it prints so `brew` is added to your shell's `PATH`. Verify in a new terminal with `brew --version`.\n- **Windows:** Install **WSL2 (Windows Subsystem for Linux)** with **Ubuntu LTS**. PowerShell is used *only* for the Windows-side WSL setup steps; for the rest of the semester, every command runs inside the Ubuntu terminal.\n\n> **Non-Example:** Git Bash, Cygwin, or MSYS2 are **not supported** in DAI. Only a real Linux environment via WSL2 behaves identically to production Linux servers and Docker containers.",
+          "title": "Why a Real Unix Shell Matters",
+          "content": "Networked applications and containers run overwhelmingly on Unix-like systems. Working inside a real Unix shell ensures your file permissions, line endings (`LF` vs `CRLF`), symlinks, and tooling behave identically to production Linux servers and Docker containers.\n\n- **Linux:** Native Unix shell and system package manager (`apt`, `dnf`, etc.).\n- **macOS:** Native BSD/Unix shell (`zsh`/`bash`) paired with a package manager such as Homebrew.\n- **Windows:** **WSL2 (Windows Subsystem for Linux)** running a real Linux kernel in a lightweight VM (e.g., Ubuntu LTS).\n\n> **Non-Example:** Compatibility shims like Git Bash, Cygwin, or MSYS2 translate POSIX calls onto Windows and diverge from real Linux behavior on permissions, sockets, and container tooling. Always use a genuine Unix environment.",
           "bookmarkable": true
         },
         {
           "id": "th-wsl2-filesystem",
           "block_type": "markdown",
-          "title": "Windows WSL2: File Locations & Defender Exclusion",
-          "content": "Understanding where files live in WSL2 prevents the #1 source of Windows student headaches:\n\n1. **Ubuntu Home (`~` / `/home/<user>`):** When you open the Ubuntu terminal, you land in `/home/<user>`. **All your DAI projects must live here.**\n2. **Seeing Windows from Ubuntu (`/mnt/`):** Windows drives are mounted under `/mnt/`, e.g., `C:\\Users` is `/mnt/c/Users`.\n3. **Seeing Ubuntu from Windows (`\\\\wsl.localhost\\...`):** Windows File Explorer can view your Ubuntu home at `\\\\wsl.localhost\\Ubuntu-<version>\\home\\<user>`.\n\n> **Caution:** **Never manipulate project files from Windows File Explorer** (or store projects on `C:\\`). Crossing the OS filesystem boundary causes Linux file permission corruption, line-ending bugs, and severe I/O slowdowns. Always use the Ubuntu terminal or IntelliJ.\n\n### Mandatory Windows Defender Exclusion\n\nWindows Defender scanning WSL2 virtual disk activity causes massive slowdowns and is a known blocker that prevents IntelliJ from detecting Java/Maven in WSL. Exclude your WSL path in an **Administrator PowerShell**:\n\n```powershell\nAdd-MpPreference -ExclusionPath '\\\\wsl.localhost\\Ubuntu-<your-version>'\n```",
+          "title": "WSL2 Filesystem Boundaries: /home vs /mnt/c",
+          "content": "In WSL2, Windows and Linux each own a separate filesystem, connected by a cross-OS bridge:\n\n1. **Native Linux Home (`~` / `/home/<user>`):** Lives on WSL2's virtual `ext4` disk. File I/O is fast and POSIX permissions (`chmod`, symlinks, executable bits) work natively. **All development projects must live here.**\n2. **Windows Drives from Linux (`/mnt/c/`, `/mnt/d/`, …):** Windows NTFS drives mounted into Linux via the **9P protocol**. Crossing this bridge for builds (`mvn`, `git`, `docker`) causes severe I/O slowdowns, permission mismatches, and `CRLF` line-ending bugs.\n3. **Linux Files from Windows (`\\\\wsl.localhost\\<Distro>\\home\\<user>`):** Exposes the WSL2 filesystem to Windows tools (such as your IDE).\n\n> **Caution:** Never manipulate files inside `/home/<user>` using Windows File Explorer or store projects on `C:\\`. Run file operations (`mkdir`, `cp`, `mv`, `rm`, `git`) inside the Unix terminal.",
           "bookmarkable": true
         },
         {
@@ -175,54 +52,22 @@
           "block_type": "kroki",
           "diagram_type": "mermaid",
           "title": "WSL2 vs Windows Filesystem Architecture",
-          "caption": "Keep all DAI projects inside the fast Linux filesystem (/home/<user>) and exclude \\\\wsl.localhost from Windows Defender.",
-          "source": "flowchart TD\n  subgraph WinSide [\"Windows Host\"]\n    WT[\"Windows Terminal (Default: Ubuntu)\"]\n    IJ[\"IntelliJ IDEA (Toolbox App)\"]\n    CDrive[\"Windows Drive (C:\\Users\\...)\"]\n    Explorer[\"Windows File Explorer\"]\n  end\n\n  subgraph WSLSide [\"WSL2 Ubuntu LTS VM\"]\n    Home[\"Linux Home (/home/user or ~)\\nALL DAI PROJECTS HERE\"]\n    MntC[\"Cross-OS Mount (/mnt/c/...)\"]\n  end\n\n  WT --> Home\n  IJ -->|\"WSL Firewall + Defender Exclusion\"| Home\n  CDrive <-->|\"Slow 9P bridge\"| MntC\n  Explorer -.->|\"NEVER edit project files here!\"| Home\n\n  classDef win fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;\n  classDef linux fill:#ecfdf5,stroke:#059669,stroke-width:2px;\n  classDef warn fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px;\n  class WT,IJ,CDrive win;\n  class Home linux;\n  class Explorer,MntC warn;",
-          "bookmarkable": true
-        },
-        {
-          "id": "code-wsl-setup-commands",
-          "block_type": "code",
-          "language": "powershell",
-          "filename": "wsl2-setup.ps1",
-          "title": "Annotated Windows WSL2 Setup Sequence",
-          "code": "# Run in Administrator PowerShell (Step 1)\nwsl --install --no-distribution\n# -> Reboot Windows, then run Step 2 in Admin PowerShell:\nwsl --update --web-download\nwsl --set-default-version 2\nwsl --list --online\nwsl --install --distribution Ubuntu-24.04\n# Exclude WSL from Windows Defender\nAdd-MpPreference -ExclusionPath '\\\\wsl.localhost\\Ubuntu-24.04'\n# Inside Ubuntu terminal: refresh catalog & upgrade packages\nsudo apt update && sudo apt upgrade",
-          "highlight_lines": [2, 5, 7, 9, 11],
-          "annotations": [
-            {
-              "line": 2,
-              "note": "Installs the WSL2 kernel/platform first without a default distro so you can pick a versioned Ubuntu LTS."
-            },
-            {
-              "line": 5,
-              "note": "Ensures WSL2 (real Linux kernel in lightweight VM) is the default rather than legacy WSL1."
-            },
-            {
-              "line": 7,
-              "note": "Use a versioned LTS entry (e.g., Ubuntu-24.04 or Ubuntu-26.04), not the unversioned 'Ubuntu' entry."
-            },
-            {
-              "line": 9,
-              "note": "Prevents Windows Defender from throttling WSL I/O or blocking IntelliJ's Java/Maven detection."
-            },
-            {
-              "line": 11,
-              "note": "sudo runs as superuser (password typing is invisible!); apt update refreshes package metadata, apt upgrade installs updates."
-            }
-          ],
+          "caption": "Keep all projects inside the native Linux filesystem (/home/<user>) to avoid 9P bridge bottlenecks and POSIX permission corruption.",
+          "source": "flowchart TD\n  subgraph WinSide [\"Windows Host (NTFS)\"]\n    WT[\"Windows Terminal (Ubuntu Shell)\"]\n    IDE[\"IDE on Windows\"]\n    CDrive[\"Windows Drive (C:\\Users\\...)\"]\n    Explorer[\"Windows File Explorer\"]\n  end\n\n  subgraph WSLSide [\"WSL2 Linux VM (ext4)\"]\n    Home[\"Linux Home (/home/user or ~)\\nALL PROJECTS HERE\"]\n    MntC[\"Cross-OS Mount (/mnt/c/...)\"]\n  end\n\n  WT --> Home\n  IDE -->|\"\\\\wsl.localhost\\...\"| Home\n  CDrive <-->|\"Slow 9P bridge (avoid for builds)\"| MntC\n  Explorer -.->|\"Do not edit Linux files here\"| Home\n\n  classDef win fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;\n  classDef linux fill:#ecfdf5,stroke:#059669,stroke-width:2px;\n  classDef warn fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px;\n  class WT,IDE,CDrive win;\n  class Home linux;\n  class Explorer,MntC warn;",
           "bookmarkable": true
         }
       ]
     },
     {
       "id": "sec-terminal-git",
-      "title": "4. Terminal Basics & Git Configuration",
-      "description": "Build muscle memory for essential Unix commands and configure Git & GitHub for the semester.",
+      "title": "2. Unix Terminal Fundamentals & Git Identity",
+      "description": "Build fluency with Unix paths and core shell commands, and configure Git cleanly.",
       "blocks": [
         {
           "id": "th-terminal-basics",
           "block_type": "markdown",
-          "title": "Essential Unix Terminal Commands",
-          "content": "You will live in the terminal this semester. Use `man <command>` whenever you want to inspect a command's manual.\n\n| Command | Purpose |\n| :--- | :--- |\n| `pwd` | Print the current working directory |\n| `ls` | List files and directories |\n| `cd <dir>` / `cd ..` | Change directory / move to parent directory |\n| `touch <file>` | Create an empty file |\n| `mkdir <dir>` | Create a directory |\n| `rm <file>` / `rm -r <dir>` | Remove a file / recursively remove a directory |\n| `cp <src> <dst>` | Copy a file (add `-r` for directories) |\n| `mv <src> <dst>` | Move or rename a file/directory |\n| `cat <file>` | Print the entire contents of a file |\n| `less <file>` / `more <file>` | Page through a file (`q` to quit) |\n| `tail <file>` | Print the last lines (`-f` to follow live logs) |\n| `exit` | Close the terminal session |\n\n**Verification Challenge:** Create a directory, create a file inside it, list it, and delete both—without touching your mouse.",
+          "title": "Paths & Essential Unix Terminal Commands",
+          "content": "Unix paths are case-sensitive and separated by forward slashes (`/`). Key path anchors:\n- `/` — filesystem root\n- `~` — your home directory (`/home/<user>` on Linux, `/Users/<user>` on macOS)\n- `.` — current directory\n- `..` — parent directory\n\nUse `man <command>` to inspect any command's manual.\n\n| Command | Purpose |\n| :--- | :--- |\n| `pwd` | Print the current working directory |\n| `ls` / `ls -la` | List files (`-l` long format, `-a` include hidden `.` files) |\n| `cd <dir>` / `cd ..` | Change directory / move to parent directory |\n| `touch <file>` | Create an empty file (or update its timestamp) |\n| `mkdir -p <dir/sub>` | Create a directory (and missing parents with `-p`) |\n| `rm <file>` / `rm -r <dir>` | Remove a file / recursively remove a directory |\n| `cp <src> <dst>` | Copy a file (add `-r` for directories) |\n| `mv <src> <dst>` | Move or rename a file/directory |\n| `cat <file>` | Print the entire contents of a file |\n| `less <file>` | Page through a file (`q` to quit) |\n| `tail -f <file>` | Print the last lines and follow live log output |",
           "bookmarkable": true
         },
         {
@@ -243,29 +88,22 @@
         {
           "id": "th-git-github-setup",
           "block_type": "markdown",
-          "title": "Git Installation, Identity & GitHub Account",
-          "content": "Git is used everywhere in DAI starting Week 1.\n\n- **Ubuntu / WSL:** `sudo apt install git`\n- **macOS:** `brew install git` — **Important:** macOS ships a pre-installed Git with Apple developer tools, but it is usually several versions behind. Always prefer Homebrew's up-to-date `git`.\n\nNext, configure your global Git identity. Git stamps this name and email onto every commit you create:\n\n```bash\ngit config --global user.name \"First-name Last-name\"\ngit config --global user.email \"your.email@example.com\"\n```\n\n> **Note:** `user.name` and `user.email` are just a label, not cryptographic proof of authorship. You will configure SSH keys and **cryptographically signed commits** in Chapter 02.\n\nFinally, create a **GitHub** account using an email address you will keep after your studies—your repositories will become part of your developer portfolio.",
+          "title": "Git Identity Configuration",
+          "content": "Verify Git is available in your Unix shell with `git --version`, then configure your global author identity. Git stamps this name and email onto every commit you create:\n\n```bash\ngit config --global user.name \"First-name Last-name\"\ngit config --global user.email \"your.email@example.com\"\n```\n\n> **Note:** `user.name` and `user.email` are only a plain-text metadata label, **not** cryptographic proof of authorship. Anyone can set any name/email in Git config; cryptographic verification requires SSH or GPG commit signing.",
           "bookmarkable": true
         }
       ]
     },
     {
-      "id": "sec-java-maven-intellij",
-      "title": "5. Java 25 LTS, Maven (via SDKMAN!) & IntelliJ IDEA",
-      "description": "Install the Java toolchain cleanly with SDKMAN!, connect IntelliJ IDEA to WSL2 on Windows, and synthesize your setup knowledge.",
+      "id": "sec-java-maven-toolchain",
+      "title": "3. Java 25 LTS & Maven via SDKMAN!",
+      "description": "Manage JDK and Maven versions cleanly with SDKMAN! and verify your toolchain from the terminal.",
       "blocks": [
         {
           "id": "th-sdkman-java-maven",
           "block_type": "markdown",
           "title": "Installing Java 25 LTS & Maven with SDKMAN!",
-          "content": "**SDKMAN!** manages Java toolchain versions cleanly, letting you install and switch between JDKs without manual `PATH` or `JAVA_HOME` edits.\n\n1. Install SDKMAN! following the `curl` command at https://sdkman.io/, then **open a new terminal** (if SDKMAN! complains about missing packages like `zip`/`unzip` on Ubuntu/WSL, install them with `sudo apt install <package>` and retry).\n2. Install the latest **Temurin** LTS Java (Java 25 at the time of writing) and **Maven**:\n\n```bash\nsdk list java\nsdk install java <version>-tem\nsdk install maven\n```\n\n3. Verify all three tools in your Unix terminal:\n   - `sdk version`\n   - `java --version` (should show Temurin 25 or newer LTS)\n   - `mvn --version` (should show Maven running on that Java)",
-          "bookmarkable": true
-        },
-        {
-          "id": "th-intellij-wsl-integration",
-          "block_type": "markdown",
-          "title": "IntelliJ IDEA & Windows-to-WSL2 Integration",
-          "content": "**IntelliJ IDEA** is the supported IDE for DAI (Community or Ultimate—no Ultimate-only features are used; you can optionally activate a free JetBrains student license with your HEIG-VD email). Install it via the **JetBrains Toolbox App** (on Windows, install Toolbox on **Windows**, *not* inside WSL).\n\n### Windows-Only: Connect IntelliJ to WSL2\n\n1. Allow WSL through the Windows Firewall in an **Administrator PowerShell**:\n\n```powershell\nNew-NetFirewallRule -DisplayName \"WSL\" -Direction Inbound -InterfaceAlias \"vEthernet (WSL (Hyper-V firewall))\" -Action Allow\nGet-NetFirewallProfile -Name Public | Get-NetFirewallRule | where DisplayName -ILike \"IntelliJ IDEA*\" | Disable-NetFirewallRule\n```\n\n2. **Two Golden Rules for the Semester:**\n   - **Rule 1:** Create all projects in your WSL home directory (`\\\\wsl.localhost\\Ubuntu-<version>\\home\\<user>`), never on the Windows side.\n   - **Rule 2:** IntelliJ's built-in terminal must open WSL, not PowerShell. If it opens PowerShell, go to **Settings > Tools > Terminal** and set the shell path to `wsl.exe -d Ubuntu-<your-version>`.\n\n> **Troubleshooting:** If IntelliJ cannot find Java or Maven inside WSL, double-check the **Windows Defender exclusion** (`Add-MpPreference -ExclusionPath '\\\\wsl.localhost\\Ubuntu-<your-version>'`)—it is the most common blocker.",
+          "content": "**SDKMAN!** manages Java toolchain versions cleanly, letting you install and switch between JDKs and build tools without manual `PATH` or `JAVA_HOME` edits.\n\n1. Install SDKMAN! and open a new shell so its initialization script is loaded.\n2. List available JDK distributions, install the latest **Temurin** LTS Java (Java 25 LTS), and install **Maven**:\n\n```bash\nsdk list java\nsdk install java <version>-tem\nsdk install maven\n```\n\n3. Verify all three tools in your Unix terminal:\n   - `sdk version`\n   - `java --version` (should show Temurin 25 or newer LTS)\n   - `mvn --version` (should show Maven bound to that same Java runtime)",
           "bookmarkable": true
         },
         {
@@ -273,24 +111,24 @@
           "block_type": "code",
           "language": "bash",
           "filename": "verify-env.sh",
-          "title": "Complete Week-1 Environment Verification Script",
-          "code": "#!/usr/bin/env bash\ncat /etc/os-release | head -n 2\napt --version || brew --version\ngit --version\ngit config user.name\nsdk version\njava --version\nmvn --version",
-          "highlight_lines": [2, 5, 7, 8],
+          "title": "Toolchain Verification Script",
+          "code": "#!/usr/bin/env bash\npwd\ngit --version\ngit config user.name\nsdk version\njava --version\nmvn --version",
+          "highlight_lines": [2, 4, 6, 7],
           "annotations": [
             {
               "line": 2,
-              "note": "On WSL2/Ubuntu, confirms your Ubuntu LTS distribution version."
+              "note": "Confirms your current directory is inside your native Unix home (/home/<user> on Linux/WSL), not /mnt/c/."
             },
             {
-              "line": 5,
-              "note": "Confirms your Git commit author label is configured."
+              "line": 4,
+              "note": "Confirms your global Git commit author label is configured."
             },
             {
-              "line": 7,
+              "line": 6,
               "note": "Must report Temurin 25 (or newer LTS) managed by SDKMAN!."
             },
             {
-              "line": 8,
+              "line": 7,
               "note": "Verifies Maven is installed and bound to the same Java 25 runtime."
             }
           ],
@@ -299,15 +137,15 @@
         {
           "id": "ref-setup-rubric",
           "block_type": "reflection_rubric",
-          "title": "Synthesis: Diagnosing a Broken Windows WSL2 + IntelliJ Setup",
-          "prompt": "A classmate on Windows reports two problems: (1) their Maven builds are painfully slow and file permissions keep breaking because they created their project in C:\\Users\\Alex\\DAI, and (2) when they move the project to WSL, IntelliJ IDEA still cannot detect Java 25 or Maven inside Ubuntu. Diagnose both issues and write out the exact fixes.",
+          "title": "Synthesis: Diagnosing a Broken WSL2 Java Environment",
+          "prompt": "A developer on Windows reports two issues: (1) their Maven builds are painfully slow and `chmod +x` has no effect because their repository is in `C:\\Users\\Alex\\projects`, and (2) running `java --version` in Ubuntu prints 'command not found' even though they installed Java on Windows. Diagnose both issues and give the exact fixes.",
           "self_check_criteria": [
-            "Identified that storing projects on C:\\ (/mnt/c/) crosses the Windows-Linux filesystem boundary, causing slow I/O and permission issues.",
-            "Specified moving projects into the WSL Linux home directory (/home/<user>, accessed via \\\\wsl.localhost\\Ubuntu-<version>\\home\\<user>).",
-            "Identified Windows Defender scanning \\\\wsl.localhost\\... as the primary blocker for IntelliJ detecting Java/Maven in WSL.",
-            "Mentioned checking Windows Firewall rules for vEthernet (WSL) and setting IntelliJ's terminal to wsl.exe -d Ubuntu-<version>."
+            "Identified that storing projects on C:\\ (/mnt/c/) crosses the 9P Windows-Linux filesystem boundary, causing slow I/O and broken POSIX permissions.",
+            "Specified moving the repository into the native Linux home directory (/home/<user> or ~) and running git/mvn commands from the Unix shell.",
+            "Explained that WSL2 is a separate Linux environment and does not automatically share Windows-installed JDKs.",
+            "Specified installing Java 25 LTS and Maven inside Ubuntu using SDKMAN! (`sdk install java <version>-tem`, `sdk install maven`) and verifying with `java --version` and `mvn --version`."
           ],
-          "model_answer": "1) Storing projects in C:\\Users\\Alex\\DAI forces WSL2 to access files across the 9P Windows-Linux bridge (/mnt/c/), which is much slower and breaks Unix file permissions. The fix is to create and store all projects inside the Ubuntu home directory (/home/<user>, opened in IntelliJ via \\\\wsl.localhost\\Ubuntu-<version>\\home\\<user>) and never edit them from Windows File Explorer.\n\n2) When IntelliJ cannot detect Java 25 or Maven inside WSL, the most common culprit is Windows Defender blocking/throttling \\\\wsl.localhost. Running `Add-MpPreference -ExclusionPath '\\\\wsl.localhost\\Ubuntu-<your-version>'` in an Administrator PowerShell (along with enabling the WSL Hyper-V firewall rule) resolves the detection issue. Also verify IntelliJ's built-in terminal is set to `wsl.exe -d Ubuntu-<your-version>`.",
+          "model_answer": "1) Storing projects in `C:\\Users\\Alex\\projects` (`/mnt/c/...`) forces WSL2 to access files across the 9P Windows-Linux bridge, which causes severe I/O slowdowns for Maven/Git and prevents native POSIX permissions (`chmod`) from working properly. Move the repository into `/home/<user>/projects` inside WSL2 and manipulate files from the Ubuntu terminal.\n\n2) WSL2 runs an isolated Linux userland, so a JDK installed on Windows is not your Linux `java` binary. Install SDKMAN! inside Ubuntu, then run `sdk install java <version>-tem` and `sdk install maven`. Open a new shell and verify with `java --version` and `mvn --version`.",
           "bookmarkable": true
         },
         {
@@ -319,7 +157,7 @@
           "key_points_to_cover": [
             "WSL2 runs a real Linux computer inside Windows with its own native Linux disk (/home/<user>).",
             "Accessing C:\\ (/mnt/c/) or poking into Linux files from Windows Explorer forces two different operating systems to translate permissions and file formats across a slow bridge.",
-            "Keeping projects in /home/<user> and using only the Ubuntu terminal and IntelliJ avoids permission corruption and slow builds."
+            "Keeping projects in /home/<user> and using only the Unix terminal (and opening the WSL path in an IDE) avoids permission corruption and slow builds."
           ],
           "bookmarkable": true
         }
@@ -327,57 +165,9 @@
     },
     {
       "id": "sec-retrieval-and-srs",
-      "title": "6. Knowledge Retrieval & Spaced Repetition",
-      "description": "Test your understanding of DAI's course structure, grading math, and environment setup with diagnostic questions and flashcards.",
+      "title": "4. Knowledge Retrieval & Spaced Repetition",
+      "description": "Test your mastery of WSL2 filesystem boundaries, Unix terminal navigation, Git identity, and SDKMAN! toolchain verification.",
       "blocks": [
-        {
-          "id": "qz-grading-calc",
-          "block_type": "quiz_question",
-          "question_type": "multiple_choice",
-          "title": "Compute the Final DAI Grade",
-          "difficulty": 2,
-          "related_block_id": "th-grading-formula",
-          "question": "A student scores **TE1 = 4.0**, **TE2 = 5.0**, and **PW = 5.5**. Using the DAI grading formula $(\\text{TE1} \\times 0.4 + \\text{TE2} \\times 0.6) \\times 0.8 + \\text{PW} \\times 0.2$, what is their final grade?",
-          "options": [
-            "4.78",
-            "4.62",
-            "4.83",
-            "3.68"
-          ],
-          "correct_answer": "4.78",
-          "explanation": "First compute the cours average: $4.0 \\times 0.4 + 5.0 \\times 0.6 = 1.6 + 3.0 = 4.6$. Next, weight cours at 80% and PW at 20%: $(4.6 \\times 0.8) + (5.5 \\times 0.2) = 3.68 + 1.10 = 4.78$.\n\n* '4.62' reverses the TE1 and TE2 weights ($4.0 \\times 0.6 + 5.0 \\times 0.4 = 4.4$, then $4.4 \\times 0.8 + 5.5 \\times 0.2 = 4.62$).\n* '4.83' is an unweighted simple average $(4.0 + 5.0 + 5.5) / 3$.\n* '3.68' forgets to add the `PW * 0.2` term.",
-          "hints": [
-            "Start inside the parentheses: compute the weighted cours average using 0.4 for TE1 and 0.6 for TE2.",
-            "Multiply the cours average by 0.8, then add 20% of the PW grade (5.5 × 0.2)."
-          ],
-          "bookmarkable": true
-        },
-        {
-          "id": "qz-course-structure",
-          "block_type": "quiz_question",
-          "question_type": "multi_select",
-          "title": "DAI Course Structure & Logistics",
-          "difficulty": 2,
-          "related_block_id": "th-course-workflow",
-          "question": "Which of the following statements about how DAI operates are **true**? (Select all that apply)",
-          "options": [
-            "All course communication and Q&A happen on GitHub Discussions rather than Cyberlearn or Teams.",
-            "There is no final exam session; all evaluations happen during the semester.",
-            "Course material is written in English, while classes and evaluations are in French.",
-            "The \"Go further\" sections in chapters are mandatory and tested on TE1 and TE2."
-          ],
-          "correct_answer": [
-            "All course communication and Q&A happen on GitHub Discussions rather than Cyberlearn or Teams.",
-            "There is no final exam session; all evaluations happen during the semester.",
-            "Course material is written in English, while classes and evaluations are in French."
-          ],
-          "explanation": "DAI uses GitHub Discussions exclusively for communication, has no exam session (grading is strictly TE1, TE2, and 3 PWs during the semester), and pairs English chapters with French classes/evaluations. However, the collapsible 'Go further' boxes are optional enrichment for the curious—evaluations only cover the core chapter content.",
-          "hints": [
-            "Check Chapter 01's 'How the course works' section regarding communication channels and languages.",
-            "Recall what evaluations cover: core chapter content vs. collapsible 'Go further' boxes."
-          ],
-          "bookmarkable": true
-        },
         {
           "id": "qz-wsl-paths",
           "block_type": "quiz_question",
@@ -385,18 +175,18 @@
           "title": "WSL2 Project Storage & File Access",
           "difficulty": 3,
           "related_block_id": "th-wsl2-filesystem",
-          "question": "On Windows with WSL2, where should you store your DAI Java projects, and how should you manipulate those files?",
+          "question": "On Windows with WSL2, where should you store your Java/network programming projects, and how should you manipulate those files?",
           "options": [
-            "Store them in `/home/<user>` (inside WSL) and manipulate them only from the Ubuntu terminal or IntelliJ.",
+            "Store them in `/home/<user>` (inside WSL) and manipulate them from the Ubuntu terminal (opening `\\\\wsl.localhost\\...` in your IDE).",
             "Store them in `C:\\Users\\<user>\\Projects` (`/mnt/c/...`) so both Windows Explorer and Ubuntu can edit them freely.",
-            "Store them in `/home/<user>` and regularly organize or rename them using Windows File Explorer at `\\\\wsl.localhost\\...`.",
+            "Store them in `/home/<user>` and regularly organize or rename them using Windows File Explorer.",
             "Use Git Bash on Windows so all files stay native to `C:\\` without needing WSL2."
           ],
-          "correct_answer": "Store them in `/home/<user>` (inside WSL) and manipulate them only from the Ubuntu terminal or IntelliJ.",
-          "explanation": "All projects must live in the Linux home directory (`/home/<user>`, shorthand `~`) and be manipulated only via the Ubuntu terminal or IntelliJ. Storing projects under `/mnt/c/` causes slow cross-OS I/O, while editing WSL files from Windows File Explorer causes permission issues and odd file behaviors. Git Bash is explicitly unsupported.",
+          "correct_answer": "Store them in `/home/<user>` (inside WSL) and manipulate them from the Ubuntu terminal (opening `\\\\wsl.localhost\\...` in your IDE).",
+          "explanation": "All projects must live in the native Linux home directory (`/home/<user>`, shorthand `~`) to get fast ext4 I/O and real POSIX permissions. Storing projects under `/mnt/c/` forces traffic across the slow 9P bridge, while editing WSL files from Windows File Explorer causes permission corruption and line-ending issues. Git Bash is a Windows shim, not a real Linux environment.",
           "hints": [
-            "Think about which filesystem is native to the Ubuntu terminal where your builds and Docker containers run.",
-            "Recall the Caution box in Chapter 00 about mixing Windows File Explorer with WSL files."
+            "Think about which filesystem is native to the Ubuntu kernel where your builds and containers run.",
+            "Crossing the 9P bridge (`/mnt/c/`) or editing Linux files from Windows Explorer causes performance and permission bugs."
           ],
           "bookmarkable": true
         },
@@ -417,125 +207,83 @@
           "bookmarkable": true
         },
         {
-          "id": "qz-git-macos",
-          "block_type": "quiz_question",
-          "question_type": "multiple_choice",
-          "title": "Git Installation on macOS",
-          "difficulty": 2,
-          "related_block_id": "th-git-github-setup",
-          "question": "Why does Chapter 00 instruct macOS users to run `brew install git` even though macOS already ships a `git` binary with Apple developer tools?",
-          "options": [
-            "Apple's pre-installed Git is usually several versions behind, so Homebrew provides an up-to-date version.",
-            "Apple's pre-installed Git cannot connect to GitHub over HTTPS.",
-            "Homebrew's Git automatically generates SSH keys and GPG commit signatures.",
-            "Apple's Git only works inside IntelliJ IDEA and cannot run in the terminal."
-          ],
-          "correct_answer": "Apple's pre-installed Git is usually several versions behind, so Homebrew provides an up-to-date version.",
-          "explanation": "macOS ships a Git binary with Apple's Command Line Tools, but it lags several versions behind upstream Git releases. Installing via `brew install git` ensures you have a modern, up-to-date Git. Neither version auto-generates SSH/GPG signatures (that's covered in Chapter 02).",
-          "hints": [
-            "Check the comment in the macOS Git installation snippet in Chapter 00.",
-            "It is about software freshness/versioning rather than missing protocol support."
-          ],
-          "bookmarkable": true
-        },
-        {
-          "id": "qz-grade-script-output",
+          "id": "qz-unix-relative-paths",
           "block_type": "quiz_question",
           "question_type": "code_output",
-          "title": "Predict Output: Grade Calculation Snippet",
-          "difficulty": 3,
-          "related_block_id": "th-grading-formula",
-          "question": "What does the following JavaScript snippet print to the console?\n\n```javascript\nconst te1 = 5.0;\nconst te2 = 4.0;\nconst pw = 6.0;\nconst cours = te1 * 0.4 + te2 * 0.6;\nconst finalGrade = cours * 0.8 + pw * 0.2;\nconsole.log(finalGrade.toFixed(2));\n```",
+          "title": "Predict Output: Unix Directory Navigation",
+          "difficulty": 2,
+          "related_block_id": "th-terminal-basics",
+          "question": "Suppose your shell starts in `/home/alice/projects/http-server`. What does `pwd` print after running the following commands?\n\n```bash\ncd ..\nmkdir -p labs/lab01\ncd labs/lab01\npwd\n```",
           "options": [
-            "4.72",
-            "4.88",
-            "5.00",
-            "4.56"
+            "/home/alice/projects/labs/lab01",
+            "/home/alice/projects/http-server/labs/lab01",
+            "/home/alice/labs/lab01",
+            "/labs/lab01"
           ],
-          "correct_answer": "4.72",
-          "explanation": "Compute `cours`: `5.0 * 0.4 + 4.0 * 0.6 = 2.0 + 2.4 = 4.4`. Then compute `finalGrade`: `4.4 * 0.8 + 6.0 * 0.2 = 3.52 + 1.20 = 4.72`.\n\n* '4.88' swaps the TE1 and TE2 weights (`5.0 * 0.6 + 4.0 * 0.4 = 4.6`, `4.6 * 0.8 + 1.2 = 4.88`).\n* '5.00' is the unweighted average `(5 + 4 + 6) / 3`.\n* '4.56' mistakenly applies `0.2` to `cours` or miscalculates `3.52 + 1.04`.",
+          "correct_answer": "/home/alice/projects/labs/lab01",
+          "explanation": "`cd ..` moves up one level from `/home/alice/projects/http-server` to `/home/alice/projects`. `mkdir -p labs/lab01` creates `labs/lab01` inside `/home/alice/projects`, and `cd labs/lab01` enters it, so `pwd` prints `/home/alice/projects/labs/lab01`.\n\n* `/home/alice/projects/http-server/labs/lab01` ignores the `cd ..` command.\n* `/home/alice/labs/lab01` moves up two levels (`../..`) instead of one.\n* `/labs/lab01` treats a relative path as an absolute path starting at `/`.",
           "hints": [
-            "Compute `cours` first: `5.0 * 0.4` is `2.0`, and `4.0 * 0.6` is `2.4`.",
-            "Multiply `4.4` by `0.8` (`3.52`), then add `6.0 * 0.2` (`1.2`)."
+            "`..` refers to the parent directory of the current working directory.",
+            "Paths without a leading `/` are relative to your current directory."
           ],
           "bookmarkable": true
         },
         {
-          "id": "qz-intellij-wsl-troubleshoot",
-          "block_type": "quiz_question",
-          "question_type": "multi_select",
-          "title": "Troubleshooting IntelliJ IDEA + WSL2 on Windows",
-          "difficulty": 4,
-          "related_block_id": "th-intellij-wsl-integration",
-          "question": "A Windows student installed Java 25 and Maven via SDKMAN! inside Ubuntu WSL2, but IntelliJ IDEA cannot detect them and its built-in terminal opens PowerShell. Which actions are part of the official Chapter 00 fix? (Select all that apply)",
-          "options": [
-            "Add a Windows Defender exclusion for `\\\\wsl.localhost\\Ubuntu-<your-version>` in an Administrator PowerShell.",
-            "Add an inbound Windows Firewall allow rule for `vEthernet (WSL (Hyper-V firewall))`.",
-            "Set IntelliJ's Terminal shell path to `wsl.exe -d Ubuntu-<your-version>` in Settings > Tools > Terminal.",
-            "Install a second copy of JetBrains Toolbox inside Ubuntu WSL2 and launch IntelliJ from there."
-          ],
-          "correct_answer": [
-            "Add a Windows Defender exclusion for `\\\\wsl.localhost\\Ubuntu-<your-version>` in an Administrator PowerShell.",
-            "Add an inbound Windows Firewall allow rule for `vEthernet (WSL (Hyper-V firewall))`.",
-            "Set IntelliJ's Terminal shell path to `wsl.exe -d Ubuntu-<your-version>` in Settings > Tools > Terminal."
-          ],
-          "explanation": "Chapter 00 explicitly instructs Windows users to: (1) exclude `\\\\wsl.localhost\\Ubuntu-<your-version>` in Windows Defender (a known blocker for IntelliJ finding Java/Maven in WSL), (2) allow `vEthernet (WSL (Hyper-V firewall))` in Windows Firewall, and (3) set IntelliJ's Terminal shell path to `wsl.exe -d Ubuntu-<your-version>`. JetBrains Toolbox must be installed on Windows, *not* inside WSL.",
-          "hints": [
-            "Recall the Windows-only IntelliJ + WSL integration section in Chapter 00.",
-            "Where should JetBrains Toolbox be installed on Windows?"
-          ],
-          "bookmarkable": true
-        },
-        {
-          "id": "qz-ai-accountability",
+          "id": "qz-git-identity-meaning",
           "block_type": "quiz_question",
           "question_type": "multiple_choice",
-          "title": "DAI AI Tools Accountability Rule",
+          "title": "What Git's user.name and user.email Actually Prove",
           "difficulty": 2,
-          "related_block_id": "th-ai-policy",
-          "question": "According to Chapter 01's AI tools policy, what is the core test of whether you used an AI assistant responsibly on a lab or practical work?",
+          "related_block_id": "th-git-github-setup",
+          "question": "You run `git config --global user.name \"Alice\"` and `git config --global user.email \"alice@example.com\"`. What does this guarantee about commits you push?",
           "options": [
-            "You can explain every line of the submitted code yourself, because evaluations happen without AI.",
-            "You disclose the AI model name in your README, which exempts you from explaining the code.",
-            "You only use AI for comments and documentation, never for debugging errors.",
-            "AI assistants are completely banned from all labs and practical works."
+            "Nothing cryptographically—it is only a plain-text label stamped onto commit metadata.",
+            "It cryptographically signs every commit with an SSH key.",
+            "GitHub verifies that you own `alice@example.com` before accepting any commit with that metadata.",
+            "It prevents anyone else from creating commits using the same name and email."
           ],
-          "correct_answer": "You can explain every line of the submitted code yourself, because evaluations happen without AI.",
-          "explanation": "DAI allows responsible AI use to understand errors or explore approaches, with one strict rule: if you cannot explain your code line by line, it is not your code. Since TE1 and TE2 happen without AI, outsourcing your learning is self-defeating.\n\n* Disclosing the AI model in a README never exempts you from accountability for every line you submit.\n* AI is explicitly allowed for understanding errors/debugging (not restricted to comments only).\n* AI is not banned from labs/PWs—it is permitted with responsibility, though banned during evaluations.",
+          "correct_answer": "Nothing cryptographically—it is only a plain-text label stamped onto commit metadata.",
+          "explanation": "Git's `user.name` and `user.email` are unverified metadata labels stored in `~/.gitconfig` and stamped into commit objects. Anyone can configure any name or email; cryptographic proof of authorship requires signing commits with SSH or GPG keys.",
           "hints": [
-            "Re-read the three bullet points under 'AI tools' in Chapter 01.",
-            "Remember why evaluations (TE1/TE2) matter for your lab/PW workflow."
+            "Think about whether `git config` involves any private key or password.",
+            "Distinguish between commit metadata labels and cryptographic commit signing."
           ],
           "bookmarkable": true
         },
         {
-          "id": "fc-grading-formula",
-          "block_type": "flashcard",
-          "title": "DAI Final Grade Formula",
-          "front": "What is the exact **DAI final grade formula**, and what is the effective weight of TE1, TE2, and PW?",
-          "back": "$$\\text{final grade} = (\\text{TE1} \\times 0.4 + \\text{TE2} \\times 0.6) \\times 0.8 + \\text{PW} \\times 0.2$$\n\n- **TE1:** $32\\%$ ($0.4 \\times 0.8$)\n- **TE2:** $48\\%$ ($0.6 \\times 0.8$)\n- **PW (avg of 3):** $20\\%$\n- **No exam session**—everything happens during the semester.",
-          "hint": "80% cours (split 40/60 between TE1 and TE2) + 20% labo (PW).",
-          "tags": ["dai", "grading", "ch01"],
+          "id": "qz-sdkman-verification",
+          "block_type": "quiz_question",
+          "question_type": "multi_select",
+          "title": "SDKMAN! & Java Toolchain Verification",
+          "difficulty": 2,
+          "related_block_id": "th-sdkman-java-maven",
+          "question": "Which statements about managing Java 25 LTS and Maven with SDKMAN! are **true**? (Select all that apply)",
+          "options": [
+            "SDKMAN! manages `JAVA_HOME` and `PATH` for you so you can switch JDKs cleanly.",
+            "Running `mvn --version` confirms both Maven's version and the Java runtime it is using.",
+            "After installing SDKMAN!, you must open a new shell (or source its init script) before `sdk` commands work.",
+            "You must manually edit `/etc/environment` for every new JDK version installed via `sdk install java`."
+          ],
+          "correct_answer": [
+            "SDKMAN! manages `JAVA_HOME` and `PATH` for you so you can switch JDKs cleanly.",
+            "Running `mvn --version` confirms both Maven's version and the Java runtime it is using.",
+            "After installing SDKMAN!, you must open a new shell (or source its init script) before `sdk` commands work."
+          ],
+          "explanation": "SDKMAN! automatically manages `JAVA_HOME` and `PATH` via shell initialization scripts, which is why you open a new terminal after installing it. `mvn --version` outputs both the Maven version and the underlying Java version/vendor. Manual `/etc/environment` edits are unnecessary.",
+          "hints": [
+            "Why do developers use SDKMAN! instead of manually configuring `JAVA_HOME`?",
+            "What information does `mvn --version` print besides Maven's own version?"
+          ],
           "bookmarkable": true
         },
         {
           "id": "fc-wsl-home-vs-mnt",
           "block_type": "flashcard",
           "title": "WSL2 Home (~) vs Windows Mount (/mnt/c/)",
-          "front": "In WSL2, what is the difference between `/home/<user>` (`~`) and `/mnt/c/`, and where must DAI projects live?",
-          "back": "- **`/home/<user>` (`~`):** Your native Linux home directory inside WSL2. **All DAI projects must live here.**\n- **`/mnt/c/`:** Cross-OS mount of your Windows `C:\\` drive.\n- Never edit WSL project files from Windows File Explorer (`\\\\wsl.localhost\\...`), as it causes permission issues and odd file behaviors.",
-          "hint": "One is native Linux storage; the other crosses an OS bridge.",
-          "tags": ["wsl2", "filesystem", "ch00"],
-          "bookmarkable": true
-        },
-        {
-          "id": "fc-defender-exclusion",
-          "block_type": "flashcard",
-          "title": "Windows Defender Exclusion for WSL2",
-          "front": "Which PowerShell command prevents Windows Defender from slowing down WSL2 and blocking IntelliJ from detecting Java/Maven?",
-          "back": "Run in an **Administrator PowerShell**:\n\n```powershell\nAdd-MpPreference -ExclusionPath '\\\\wsl.localhost\\Ubuntu-<your-version>'\n```",
-          "hint": "Uses `Add-MpPreference -ExclusionPath` pointing to `\\\\wsl.localhost\\...`.",
-          "tags": ["wsl2", "windows", "troubleshooting"],
+          "front": "In WSL2, what is the difference between `/home/<user>` (`~`) and `/mnt/c/`, and where must projects live?",
+          "back": "- **`/home/<user>` (`~`):** Native Linux `ext4` home directory inside WSL2. **All projects must live here.**\n- **`/mnt/c/`:** Cross-OS 9P mount of your Windows `C:\\` drive (slow I/O, broken POSIX permissions).\n- Never edit WSL project files from Windows File Explorer (`\\\\wsl.localhost\\...`).",
+          "hint": "One is native Linux storage; the other crosses the 9P OS bridge.",
+          "tags": ["wsl2", "filesystem"],
           "bookmarkable": true
         },
         {
@@ -555,7 +303,7 @@
           "front": "What do `pwd`, `touch`, `rm -r`, `cp -r`, `less`, and `tail -f` do in a Unix shell?",
           "back": "- `pwd`: Print working directory\n- `touch <file>`: Create empty file\n- `rm -r <dir>`: Recursively delete directory\n- `cp -r <src> <dst>`: Recursively copy directory\n- `less <file>`: Page through file (`q` to quit)\n- `tail -f <file>`: Follow live lines (e.g., logs)",
           "hint": "Basic file navigation, creation, deletion, and log inspection.",
-          "tags": ["terminal", "unix", "ch00"],
+          "tags": ["terminal", "unix"],
           "bookmarkable": true
         },
         {
@@ -563,29 +311,9 @@
           "block_type": "flashcard",
           "title": "Git Global Identity Configuration",
           "front": "How do you set your Git author name and email globally, and is this a cryptographic proof of identity?",
-          "back": "```bash\ngit config --global user.name \"First-name Last-name\"\ngit config --global user.email \"your.email@example.com\"\n```\nNo—it is only a **label** stamped on commits. Cryptographic commit signing is configured in Chapter 02.",
+          "back": "```bash\ngit config --global user.name \"First-name Last-name\"\ngit config --global user.email \"your.email@example.com\"\n```\nNo—it is only an unverified **metadata label** stamped on commits. Cryptographic proof requires SSH or GPG commit signing.",
           "hint": "Uses `git config --global`.",
-          "tags": ["git", "ch00"],
-          "bookmarkable": true
-        },
-        {
-          "id": "fc-ai-policy",
-          "block_type": "flashcard",
-          "title": "DAI AI Tools Ground Rules",
-          "front": "What are the **three ground rules** for using AI assistants (Copilot, ChatGPT, Claude) in DAI?",
-          "back": "1. Use AI to **understand** (explain errors, explore approaches), not to generate work you cannot explain.\n2. **Accountability:** If you cannot explain your code line by line, it is not your code.\n3. **Evaluations (TE1/TE2) have no AI**—outsourcing learning will show there.",
-          "hint": "Understand, line-by-line accountability, AI-free evaluations.",
-          "tags": ["ai-policy", "ch01"],
-          "bookmarkable": true
-        },
-        {
-          "id": "fc-intellij-wsl-rules",
-          "block_type": "flashcard",
-          "title": "Two Golden Rules for IntelliJ + WSL2",
-          "front": "What are the **two rules** every Windows student must respect for IntelliJ IDEA all semester?",
-          "back": "1. Create all projects in your **WSL home** (`\\\\wsl.localhost\\Ubuntu-<version>\\home\\<user>`), never on the Windows side.\n2. Set IntelliJ's built-in terminal to open **WSL** (`wsl.exe -d Ubuntu-<your-version>`), not PowerShell.",
-          "hint": "Project location + built-in terminal shell path.",
-          "tags": ["intellij", "wsl2", "ch00"],
+          "tags": ["git"],
           "bookmarkable": true
         }
       ]

@@ -1,13 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Check, Copy, FileCode, Info, Moon, Sun, Edit3, Eye, RotateCcw } from 'lucide-react';
 import type { CodeBlock } from '../../types.js';
 import { MathText } from '../MathText.js';
 import { HighlightedCodeEditor } from '../HighlightedCodeEditor.js';
-import {
-  tokenizeCodeLine,
-  DARK_TOKEN_CLASSES,
-  LIGHT_TOKEN_CLASSES,
-} from '../../utils/syntaxHighlight.js';
+import { highlightCodeToLines } from '../../utils/syntaxHighlight.js';
 
 interface Props {
   block: CodeBlock;
@@ -32,8 +28,11 @@ export const CodeBlockView: React.FC<Props> = ({ block }) => {
 
   const isModified = code !== block.code;
   const isLight = theme === 'light';
-  const tokenClasses = isLight ? LIGHT_TOKEN_CLASSES : DARK_TOKEN_CLASSES;
   const lines = code.split('\n');
+  const highlightedLines = useMemo(
+    () => highlightCodeToLines(code, block.language),
+    [code, block.language]
+  );
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -166,13 +165,12 @@ export const CodeBlockView: React.FC<Props> = ({ block }) => {
             rows={Math.max(5, Math.min(28, lines.length + 1))}
           />
         ) : (
-        <table className="w-full border-collapse">
+        <table className={`w-full border-collapse ${isLight ? 'hljs-light' : 'hljs-dark'}`}>
           <tbody>
-            {lines.map((line, idx) => {
+            {highlightedLines.map((lineHtml, idx) => {
               const lineNum = idx + 1;
               const isHighlighted = highlightSet.has(lineNum);
               const annotation = annotationsMap.get(lineNum);
-              const tokens = tokenizeCodeLine(line, block.language);
 
               return (
                 <React.Fragment key={lineNum}>
@@ -180,8 +178,8 @@ export const CodeBlockView: React.FC<Props> = ({ block }) => {
                     className={
                       isHighlighted
                         ? isLight
-                          ? 'bg-indigo-100/70 border-l-2 border-indigo-600'
-                          : 'bg-indigo-950/70 border-l-2 border-indigo-400'
+                          ? 'bg-sky-100/70 border-l-2 border-sky-600'
+                          : 'bg-sky-950/60 border-l-2 border-sky-400'
                         : isLight
                         ? 'hover:bg-slate-100/80'
                         : 'hover:bg-slate-900/70'
@@ -194,17 +192,10 @@ export const CodeBlockView: React.FC<Props> = ({ block }) => {
                     >
                       {lineNum}
                     </td>
-                    <td className="pr-4 py-0.5 whitespace-pre">
-                      {tokens.length === 0 ? (
-                        ' '
-                      ) : (
-                        tokens.map((tok, tIdx) => (
-                          <span key={tIdx} className={tokenClasses[tok.type]}>
-                            {tok.value}
-                          </span>
-                        ))
-                      )}
-                    </td>
+                    <td
+                      className="pr-4 py-0.5 whitespace-pre"
+                      dangerouslySetInnerHTML={{ __html: lineHtml || ' ' }}
+                    />
                   </tr>
                   {annotation && (
                     <tr>

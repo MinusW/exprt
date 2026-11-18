@@ -116,7 +116,7 @@
           "id": "th-race-conditions",
           "block_type": "markdown",
           "title": "Why Shared State Breaks: Race Conditions & Exhaustion",
-          "content": "When multiple threads access the same mutable variable or collection simultaneously, several classes of bugs emerge:\n\n1. **Race Conditions (Lost Updates):** Even a seemingly single-line Java statement like `count++` is **not atomic**. At the CPU/bytecode level, it consists of three separate steps:\n   1. **Read** the current value of `count` from memory.\n   2. **Add 1** to that value in a register.\n   3. **Write** the new value back to memory.\n\n   Because the OS can preempt a thread *between* any of those steps—or two cores can execute them simultaneously—two threads can read the same `count`, both add 1, and both write back the same result. One increment is **silently lost**. In chapter 09's benchmark, 8 threads each running `count++` 100,000 times (expecting `800,000`) produced between `260,000` and `400,000`!\n\n2. **Visibility & Stale Reads:** Without proper synchronization, a thread may read a stale value while another thread is modifying it, or two threads may each run `containsKey(name)` before either calls `put(name, ...)`, allowing both to claim the same unique name.\n\n3. **Deadlocks:** When threads acquire locks on multiple shared resources in conflicting orders, each waits forever for the other to release its lock.\n\n4. **Resource Exhaustion (`OutOfMemoryError`):** Operating-system threads are limited and consume substantial stack memory (~1 MB each). Spawning an unbounded number of OS threads—one per incoming connection—can exhaust memory or OS thread limits under heavy load.",
+          "content": "When multiple threads access the same mutable variable or collection simultaneously, several classes of bugs emerge:\n\n1. **Race Conditions (Lost Updates):** Even a seemingly single-line Java statement like `count++` is **not atomic**. At the CPU/bytecode level, it consists of three separate steps:\n   1. **Read** the current value of `count` from memory.\n   2. **Add 1** to that value in a register.\n   3. **Write** the new value back to memory.\n\n   Because the OS can preempt a thread *between* any of those steps—or two cores can execute them simultaneously—two threads can read the same `count`, both add 1, and both write back the same result. One increment is **silently lost**. In practice, 8 threads each running `count++` 100,000 times (expecting `800,000`) typically produce only `260,000`–`400,000`!\n\n2. **Visibility & Stale Reads:** Without proper synchronization, a thread may read a stale value while another thread is modifying it, or two threads may each run `containsKey(name)` before either calls `put(name, ...)`, allowing both to claim the same unique name.\n\n3. **Deadlocks:** When threads acquire locks on multiple shared resources in conflicting orders, each waits forever for the other to release its lock.\n\n4. **Resource Exhaustion (`OutOfMemoryError`):** Operating-system threads are limited and consume substantial stack memory (~1 MB each). Spawning an unbounded number of OS threads—one per incoming connection—can exhaust memory or OS thread limits under heavy load.",
           "bookmarkable": true
         },
         {
@@ -165,22 +165,6 @@
           "difficulty": 2,
           "related_block_id": "th-race-conditions",
           "bookmarkable": true
-        },
-        {
-          "id": "qz-count-plusplus-steps",
-          "block_type": "quiz_question",
-          "question_type": "fill_in_the_blank",
-          "title": "Terminology: Interleaved Shared-State Bug",
-          "question": "When the outcome of a concurrent program depends on the unpredictable order in which threads read and write shared data—such as two threads executing `count++` simultaneously—this bug is called a ___ condition.",
-          "correct_answer": "race",
-          "explanation": "A **race condition** occurs when multiple threads access and mutate shared resources concurrently and the final result depends on the timing/interleaving of thread execution.",
-          "hints": [
-            "The threads are 'racing' to read and write the same variable.",
-            "It is a two-word phrase: '___ condition'."
-          ],
-          "difficulty": 1,
-          "related_block_id": "th-race-conditions",
-          "bookmarkable": true
         }
       ]
     },
@@ -193,7 +177,7 @@
           "id": "th-iterative-vs-concurrent",
           "block_type": "markdown",
           "title": "Handling One Client at a Time: The Iterative Server",
-          "content": "A server that serves clients **one after another** until each disconnects is called an **iterative server**.\n\nIn the hotline analogy from Chapter 08, an iterative server is a hotline with **one operator**: while the operator talks to Caller 1, Callers 2 and 3 hear *\"please hold\"* (the OS keeps their TCP connections queued in the `ServerSocket` backlog) until Caller 1 hangs up and the server calls `accept()` again.\n\n> [!WARNING]\n> **Subtle Trap — `TcpServerSingleThreadExample`:**\n> Even though `TcpServerSingleThreadExample` uses two threads (the `main` thread calling `accept()` and **one** worker thread from `Executors.newSingleThreadExecutor()`), it is **still an iterative server**! With 3 clients that each take 10 seconds, the clients receive their answers after **10, 20, and 30 seconds** because the single worker drains its queue one client at a time.\n>\n> *(Bonus bug from the chapter)*: `TcpServerSingleThreadExample` also uses `StandardCharsets.US_ASCII` instead of `UTF_8`, which corrupts the 4-byte UTF-8 wave emoji `👋` into `` and encodes outgoing emojis as `?`!",
+          "content": "A server that serves clients **one after another** until each disconnects is called an **iterative server**.\n\nIn the hotline analogy, an iterative server is a hotline with **one operator**: while the operator talks to Caller 1, Callers 2 and 3 hear *\"please hold\"* (the OS keeps their TCP connections queued in the `ServerSocket` backlog) until Caller 1 hangs up and the server calls `accept()` again.\n\n> [!WARNING]\n> **Subtle Trap — `Executors.newSingleThreadExecutor()`:**\n> Even when a server uses two threads (the `main` thread calling `accept()` and **one** worker thread from `Executors.newSingleThreadExecutor()`), it is **still an iterative server**! With 3 clients that each take 10 seconds, the clients receive their answers after **10, 20, and 30 seconds** because the single worker drains its queue one client at a time.",
           "bookmarkable": true
         },
         {
@@ -225,7 +209,7 @@
             "20s, 20s, and 20s"
           ],
           "correct_answer": "10s, 10s, and 20s",
-          "explanation": "A fixed thread pool of size 2 has 2 worker threads. Client 1 and Client 2 start immediately at `t = 0s` and finish at `t = 10s`. Client 3 waits in the executor's unbounded queue until one of the 2 threads becomes free at `t = 10s`, then takes 10 seconds to finish at `t = 20s`.\n\n* `10s, 20s, 30s` is the timing of an iterative server (`TcpServerSimpleExample` or `newSingleThreadExecutor()`).\n* `10s, 10s, 10s` occurs when at least 3 threads (e.g., `newCachedThreadPool()` or `newVirtualThreadPerTaskExecutor()`) are available.\n* `20s, 20s, 20s` would imply all clients blocked each other for double the duration, which does not happen.",
+          "explanation": "A fixed thread pool of size 2 has 2 worker threads. Client 1 and Client 2 start immediately at `t = 0s` and finish at `t = 10s`. Client 3 waits in the executor's unbounded queue until one of the 2 threads becomes free at `t = 10s`, then takes 10 seconds to finish at `t = 20s`.\n\n* `10s, 20s, 30s` is the timing of an iterative server (e.g., a single-threaded accept loop or `newSingleThreadExecutor()`).\n* `10s, 10s, 10s` occurs when at least 3 threads (e.g., `newCachedThreadPool()` or `newVirtualThreadPerTaskExecutor()`) are available.\n* `20s, 20s, 20s` would imply all clients blocked each other for double the duration, which does not happen.",
           "hints": [
             "How many clients can the pool execute simultaneously at `t = 0s`?",
             "When does the third client leave the waiting queue and begin its 10-second work?"
@@ -323,8 +307,8 @@
           "correct_answer": "close() is called automatically, initiating shutdown and blocking until all submitted tasks finish.",
           "explanation": "Since Java 19, `ExecutorService` extends `AutoCloseable`. Its default `close()` implementation calls `shutdown()` and awaits termination until all previously submitted tasks complete.\n\n* It does **not** forcibly kill running tasks.\n* It does **not** return immediately while tasks are still running; it waits for them.\n* `ExecutorService` has implemented `AutoCloseable` since Java 19.",
           "hints": [
-            "Remember the UDP `Receiver` example from the chapter: two workers run inside `try (ExecutorService ...)`.",
-            "Why doesn't `call()` return `0` before the two workers finish?"
+            "What does `ExecutorService.close()` do when execution leaves the `try` block?",
+            "Why doesn't the `try` block finish before running worker tasks complete?"
           ],
           "difficulty": 2,
           "related_block_id": "th-runnable-callable-executor",
@@ -363,7 +347,7 @@
           "id": "th-platform-vs-virtual",
           "block_type": "markdown",
           "title": "Platform Threads (1:1) vs. Virtual Threads (M:N, JEP 444)",
-          "content": "Since **Java 21**, `java.lang.Thread` comes in two flavors (checkable with `thread.isVirtual()`):\n\n1. **Platform Threads (1:1 OS Thread):**\n   * Backed by **one operating-system thread** for their entire lifetime (`new Thread(...)`, `newFixedThreadPool`, `newCachedThreadPool`).\n   * Heavyweight (~1 MB stack) and expensive to context-switch.\n   * Even when a platform thread is blocked waiting on `socket.readLine()` or `Thread.sleep()`, it **holds its OS thread hostage**, doing nothing.\n\n2. **Virtual Threads (M:N JVM-Managed):**\n   * Managed by the JVM, which schedules **many virtual threads** onto a **few platform carrier threads**.\n   * Extremely lightweight and fast to create—a server can easily spawn **thousands or millions**, one per client.\n   * **The Magic of Unmounting:** When a virtual thread blocks on network I/O (`readLine()`, `accept()`) or `Thread.sleep()`, the JVM **unmounts** it from its carrier thread and runs another virtual thread on that carrier in the meantime. When data arrives, the JVM remounts the virtual thread onto a free carrier.\n\n> [!TIP]\n> **Chapter 09 Benchmark Reality (`SLEEP` vs. `COMPUTE`):**\n> * **I/O-Bound (`SLEEP` 100 ms per request):** `fixed-14` achieved ~134 req/s (each thread blocked for 100 ms), whereas **`virtual` achieved 4,500–5,800 req/s**!\n> * **CPU-Bound (`COMPUTE` 6 ms of math):** `fixed-14` achieved 1,310–1,530 req/s, and **`virtual` achieved 1,330–1,500 req/s**.\n>\n> **Rule of Thumb:** Virtual threads are **not faster** than platform threads—they are **lighter**. Use virtual threads (`Executors.newVirtualThreadPerTaskExecutor()`) for **I/O-bound** network servers, and a fixed pool (~1 thread per core) for pure **CPU-bound** computation.",
+          "content": "Since **Java 21**, `java.lang.Thread` comes in two flavors (checkable with `thread.isVirtual()`):\n\n1. **Platform Threads (1:1 OS Thread):**\n   * Backed by **one operating-system thread** for their entire lifetime (`new Thread(...)`, `newFixedThreadPool`, `newCachedThreadPool`).\n   * Heavyweight (~1 MB stack) and expensive to context-switch.\n   * Even when a platform thread is blocked waiting on `socket.readLine()` or `Thread.sleep()`, it **holds its OS thread hostage**, doing nothing.\n\n2. **Virtual Threads (M:N JVM-Managed):**\n   * Managed by the JVM, which schedules **many virtual threads** onto a **few platform carrier threads**.\n   * Extremely lightweight and fast to create—a server can easily spawn **thousands or millions**, one per client.\n   * **The Magic of Unmounting:** When a virtual thread blocks on network I/O (`readLine()`, `accept()`) or `Thread.sleep()`, the JVM **unmounts** it from its carrier thread and runs another virtual thread on that carrier in the meantime. When data arrives, the JVM remounts the virtual thread onto a free carrier.\n\n> [!TIP]\n> **I/O-Bound vs. CPU-Bound Benchmark (`SLEEP` vs. `COMPUTE`):**\n> * **I/O-Bound (`SLEEP` 100 ms per request):** `fixed-14` achieved ~134 req/s (each thread blocked for 100 ms), whereas **`virtual` achieved 4,500–5,800 req/s**!\n> * **CPU-Bound (`COMPUTE` 6 ms of math):** `fixed-14` achieved 1,310–1,530 req/s, and **`virtual` achieved 1,330–1,500 req/s**.\n>\n> **Rule of Thumb:** Virtual threads are **not faster** than platform threads—they are **lighter**. Use virtual threads (`Executors.newVirtualThreadPerTaskExecutor()`) for **I/O-bound** network servers, and a fixed pool (~1 thread per core) for pure **CPU-bound** computation.",
           "bookmarkable": true
         },
         {
@@ -438,25 +422,9 @@
           "explanation": "Virtual threads are **lighter**, not **faster**. Because pure computation never blocks on I/O, virtual threads never unmount to free up carrier threads for other work—the 8 CPU cores remain the hard bottleneck, so `newVirtualThreadPerTaskExecutor()` performs comparably to `newFixedThreadPool(8)`.\n\n* Virtual threads do not speed up CPU instructions.\n* Virtual threads run on carrier threads scheduled across all available CPU cores.\n* 8 virtual threads use negligible memory and will not cause `OutOfMemoryError`.",
           "hints": [
             "When does a virtual thread unmount from its carrier thread?",
-            "Recall the `COMPUTE` vs. `SLEEP` benchmark table from Chapter 09."
+            "Contrast what happens when a thread blocks on I/O versus when it runs nonstop math."
           ],
           "difficulty": 4,
-          "related_block_id": "th-platform-vs-virtual",
-          "bookmarkable": true
-        },
-        {
-          "id": "qz-virtual-thread-unmount",
-          "block_type": "quiz_question",
-          "question_type": "fill_in_the_blank",
-          "title": "Carrier Thread Multiplexing",
-          "question": "When a virtual thread blocks on `socket.readLine()` or `Thread.sleep()`, the JVM ___ it from its carrier thread so another virtual thread can run on that carrier in the meantime.",
-          "correct_answer": "unmounts",
-          "explanation": "When a virtual thread hits a blocking operation (such as network I/O or `Thread.sleep()`), the JVM **unmounts** it from its underlying platform carrier thread and mounts another ready virtual thread.",
-          "hints": [
-            "Think of the verb describing detaching a virtual thread from its carrier thread.",
-            "Opposite of 'mounts'."
-          ],
-          "difficulty": 2,
           "related_block_id": "th-platform-vs-virtual",
           "bookmarkable": true
         }

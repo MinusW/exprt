@@ -228,7 +228,7 @@
           "id": "th-github-entities",
           "block_type": "markdown",
           "title": "GitHub Collaboration: Users, Orgs, Issues, PRs & Forks",
-          "content": "While **Git** is the distributed version control tool running on your machine, **GitHub** is the cloud platform hosting your remote repositories and adding social collaboration tools on top:\n\n* **Users vs. Organizations:** A repository belongs either to a personal user account (e.g., your profile README repo `<username>/<username>`) or to an **Organization** shared by a team (such as your DAI practical work team).\n* **Issues:** Track bugs, tasks, and feature ideas with assignees, labels, and discussion threads. Opening an issue *before* coding prevents duplicated or unwanted work.\n* **Pull Requests (PRs):** Propose merging commits from a feature branch into `main`. Teammates review the diff, leave line-by-line comments, request changes, or approve before merging.\n* **Forks:** Your own server-side copy of *someone else's* repository—the standard way to contribute to open-source projects where you do not have direct write access."
+          "content": "While **Git** is the distributed version control tool running on your machine, **GitHub** is the cloud platform hosting your remote repositories and adding social collaboration tools on top:\n\n* **Users vs. Organizations:** A repository belongs either to a personal user account (e.g., your profile README repo `<username>/<username>`) or to an **Organization** shared by a team (such as a project team).\n* **Issues:** Track bugs, tasks, and feature ideas with assignees, labels, and discussion threads. Opening an issue *before* coding prevents duplicated or unwanted work.\n* **Pull Requests (PRs):** Propose merging commits from a feature branch into `main`. Teammates review the diff, leave line-by-line comments, request changes, or approve before merging.\n* **Forks:** Your own server-side copy of *someone else's* repository—the standard way to contribute to open-source projects where you do not have direct write access."
         },
         {
           "id": "th-ssh-and-signing",
@@ -269,7 +269,7 @@
           "id": "th-markdown-why-and-syntax",
           "block_type": "markdown",
           "title": "Why Markdown? Diffable, Portable & GFM",
-          "content": "Code is only half of your deliverable—the other half (READMEs, protocol specs, PW reports) is written in **Markdown** (created by John Gruber and Aaron Swartz in 2004).\n\nWhy use Markdown instead of `.docx` inside a Git repository?\n1. **Diffable:** Because Markdown is plain text, `git diff` shows the exact sentence you changed. A `.docx` file is a binary ZIP archive—Git cannot show meaningful line diffs or merge two teammates' edits.\n2. **Portable:** The same `.md` file renders natively on GitHub, converts to HTML/PDF/slides via Pandoc or Quarto, and remains readable in any plain-text editor.\n\n### CommonMark vs. GitHub Flavored Markdown (GFM)\n* **CommonMark:** The strict, unambiguous baseline specification.\n* **GFM:** CommonMark *plus* **tables**, **task lists** (`- [ ]`), **strikethrough** (`~~text~~`), and **autolinks**—the dialect GitHub renders in READMEs, Issues, and PRs.\n\n### Two Classic Pitfalls to Avoid\n1. **Missing blank lines:** A blank line separates blocks. A list glued immediately below a paragraph with no blank line may fail to render as a list.\n2. **Single line breaks in `.md` files vs. GitHub Issues:** In `.md` files, a single newline inside a paragraph is ignored (so wrapping at 80 chars still renders as one paragraph). In GitHub Issues/PRs, however, GitHub turns every newline into a visible `<br>` line break."
+          "content": "Code is only half of your deliverable—the other half (READMEs, protocol specs, technical reports) is written in **Markdown** (created by John Gruber and Aaron Swartz in 2004).\n\nWhy use Markdown instead of `.docx` inside a Git repository?\n1. **Diffable:** Because Markdown is plain text, `git diff` shows the exact sentence you changed. A `.docx` file is a binary ZIP archive—Git cannot show meaningful line diffs or merge two teammates' edits.\n2. **Portable:** The same `.md` file renders natively on GitHub, converts to HTML/PDF/slides via Pandoc or Quarto, and remains readable in any plain-text editor.\n\n### CommonMark vs. GitHub Flavored Markdown (GFM)\n* **CommonMark:** The strict, unambiguous baseline specification.\n* **GFM:** CommonMark *plus* **tables**, **task lists** (`- [ ]`), **strikethrough** (`~~text~~`), and **autolinks**—the dialect GitHub renders in READMEs, Issues, and PRs.\n\n### Two Classic Pitfalls to Avoid\n1. **Missing blank lines:** A blank line separates blocks. A list glued immediately below a paragraph with no blank line may fail to render as a list.\n2. **Single line breaks in `.md` files vs. GitHub Issues:** In `.md` files, a single newline inside a paragraph is ignored (so wrapping at 80 chars still renders as one paragraph). In GitHub Issues/PRs, however, GitHub turns every newline into a visible `<br>` line break."
         },
         {
           "id": "code-markdown-gfm",
@@ -299,7 +299,7 @@
           "block_type": "sandbox",
           "runtime": "python",
           "title": "Build a Mini Markdown / GFM Linter",
-          "instructions": "Write `lint_markdown(md)` to catch two common Markdown mistakes from Chapter 02:\n1. **Bare code fence:** An opening ` ``` ` line with no language tag (e.g., `line.strip() == '```'` when not currently inside a code block).\n2. **Glued list:** A list item (`- ` or `* `) immediately following a non-empty non-list line without a blank line in between.\nPrint each warning found.",
+          "instructions": "Write `lint_markdown(md)` to catch two common Markdown mistakes:\n1. **Bare code fence:** An opening ` ``` ` line with no language tag (e.g., `line.strip() == '```'` when not currently inside a code block).\n2. **Glued list:** A list item (`- ` or `* `) immediately following a non-empty non-list line without a blank line in between.\nPrint each warning found.",
           "starter_code": "sample_md = \"\"\"# Report\nHere are the steps:\n- Step 1\n- Step 2\n\n```\necho hello\n```\n\"\"\"\n\ndef lint_markdown(md):\n    warnings = []\n    lines = md.splitlines()\n    in_code = False\n    for i, line in enumerate(lines):\n        stripped = line.strip()\n        # TODO: toggle in_code on ``` and warn if opening fence has no language\n        # TODO: warn if not in_code, line starts with '- ', and previous line is non-empty text (not a list)\n    return warnings\n\nfor w in lint_markdown(sample_md):\n    print(w)",
           "expected_output": "Line 3: Missing blank line before list\nLine 6: Code fence missing language tag",
           "solution": "sample_md = \"\"\"# Report\nHere are the steps:\n- Step 1\n- Step 2\n\n```\necho hello\n```\n\"\"\"\n\ndef lint_markdown(md):\n    warnings = []\n    lines = md.splitlines()\n    in_code = False\n    for i, line in enumerate(lines):\n        stripped = line.strip()\n        if stripped.startswith('```'):\n            if not in_code and stripped == '```':\n                warnings.append(f'Line {i + 1}: Code fence missing language tag')\n            in_code = not in_code\n            continue\n        if not in_code and stripped.startswith('- ') and i > 0:\n            prev = lines[i - 1].strip()\n            if prev and not prev.startswith('- '):\n                warnings.append(f'Line {i + 1}: Missing blank line before list')\n    return warnings\n\nfor w in lint_markdown(sample_md):\n    print(w)",
@@ -527,29 +527,29 @@
           ],
           "explanation": "Because Markdown is plain text, it is **diffable** (Git shows exact changed lines and can merge non-overlapping edits) and **portable** (readable anywhere, rendered by GitHub, and convertible to PDF/HTML/DOCX). Fenced code blocks (` ```java `) provide syntax highlighting for readers, not automatic compilation.",
           "hints": [
-            "Recall the two core properties highlighted in the chapter: *diffable* and *portable*.",
+            "Think about how Git handles plain text vs. binary files, and how Markdown converts to other formats.",
             "Does Markdown execute or compile code blocks?"
           ]
         },
         {
-          "id": "qz-pr-workflow-order",
+          "id": "qz-gitignore-already-tracked",
           "block_type": "quiz_question",
           "question_type": "multiple_choice",
-          "difficulty": 2,
-          "related_block_id": "th-team-workflows",
-          "title": "Standard Team Pull-Request Cycle",
-          "question": "In the recommended team Pull-Request workflow, who should review and merge a Pull Request?",
+          "difficulty": 3,
+          "related_block_id": "th-gitignore-rules",
+          "title": "Untracking an Already-Committed File",
+          "question": "You accidentally committed `.env` (containing API keys) in an earlier commit. You now add `.env` to `.gitignore`, but `git status` still shows modifications to `.env` whenever you edit it. Which command stops Git from tracking `.env` while keeping the file on your local disk?",
           "options": [
-            "A teammate other than the PR author.",
-            "The PR author immediately after pushing, without waiting for anyone else.",
-            "GitHub's automated bot before any human reads the diff.",
-            "Only the course professor."
+            "`git rm --cached .env`",
+            "`git rm .env`",
+            "`git add --force .gitignore`",
+            "`git clean -fd .env`"
           ],
-          "correct_answer": "A teammate other than the PR author.",
-          "explanation": "In a team Pull-Request workflow, **a teammate (not the author)** reviews the diff, leaves feedback or approves, and merges the PR. This catches bugs early, spreads knowledge across the team, and keeps `main` clean.\n\n* Self-merging without review defeats the purpose of a PR.\n* Bots cannot judge architectural or logic correctness on their own.",
+          "correct_answer": "`git rm --cached .env`",
+          "explanation": "`.gitignore` only applies to **untracked** files. Once a file is in the index/history, Git continues tracking it until you remove it from the Staging Area (index) with `git rm --cached .env` and commit that removal. The `--cached` flag leaves the file intact on your local disk.\n\n* `git rm .env` deletes `.env` from both the index and your working directory.\n* `git add --force .gitignore` does not untrack already-committed files.\n* `git clean -fd` only removes untracked files, not tracked ones.",
           "hints": [
-            "Think about why Pull Requests exist in a team of developers.",
-            "Who catches blind spots best—the author who just wrote the code, or a fresh pair of eyes?"
+            "Does `.gitignore` affect files that are already tracked in the index?",
+            "Which `git rm` flag removes a file from the index without deleting it from your working directory?"
           ]
         },
         {
@@ -629,7 +629,7 @@
           "block_type": "flashcard",
           "title": "Fork vs. Branch on GitHub",
           "front": "When do you use a **branch** vs. a **fork** to contribute on GitHub?",
-          "back": "* **Branch:** When you have **write access** to the repository (e.g., your PW team repo).\n* **Fork:** Your own copy of someone else's repo, used when you have **no write access** (e.g., open-source contributions).",
+          "back": "* **Branch:** When you have **write access** to the repository (e.g., your team repo).\n* **Fork:** Your own copy of someone else's repo, used when you have **no write access** (e.g., open-source contributions).",
           "hint": "Write access vs. no write access.",
           "tags": ["github", "workflows"]
         },

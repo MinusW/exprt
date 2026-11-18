@@ -56,8 +56,8 @@
         {
           "id": "th-port-numbers",
           "block_type": "markdown",
-          "title": "Port Numbers: Street Address vs. Apartment Number",
-          "content": "Think of an **IP address** as a building's street address and a **port number** as the apartment number inside that building. An IP identifies the *machine*; a port (a 16-bit integer from `0` to `65535`) identifies the specific *program* listening on that machine.\n\nTCP and UDP maintain completely separate port spaces: **TCP port 53** and **UDP port 53** are distinct endpoints that two different programs (or protocols) can use independently.\n\n| Port Range | Category | Common Examples |\n| :--- | :--- | :--- |\n| **`0–1023`** | **System (Well-Known) Ports** | `20/21` FTP, `22` SSH, `23` Telnet, `25/465/587` SMTP, `53` DNS, `80/443` HTTP/HTTPS, `110/995` POP3, `143/993` IMAP |\n| **`1024–49151`** | **User (Registered) Ports** | `1025` Mailpit SMTP, `3306` MySQL, `5432` PostgreSQL, `6379` Redis, `8025` Mailpit Web UI, `8080` HTTP alt |\n| **`49152–65535`** | **Dynamic / Ephemeral Ports** | Temporary client-side source ports and private services (e.g., `51820` WireGuard) |\n\n> [!NOTE]\n> On Linux and macOS, binding a server to a well-known port below `1024` requires elevated privileges (`root` or `CAP_NET_BIND_SERVICE`). That is why mock servers like Mailpit listen on `1025` and `8025` by default."
+          "title": "TCP/UDP Ports & Privilege Boundaries",
+          "content": "An IP address identifies the *machine*; a **port** (a 16-bit integer from `0` to `65535`) identifies the specific *process* listening on that machine. TCP and UDP maintain completely separate port spaces: **TCP port 53** and **UDP port 53** are distinct endpoints.\n\n| Port Range | Category | Mail & Networking Examples |\n| :--- | :--- | :--- |\n| **`0–1023`** | **System (Well-Known) Ports** | `25/465/587` SMTP, `53` DNS, `80/443` HTTP/HTTPS, `110/995` POP3, `143/993` IMAP |\n| **`1024–49151`** | **User (Registered) Ports** | `1025` Mailpit SMTP, `8025` Mailpit Web UI, `8080` HTTP alt |\n| **`49152–65535`** | **Dynamic / Ephemeral Ports** | Temporary client-side source ports |\n\n> [!NOTE]\n> On Linux and macOS, binding a server to a port below `1024` requires elevated privileges (`root` or `CAP_NET_BIND_SERVICE`). That is why unprivileged mock servers like Mailpit listen on `1025` and `8025` by default."
         },
         {
           "id": "code-dns-dig-lookup",
@@ -339,7 +339,7 @@
     {
       "id": "sec-synthesis-retrieval",
       "title": "7. Synthesis, Reflection & Retrieval Practice",
-      "description": "Solidify your mental model with Feynman articulation, failure-mode reflection, 10 diagnostic quiz questions, and 10 spaced-repetition flashcards.",
+      "description": "Solidify your mental model with Feynman articulation, failure-mode reflection, and 10 diagnostic quiz questions.",
       "blocks": [
         {
           "id": "ref-feynman-envelope-spoofing",
@@ -449,7 +449,7 @@
           "explanation": "Mailpit tolerates `\\n` on individual SMTP commands, so `EHLO`, `MAIL FROM`, `RCPT TO`, and `DATA` appear to work. However, RFC 5321 requires the exact 5-byte sequence `\\r\\n.\\r\\n` to end `DATA`. Without `-C`, `ncat` sends `\\n.\\n`, so Mailpit keeps waiting for the real terminator until its 5-minute timeout (`421`).\n\n* `ncat` uses TCP by default (UDP requires `-u`).\n* TLS requires `--ssl`, not `-C`.",
           "hints": [
             "What line ending does your terminal's Enter key produce versus what SMTP requires?",
-            "Recall Exercise 2: why did `QUIT` also receive no response?"
+            "Why did `QUIT` also receive no response—what phase is the server still in?"
           ]
         },
         {
@@ -577,7 +577,7 @@
           "explanation": "`354` is the `3xx` intermediate success code telling the client to proceed with sending the RFC 5322 headers, blank line, body, and `\\r\\n.\\r\\n` terminator.",
           "hints": [
             "It is a 3-digit code starting with `3` (intermediate \"go ahead\" status).",
-            "Check line 12 of the annotated SMTP wire transcript (`Start mail input`)."
+            "Recall the `3xx` code that tells the client to begin sending the message headers and body."
           ]
         },
         {
@@ -592,7 +592,7 @@
           "explanation": "DMARC policies are always published as `TXT` records at the `_dmarc.` subdomain of the organizational domain (e.g., `_dmarc.heig-vd.ch`).",
           "hints": [
             "Starts with an underscore `_` followed by the acronym.",
-            "Include the trailing dot so it prefixes `heig-vd.ch` cleanly (7 characters total)."
+            "Include the trailing dot so it forms a valid subdomain prefix before `heig-vd.ch`."
           ]
         },
         {
@@ -602,7 +602,7 @@
           "difficulty": 2,
           "related_block_id": "code-smtp-wire-transcript",
           "title": "SMTP Reply Code First Digit Semantics",
-          "question": "An SMTP server responds to a `RCPT TO:` command with `451 Temporary local error`. What does the leading digit `4` tell the sending MTA?",
+          "question": "An SMTP server responds to a `RCPT TO:` command with `451 Requested action aborted: local error in processing`. What does the leading digit `4` tell the sending MTA?",
           "options": [
             "Temporary failure: keep the email queued and try again later.",
             "Permanent failure: bounce the email immediately and never retry.",
@@ -612,8 +612,8 @@
           "correct_answer": "Temporary failure: keep the email queued and try again later.",
           "explanation": "In SMTP, the first digit classifies the outcome: `2` = success, `3` = intermediate/go ahead, `4` = temporary failure (retry later), `5` = permanent failure (do not retry, bounce to `MAIL FROM`).",
           "hints": [
-            "Compare `4xx` vs `5xx` in HTTP and SMTP.",
-            "Notice the message text `Temporary local error`—should the sending MTA give up permanently or queue for retry?"
+            "Compare `4xx` vs `5xx` in SMTP reply codes.",
+            "Distinguish between a transient server-side condition and a permanent rejection like `550 No such user`."
           ]
         }
       ]

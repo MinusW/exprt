@@ -82,3 +82,110 @@
     font-size: 1.38em;
   }
 }
+
+/* Syntax highlighting themes (highlight.js) for both dark and light code blocks/editors */
+.hljs-dark {
+  color: #f1f5f9;
+}
+.hljs-dark .hljs-comment,
+.hljs-dark .hljs-quote {
+  color: #94a3b8;
+  font-style: italic;
+}
+.hljs-dark .hljs-keyword,
+.hljs-dark .hljs-selector-tag,
+.hljs-dark .hljs-subst {
+  color: #7dd3fc;
+  font-weight: 500;
+}
+.hljs-dark .hljs-type,
+.hljs-dark .hljs-built_in,
+.hljs-dark .hljs-title.class_,
+.hljs-dark .hljs-class .hljs-title {
+  color: #5eead4;
+}
+.hljs-dark .hljs-title,
+.hljs-dark .hljs-title.function_,
+.hljs-dark .hljs-section {
+  color: #93c5fd;
+}
+.hljs-dark .hljs-string,
+.hljs-dark .hljs-doctag,
+.hljs-dark .hljs-regexp {
+  color: #6ee7b7;
+}
+.hljs-dark .hljs-number,
+.hljs-dark .hljs-literal,
+.hljs-dark .hljs-symbol,
+.hljs-dark .hljs-bullet {
+  color: #fcd34d;
+}
+.hljs-dark .hljs-meta,
+.hljs-dark .hljs-meta .hljs-keyword {
+  color: #fda4af;
+}
+.hljs-dark .hljs-attr,
+.hljs-dark .hljs-attribute,
+.hljs-dark .hljs-property,
+.hljs-dark .hljs-name,
+.hljs-dark .hljs-tag {
+  color: #bae6fd;
+}
+.hljs-dark .hljs-variable,
+.hljs-dark .hljs-template-variable,
+.hljs-dark .hljs-params {
+  color: #e2e8f0;
+}
+
+.hljs-light {
+  color: #0f172a;
+}
+.hljs-light .hljs-comment,
+.hljs-light .hljs-quote {
+  color: #64748b;
+  font-style: italic;
+}
+.hljs-light .hljs-keyword,
+.hljs-light .hljs-selector-tag,
+.hljs-light .hljs-subst {
+  color: #0369a1;
+  font-weight: 600;
+}
+.hljs-light .hljs-type,
+.hljs-light .hljs-built_in,
+.hljs-light .hljs-title.class_,
+.hljs-light .hljs-class .hljs-title {
+  color: #0f766e;
+}
+.hljs-light .hljs-title,
+.hljs-light .hljs-title.function_,
+.hljs-light .hljs-section {
+  color: #1d4ed8;
+}
+.hljs-light .hljs-string,
+.hljs-light .hljs-doctag,
+.hljs-light .hljs-regexp {
+  color: #047857;
+}
+.hljs-light .hljs-number,
+.hljs-light .hljs-literal,
+.hljs-light .hljs-symbol,
+.hljs-light .hljs-bullet {
+  color: #b45309;
+}
+.hljs-light .hljs-meta,
+.hljs-light .hljs-meta .hljs-keyword {
+  color: #be123c;
+}
+.hljs-light .hljs-attr,
+.hljs-light .hljs-attribute,
+.hljs-light .hljs-property,
+.hljs-light .hljs-name,
+.hljs-light .hljs-tag {
+  color: #0284c7;
+}
+.hljs-light .hljs-variable,
+.hljs-light .hljs-template-variable,
+.hljs-light .hljs-params {
+  color: #1e293b;
+}
