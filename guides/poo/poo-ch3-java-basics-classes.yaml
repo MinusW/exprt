@@ -1,0 +1,1012 @@
+id: poo-ch3-java-basics-classes
+title: "Chapter 3: Java Foundations — JVM, Types, References & Classes"
+description: "Complete foundation of Java 21 for POO: history and LTS evolution, compiled vs. interpreted trade-offs, JVM bytecode and JIT execution, primitive types and wrappers, reference semantics and immutable Strings, classes, constructors, parameter passing, this, and main()."
+estimated_minutes: 55
+category: "Object-Oriented Programming"
+track: "POO - Programmation Orientée Objet (TE1)"
+track_order: 3
+difficulty_level: beginner
+tags:
+  - java
+  - jvm
+  - oop
+  - poo
+  - te1
+  - types
+  - references
+  - classes
+prerequisites:
+  - poo-ch1-oop-fundamentals
+  - poo-ch2-uml-modeling
+layout_mode: single-page
+sources:
+  - title: "HEIG-VD POO — 3 Java 1"
+    url_or_path: "sources/POO_TE1/3 Java 1.pdf"
+    notes: "Slides 1–33: Java introduction, JVM/bytecode/compilation, primitive types & references, memory model, strings, classes, attributes, methods, constructors, this, overloading, parameter passing."
+
+sections:
+  - id: sec-java-jvm
+    title: "1. Java Ecosystem, Compilation & the JVM"
+    description: "Origins of Java, LTS release milestones, compiled vs. interpreted trade-offs, and how the JVM combines bytecode interpretation with Just-In-Time (JIT) compilation."
+    blocks:
+      - id: th-java-overview
+        block_type: markdown
+        title: "Java Origins, LTS Versions & Language Characteristics"
+        content: |
+          ### Origins & Evolution (Slides 4–5)
+          Java originated at **Sun Microsystems** as a language for **embedded systems** (*systèmes embarqués*), initially named **Oak** before becoming **Java**. Embedded devices shared the exact same engineering requirements as the emerging Internet:
+          * **Reliability & security** (*fiabilité, sécurité*)
+          * **CPU independence** (*indépendance vis-à-vis du processeur*)
+          * **External interaction** (*interactions avec l'extérieur*) and **error recovery** (*récupération d'erreurs*)
+
+          Although early fame came from browser *applets*, Java evolved into a standard platform for enterprise backends, web services, and mobile development (Android).
+
+          #### Long-Term Support (LTS) Milestones
+          This course targets **Java 21 (LTS)**. Know the major turning points in Java's evolution:
+
+          | LTS Version | Year | Key Additions |
+          | :--- | :--- | :--- |
+          | **Java 5** | 2004 | Major release: generics (*généricité*), enums (*types énumérés*), enhanced `for-each` loop |
+          | **Java 8** | 2014 | Major release: default interface methods (*méthodes par défaut*), lambda expressions |
+          | **Java 11** | 2018 | Minor release: `var` local type inference (*inférence de type*), removal of applets |
+          | **Java 17** | 2021 | Minor release: text blocks (*blocs de texte*), `switch` expressions, pattern matching for `instanceof`, `record`, `sealed` classes |
+          | **Java 21** | 2023 | Minor release (course target): record patterns, pattern matching for `switch`, virtual threads, sequenced collections |
+
+          ### General Aspects of Java (*Aspects généraux*, Slide 6)
+          * **Multi-platform:** Compiles to portable **bytecode** executed by a **virtual machine** (*machine virtuelle*).
+          * **C++-like syntax** (*syntaxe proche de C++*), lowering the barrier for systems programmers.
+          * **Almost everything is an object** (*presque tout objet*) — the only exceptions are the 8 **primitive types** (`int`, `double`, `boolean`, etc.).
+          * **Robust (*robuste*):** Strong static typing (*typage fort*), **no raw pointers** (*pas de pointeurs*), automatic **garbage collector** (*ramasse-miettes*), and encapsulation.
+          * **Safe (*sûr*):** Structured **exception handling** (*gestion des exceptions*).
+          * **Organized & Battery-Included:** Structured into **packages** (*paquetages*) and modules, shipping with a vast standard class library (**API**), portable GUI toolkits (Swing, JavaFX), built-in concurrency (**threads** / *processus*), **dynamic linking** (*lier dynamiquement du code à l'exécution*), and networking APIs for **distributed applications** (*applications réparties*).
+
+          ---
+
+          ### Compiled vs. Interpreted vs. JVM Hybrid (Slides 7–12)
+          Every language design makes a trade-off between raw hardware performance and developer productivity/portability:
+
+          | Paradigm | Examples | How It Runs | Strengths (+) | Weaknesses (−) |
+          | :--- | :--- | :--- | :--- | :--- |
+          | **Compiled** (*compilé*) | C, C++ | Translated ahead-of-time into native machine code by a compiler | Often faster; predictable performance; fine hardware control | Manual memory management; harder to secure (*unsafe*); harder to port across CPUs/OSes |
+          | **Interpreted** (*interprété*) | Python, JavaScript | Translated dynamically during execution by an interpreter | Easy to port; ideal for prototyping; dynamic features (`eval`) | Often slower; limited hardware control; code-injection risks |
+          | **JVM Hybrid** (*Machine Virtuelle Java*) | Java, Scala, Kotlin | Compiled to **bytecode** (`.class`), then interpreted **and** JIT-compiled by the JVM | **Portable** (*Write once, run anywhere*); dynamic **Just-In-Time (JIT)** optimization (e.g., *inlining*) using runtime profiles; **memory safety**; automatic **garbage collector** | Less predictable performance; **warmup time** (*temps de chauffe*, class loading); higher memory footprint (GC overhead) |
+
+          > [!NOTE]
+          > Multiple JVM implementations exist, including the proprietary **Oracle JDK** and the open-source **OpenJDK**. Because the JVM observes the live execution profile, it identifies **hot paths** (*portions chaudes*) and compiles them on-the-fly into native machine code tailored to the exact host CPU.
+
+      - id: diag-jvm-pipeline
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Java Compilation, Class Loading & JVM Execution Pipeline"
+        caption: "From .java source to portable .class bytecode via javac, then loaded and executed by the JVM combining interpretation with profile-guided JIT compilation."
+        source: |
+          flowchart LR
+            subgraph Compile ["1. Compilation (javac)"]
+              src["Prog11.java\n(Java Source)"] --> javac["javac Compiler"]
+              javac --> bc["Prog11.class\n(Bytecode: aload_0,\nastore_2, getfield #23)"]
+            end
+
+            subgraph JVM ["2. JVM Execution (java Prog11)"]
+              bc --> loader["Class Loader\n(Chargement)"]
+              libs["JDK Standard Library\n& Other .class Files"] --> loader
+              loader --> interp["Bytecode Interpreter\n(Immediate Execution)"]
+              interp -->|"Hot Paths Detected\n(Portions chaudes)"| jit["JIT Compiler\n(Just-In-Time + Inlining)"]
+              jit --> native["Native Machine Code\n(Host CPU)"]
+              gc["Garbage Collector\n(Ramasse-miettes)"] -.->|"Reclaims Unreferenced\nHeap Objects"| interp
+            end
+
+            classDef srcStyle fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;
+            classDef procStyle fill:#ede9fe,stroke:#6366f1,stroke-width:1.5px;
+            classDef outStyle fill:#ecfdf5,stroke:#059669,stroke-width:2px;
+            classDef gcStyle fill:#fef3c7,stroke:#d97706,stroke-width:1.5px;
+
+            class src,libs srcStyle;
+            class javac,bc,loader,interp,jit procStyle;
+            class native outStyle;
+            class gc gcStyle;
+
+      - id: fc-jvm-tradeoffs
+        block_type: flashcard
+        title: "JVM Trade-Offs (+/-)"
+        front: "List **3 key advantages** and **3 key drawbacks** of running Java on the **JVM** compared to purely compiled languages like C/C++."
+        back: |
+          **Advantages (+):**
+          1. **Portability** (*Write once, run anywhere* via bytecode).
+          2. **Dynamic runtime optimization** via **JIT** compilation on hot paths (e.g. *inlining*).
+          3. **Memory safety** (*sécurité de la mémoire*) and automatic **garbage collection** (*ramasse-miettes*).
+
+          **Drawbacks (−):**
+          1. **Less predictable performance** (JIT compilation & GC pauses).
+          2. **Warmup time** (*temps de chauffe* + class loading).
+          3. **Higher memory consumption** due to the garbage collector and JVM runtime.
+        hint: "Think about portability, JIT, memory safety on one side, and warmup, predictability, and RAM on the other."
+        tags:
+          - jvm
+          - jit
+          - performance
+
+  - id: sec-primitives-wrappers
+    title: "2. Primitive Types, Literals & Wrapper Classes"
+    description: "The 8 primitive types, signedness and bit widths, literal conversion rules, variable declaration rules, and immutable wrapper classes with autoboxing."
+    blocks:
+      - id: th-primitives-wrappers
+        block_type: markdown
+        title: "Primitive Types (*Types primitifs*) & Wrapper Classes (*Classes enveloppes*)"
+        content: |
+          ### The 8 Primitive Types (Slide 13)
+          Java has **8 primitive types**. Unlike C/C++, **all integer types in Java are strictly signed** (*entiers, signés seulement*) — there is no `unsigned int`.
+
+          | Category | Type | Size | Range / Values | Default (Attribute) |
+          | :--- | :--- | :--- | :--- | :--- |
+          | **Signed Integer** | `byte` | 8 bits | $-128$ to $127$ ($-2^7$ to $2^7 - 1$) | `0` |
+          | **Signed Integer** | `short` | 16 bits | $-32{,}768$ to $32{,}767$ ($-2^{15}$ to $2^{15} - 1$) | `0` |
+          | **Signed Integer** | `int` | 32 bits | $-2^{31}$ to $2^{31} - 1$ ($\approx \pm 2.14 \times 10^9$) | `0` |
+          | **Signed Integer** | `long` | 64 bits | $-2^{63}$ to $2^{63} - 1$ | `0L` |
+          | **Floating-Point** (*réels*) | `float` | 32 bits | IEEE 754 single precision | `0.0f` |
+          | **Floating-Point** (*réels*) | `double` | 64 bits | IEEE 754 double precision | `0.0` |
+          | **Boolean** (*booléen*) | `boolean` | JVM-dependent | `true` or `false` | `false` |
+          | **Character** (*caractère*) | `char` | 16 bits | Unicode code units (`'\u0000'` to `'\uffff'`) | `'\u0000'` |
+
+          > [!WARNING]
+          > **`String` is NOT a primitive type!** `String` is a full-fledged **class** (`java.lang.String`), so a `String` variable holds an object reference (defaulting to `null` as an attribute).
+
+          ### Default Literal Types (*Type par défaut des littéraux*, Slide 13)
+          * **Integer literals** (e.g., `3`, `42`) have type **`int`** by default.
+            * When assigned directly to a `byte`, `short`, `char` (or `long`), the compiler performs an **implicit conversion** if the literal value fits in the target range (e.g., `byte b = 100;` is valid, whereas `byte b = 200;` fails to compile).
+          * **Floating-point literals** (e.g., `3.14`, `3.14E2`) have type **`double`** by default. (Assigning to `float` requires an `f` suffix such as `3.14f`.)
+
+          ### Declaring Primitive Variables (Slide 14)
+          * Syntax: `type varName;`, `type a, b, c;`, or `type varName = value;` (declaration + assignment).
+          * A local variable can be declared **anywhere inside a method before its first use** (like C++, unlike pre-C99 C).
+          * **No address-of operator (`&`)**: Unlike C/C++, Java forbids taking the memory address of a variable.
+
+          ### Wrapper Classes (*Classes enveloppes / types enrobeurs*, Slide 15)
+          Every primitive type has an object-oriented counterpart in `java.lang`:
+
+          | Primitive | Wrapper Class | Primitive | Wrapper Class |
+          | :--- | :--- | :--- | :--- |
+          | `byte` | `Byte` | `float` | `Float` |
+          | `short` | `Short` | `double` | `Double` |
+          | `int` | `Integer` | `boolean` | `Boolean` |
+          | `long` | `Long` | `char` | `Character` |
+
+          * **Why they exist:** Usable anywhere an object is required (e.g., generic collections like `List<Integer>`, arrays of `Object`) and provide utility methods (e.g., `Integer.parseInt("42")`).
+          * **Immutable (*immutables*):** Once created, a wrapper object's value **cannot be modified** (no `set` method).
+          * **Autoboxing / Unboxing:** Java automatically converts between a primitive and its wrapper class (e.g., `Integer x = 42;` boxes `int` -> `Integer`; `int n = x;` unboxes `Integer` -> `int`).
+
+      - id: fc-primitive-types
+        block_type: flashcard
+        title: "Primitive Types, Sizes & Wrapper Names"
+        front: "Which two wrapper classes do **not** simply capitalize the primitive type name, and what are the bit widths of `byte`, `short`, `char`, `int`, `float`, `long`, and `double`?"
+        back: |
+          * Non-trivial wrapper names: **`int` -> `Integer`** and **`char` -> `Character`** (the other six are `Byte`, `Short`, `Long`, `Float`, `Double`, `Boolean`).
+          * Bit widths:
+            * **8 bits:** `byte` (signed)
+            * **16 bits:** `short` (signed), `char` (Unicode)
+            * **32 bits:** `int` (signed), `float`
+            * **64 bits:** `long` (signed), `double`
+            * **`boolean`:** `true` / `false` (not numeric — cannot be cast to `int`).
+        hint: "Watch out for the 3-letter integer type and the 4-letter character type."
+        tags:
+          - primitives
+          - wrappers
+          - exam-essentials
+
+  - id: sec-references-strings
+    title: "3. References, Memory Model & Immutable Strings"
+    description: "How Java manipulates objects via typed references, identity (==) vs. state, String literals, + operator overloading, and String immutability."
+    blocks:
+      - id: th-references-strings
+        block_type: markdown
+        title: "Object References (*Références*) & Strings (*Chaînes de caractères*)"
+        content: |
+          ### Object References (Slide 16)
+          In Java, **all objects are manipulated exclusively through typed references** (*références typées*):
+          1. **Declaration:** `Person a;` declares a reference variable `a` on the stack (it does **not** create an object yet).
+          2. **Instantiation:** `a = new Person("John");` invokes a **constructor** via `new`, allocates the object on the heap, and stores its reference in `a`. Both steps can be combined: `Person b = new Person("Paul");`.
+          3. **Reference assignment:** `a = b;` copies the reference — now **both `a` and `b` point to the exact same `Paul` object**. The `John` object previously referenced by `a` loses its last reference and becomes eligible for automatic reclamation by the **garbage collector** (*ramasse-miettes*).
+          4. **Identity equality (`==`):** Applying `==` to references compares **object identity** (do both references point to the same heap object?), **not** whether the two objects have identical field values.
+
+          ### Strings (*Chaînes de caractères*, Slides 17–18)
+          * **Simplified literal creation:** Instead of constructing from a `char[]` (`char[] data = {'D', 'e'}; String s = new String(data);`), always use string literals:
+            ```java
+            String s = "De belles"; // Empty string: String empty = "";
+            ```
+            **Never call `new String(...)` unnecessarily** — it forces a redundant heap allocation.
+          * **`+` operator concatenation:** Java provides built-in overloading of `+` between `String` and primitive types:
+            ```java
+            System.out.println(s + " valeurs : " + 1 + ", " + true);
+            // Output: De belles valeurs : 1, true
+            ```
+            > [!IMPORTANT]
+            > **User-defined operator overloading is NOT supported in Java** (*la surcharge utilisateur des opérateurs n'est pas possible*). String `+` is a special language-level exception.
+          * **Strings are true objects:** You can call methods directly on both variables and literals:
+            * `String s = "foo"; String t = s.substring(1);` -> `"oo"` (from index 1 to end).
+            * `"Go! Now!".substring(1, 3)` -> `"o!"` (Java uses a half-open interval `[beginIndex, endIndex)` — index 1 inclusive, index 3 exclusive).
+          * **Immutability (*immutabilité*):** Once created, a `String` object's content **cannot change**. Every operation (`+=`, `substring`, `toUpperCase`) allocates and returns a **new** `String` object. For repeated modifications (e.g., inside loops), use **`StringBuilder`**.
+
+      - id: diag-stack-heap-refs
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Stack vs. Heap: Primitives, Reference Aliasing & String Immutability"
+        caption: "Primitives store values directly on the stack. Object variables store references to heap objects; reassigning a reference can alias an object and orphan the previous one for the garbage collector."
+        source: |
+          flowchart LR
+            subgraph Stack ["Stack (Local Variables)"]
+              i["int i = 42\n(value stored directly)"]
+              a["Person a"]
+              b["Person b"]
+              s["String s"]
+              p["String p"]
+            end
+
+            subgraph Heap ["Heap (Objects)"]
+              john["Person #1: John\n(Unreferenced -> GC!)"]
+              paul["Person #2: Paul"]
+              strA["String #32: 'a'\n(Still held by p)"]
+              strAEx["String #33: 'a!'\n(Created by s += '!')"]
+            end
+
+            a -->|"after a = b"| paul
+            b --> paul
+            s -->|"after s += '!'"| strAEx
+            p --> strA
+
+            classDef prim fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;
+            classDef ref fill:#ede9fe,stroke:#6366f1,stroke-width:1.5px;
+            classDef obj fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;
+            classDef gc fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,stroke-dasharray: 5 5;
+
+            class i prim;
+            class a,b,s,p ref;
+            class paul,strA,strAEx obj;
+            class john gc;
+
+      - id: code-string-immutability
+        block_type: code
+        language: java
+        filename: StringTrace.java
+        title: "Tracing String Immutability, Identity (==) & StringBuilder"
+        code: |
+          public class StringTrace {
+              public static void main(String[] args) {
+                  String s = "a";
+                  String p = s;
+                  System.out.println(p == s);          // true (same object)
+                  s += "!";                            // allocates new String "a!"
+                  System.out.println(p + " | " + s);   // a | a!
+                  p = new String("a!");                // distinct object on heap
+                  System.out.println(p == s);          // false (different identities)
+                  System.out.println(p.equals(s));     // true (same content)
+                  StringBuilder sb = new StringBuilder("Go");
+                  sb.append("! Now!");                 // mutates in place
+                  System.out.println(sb.toString());   // Go! Now!
+              }
+          }
+        highlight_lines:
+          - 4
+          - 6
+          - 8
+          - 9
+          - 10
+          - 12
+        annotations:
+          - line: 4
+            note: "Reference copy: p and s point to the exact same String object \"a\", so p == s is true."
+          - line: 6
+            note: "Strings are immutable: s += \"!\" creates a brand-new \"a!\" object; p still points to \"a\"."
+          - line: 8
+            note: "Now \"a\" has zero references left and is eligible for garbage collection. p points to a distinct \"a!\" object."
+          - line: 9
+            note: "== checks reference identity (memory location), NOT text content — returns false!"
+          - line: 10
+            note: "Use .equals() to compare String contents (returns true)."
+          - line: 12
+            note: "StringBuilder is mutable: append() modifies the internal buffer in place without creating temporary Strings."
+
+  - id: sec-classes-constructors
+    title: "4. Classes, Attributes, Methods & Constructors"
+    description: "Class structure, implicit Object root, file naming rules, formal method signatures, constructors, default attribute values, overloading, and constructor chaining."
+    blocks:
+      - id: th-classes-methods
+        block_type: markdown
+        title: "Classes, Attributes (*Attributs*) & Methods (*Méthodes*)"
+        content: |
+          ### Classes & File Organization (Slide 19)
+          * A **class** is the blueprint used to instantiate objects.
+          * **Implicit root:** Every Java class implicitly inherits from `java.lang.Object`.
+          * **Naming convention:** Class names start with an **uppercase** letter (`PascalCase`, e.g., `Person`).
+          * **Source file rules:**
+            * Usually one class is declared per `.java` file.
+            * If a class is declared `public`, the file **must** have the exact same name plus `.java` (e.g., `public class Person` -> `Person.java`).
+            * `javac` generates **one `.class` file per class** declared in the `.java` source file.
+
+          ### Attributes (*Attributs / champs / variables membres*, Slide 20)
+          * Define the **state** (*état*) of each instance; can be primitive types or object references.
+          * Can specify an explicit initial value (e.g., `private int age = 18;` overrides the default `0`).
+          * Should almost always have **`private`** visibility to enforce encapsulation.
+          * **Naming convention:** Start with a **lowercase** letter (`camelCase`, e.g., `name`, `father`).
+          * Accessed via **dot notation** (*notation pointée*): `aPerson.name = "John";` (only when accessible).
+
+          ### Methods (*Méthodes / fonctions membres*, Slides 21–22)
+          * Functions defined inside a class that operate on its instances; parameters and return values are primitives or object references (`void` if no value is returned).
+          * **Naming convention:** Start with a **lowercase** letter (`camelCase`).
+          * **Formal type signature** (Slide 22):
+            $$\text{méthode} : \text{Classe} \times \text{Type}_1 \times \dots \times \text{Type}_n \to \text{TypeRésultat}$$
+          * **Under the hood:** When you write `ref.methode(arg1, arg2)`, the compiler conceptually transforms the OOP call into a function call passing the receiver first: `methode(ref, arg1, arg2)`. That is why all attributes and methods of `ref` are implicitly available inside the method body, and why the receiver can be named explicitly with **`this`**.
+
+      - id: th-constructors-defaults
+        block_type: markdown
+        title: "Constructors (*Constructeurs*), Default Values & Garbage Collection"
+        content: |
+          ### Why Constructors Exist (Slide 24)
+          Relying on a separate `set(...)` method to initialize an object is fragile: nothing forces callers to invoke it. **Constructors** combined with encapsulation guarantee that every object is born in a **coherent state** (*état cohérent*).
+
+          ### Constructor Rules (Slides 24–26)
+          1. **Exact class name, NO return type** — not even `void`! (Adding `void Person(...)` turns it into an ordinary method, not a constructor.)
+          2. **Invoked via `new`:** `Person p = new Person("John", 22);`
+          3. **Implicit Default Constructor (*constructeur par défaut*):**
+             * If a class defines **zero** constructors, the compiler automatically synthesizes a 0-parameter default constructor.
+             * It initializes every attribute to its **type default value**:
+               * Numeric types (`byte`, `short`, `int`, `long`, `float`, `double`): **`0`** (or `0.0`)
+               * `boolean`: **`false`**
+               * `char`: **`'\u0000'`** (*caractère de code nul*)
+               * Object references (including `String`): **`null`**
+          4. **Loss of the Default Constructor (High-Frequency Exam Trap!):**
+             * As soon as you declare **even one explicit constructor**, the compiler **stops generating** the implicit default constructor (*celui par défaut est perdu*). Calling `new Person()` will then fail to compile unless you also define a 0-arg constructor explicitly.
+          5. **Constructor Overloading (*surcharge*):** A class may declare multiple constructors as long as their parameter lists differ (number or types of parameters).
+          6. **Constructor Chaining (`this(...)`):** One constructor can delegate to another constructor of the same class using `this(args);`.
+             * **Mandatory rule:** `this(...)` **must be the very first statement** of the constructor body.
+          7. **No Destructors (*pas de destructeurs*):** Unlike C++, Java has no destructors; unreferenced objects are reclaimed automatically by the **garbage collector** (*ramasse-miettes*).
+
+      - id: diag-person-uml
+        block_type: kroki
+        diagram_type: plantuml
+        title: "UML Class Diagram: Object Root, Person & Vector"
+        caption: "Every Java class implicitly inherits from Object. Private attributes (-) enforce encapsulation while public constructors and methods (+) expose a safe interface."
+        source: |
+          @startuml
+          skinparam classAttributeIconSize 0
+          skinparam classBackgroundColor #f8fafc
+          skinparam classBorderColor #475569
+
+          class Object {
+            + toString(): String
+            + equals(obj: Object): boolean
+          }
+
+          class Person {
+            - name: String
+            - age: int
+            + Person(name: String, age: int)
+            + Person(name: String)
+            + toString(): String
+          }
+
+          class Vector {
+            - x: int
+            - y: int
+            + Vector(x: int, y: int)
+            + addTo(v: Vector): Vector
+            + plus(v: Vector): Vector
+          }
+
+          Object <|-- Person
+          Object <|-- Vector
+          @enduml
+
+      - id: code-person-constructors
+        block_type: code
+        language: java
+        filename: Person.java
+        title: "Overloaded Constructors, this(...) Chaining & Encapsulation"
+        code: |
+          public class Person {
+              private String name;
+              private int age;
+              public Person(String name, int age) {
+                  this.name = name;
+                  this.age = age;
+              }
+              public Person(String name) {
+                  this(name, 0);
+              }
+              public String toString() {
+                  return name + ", " + age;
+              }
+          }
+        highlight_lines:
+          - 2
+          - 5
+          - 9
+          - 11
+        annotations:
+          - line: 2
+            note: "Private attributes encapsulate object state; because an explicit constructor exists, new Person() no longer compiles."
+          - line: 5
+            note: "this.name disambiguates the instance attribute from the parameter name that shadows it."
+          - line: 9
+            note: "Constructor chaining: delegates to Person(String, int). Must be the very first statement!"
+          - line: 11
+            note: "Overrides Object.toString() to produce a readable representation of the Person's state."
+
+  - id: sec-params-this-main
+    title: "5. Parameter Passing, `this` & Program Entry Point"
+    description: "Why Java is strictly pass-by-value, how reference copies affect mutable vs. immutable objects, the 3 uses of this, class-level encapsulation, and main() CLI execution."
+    blocks:
+      - id: th-param-passing-this
+        block_type: markdown
+        title: "Parameter Passing (*Mode de transmission*), `this`, and `main()`"
+        content: |
+          ### Parameter Passing in Java (Slides 27–30)
+          Programming languages generally offer two parameter passing modes:
+          * **Pass-by-value (*par valeur*):** The method receives a **copy** of the argument; modifying the parameter has no effect on the caller's variable.
+          * **Pass-by-reference (*par référence / par adresse*):** The method receives an alias to the caller's variable and can overwrite it directly (supported alongside pass-by-value in C++).
+
+          > [!IMPORTANT]
+          > **Java uses EXCLUSIVELY pass-by-value (*exclusivement par valeur*)!**
+          > However, because objects are always manipulated via references, passing an object passes a **copy of the reference** — NOT a copy of the object. Both caller and callee therefore point to the **same heap object**:
+          > * The callee **can mutate the object's fields** through the copied reference.
+          > * Reassigning the parameter variable itself (`other = new Int(99);`) only changes the local copy and **never** alters the caller's reference.
+
+          **Practical mental model (Slide 28):** Everything behaves *as if* it were:
+          * **By value** for **primitive types** and **immutable objects** (`String`, `Integer`, `Double`, ...).
+          * **By reference** for **mutable objects** (e.g., `Int` wrapper box, `Vector`, `StringBuilder`).
+
+          Compare Slides 29 and 30:
+          * `z.swap(x, y)` on `int x = 1, y = 2;` swaps only the local copies `a` and `b` — `x` and `y` remain `1` and `2`.
+          * `x.swap(y)` on mutable `Int x = new Int(1), y = new Int(2);` swaps `this.value` and `other.value` on the heap objects — `x.value()` becomes `2` and `y.value()` becomes `1`.
+
+          ---
+
+          ### The 3 Uses of `this` & Class-Level Encapsulation (Slides 31–32)
+          Inside an instance method or constructor, `this` denotes the current target instance. It is used to:
+          1. **Pass the current instance** as an argument to another method.
+          2. **Access shadowed attributes** when a parameter shares the same name (`this.name = name;`).
+          3. **Return the current instance** (`return this;`) to enable **method chaining** (*chaîner des appels*):
+             ```java
+             v1.addTo(v2).addTo(v3); // mutates v1 in place: (1,0) + (42,42) + (-1,-1) = (42, 41)
+             ```
+
+          > [!TIP]
+          > **Class-Level Encapsulation (Slide 32):** Inside `Vector.addTo(Vector v)`, writing `this.x += v.x;` is completely legal even though `x` is `private`! In Java, **the unit of encapsulation is the class, not the individual object** (*l'unité d'encapsulation est la classe, non l'objet*).
+          >
+          > **Slide 32 Question — How to define a non-mutating `+` (`plus`) method?** Instead of modifying `this` and returning `this`, allocate and return a fresh object: `return new Vector(this.x + v.x, this.y + v.y);`.
+
+          **Do not confuse member access with constructor chaining:**
+          * `this.attr` / `this.method(...)` accesses members of the current instance; `this(...)` invokes another constructor of the same class.
+          * `super.attr` / `super.method(...)` accesses members of the superclass; `super(...)` invokes a superclass constructor.
+
+          ---
+
+          ### Program Entry Point & Command-Line Execution (Slide 33)
+          Every executable Java program requires a `public static void main(String[] args)` method:
+          * `args` is a `String[]` holding any command-line arguments passed at launch.
+          * **Compile:** `javac <ClassName>.java`
+          * **Run:** `java <ClassName> [arg1 arg2 ... argn]` (omit the `.class` extension!)
+
+      - id: exp-sandbox-vector-chaining
+        block_type: sandbox
+        runtime: java
+        title: "Practice: Method Chaining (`this`), Class Encapsulation & Mutable Swap"
+        instructions: |
+          Implement two methods in `Vector` and one in `IntBox` (matching Slides 30 & 32):
+          1. `Vector.addTo(Vector v)`: adds `v.x` and `v.y` to `this.x` and `this.y` (using class-level access to `v`'s private fields) and returns `this` to allow chaining `v1.addTo(v2).addTo(v3)`.
+          2. `Vector.plus(Vector v)`: returns a **new** `Vector(this.x + v.x, this.y + v.y)` **without** mutating `this` or `v`.
+          3. `IntBox.swap(IntBox other)`: swaps `this.value` with `other.value`.
+
+          Run the code so the output matches `(42, 41) | (41, 40) | (42, 41) | 2,1`.
+        starter_code: |
+          public class Main {
+              static class Vector {
+                  private int x, y;
+
+                  public Vector(int x, int y) {
+                      this.x = x;
+                      this.y = y;
+                  }
+
+                  public Vector addTo(Vector v) {
+                      // TODO: mutate this.x and this.y by adding v.x and v.y, then return this
+                      return this;
+                  }
+
+                  public Vector plus(Vector v) {
+                      // TODO: return a new Vector with summed coordinates without mutating this
+                      return new Vector(0, 0);
+                  }
+
+                  public String toString() {
+                      return "(" + x + ", " + y + ")";
+                  }
+              }
+
+              static class IntBox {
+                  private int value;
+
+                  public IntBox(int i) {
+                      this.value = i;
+                  }
+
+                  public int value() {
+                      return value;
+                  }
+
+                  public void swap(IntBox other) {
+                      // TODO: swap this.value and other.value
+                  }
+              }
+
+              public static void main(String[] args) {
+                  Vector v1 = new Vector(1, 0);
+                  Vector v2 = new Vector(42, 42);
+                  Vector v3 = new Vector(-1, -1);
+
+                  v1.addTo(v2).addTo(v3);
+                  Vector sum = v1.plus(v3);
+
+                  IntBox a = new IntBox(1);
+                  IntBox b = new IntBox(2);
+                  a.swap(b);
+
+                  System.out.println(v1 + " | " + sum + " | " + v1 + " | " + a.value() + "," + b.value());
+              }
+          }
+        solution: |
+          public class Main {
+              static class Vector {
+                  private int x, y;
+
+                  public Vector(int x, int y) {
+                      this.x = x;
+                      this.y = y;
+                  }
+
+                  public Vector addTo(Vector v) {
+                      this.x += v.x;
+                      this.y += v.y;
+                      return this;
+                  }
+
+                  public Vector plus(Vector v) {
+                      return new Vector(this.x + v.x, this.y + v.y);
+                  }
+
+                  public String toString() {
+                      return "(" + x + ", " + y + ")";
+                  }
+              }
+
+              static class IntBox {
+                  private int value;
+
+                  public IntBox(int i) {
+                      this.value = i;
+                  }
+
+                  public int value() {
+                      return value;
+                  }
+
+                  public void swap(IntBox other) {
+                      int tmp = this.value;
+                      this.value = other.value;
+                      other.value = tmp;
+                  }
+              }
+
+              public static void main(String[] args) {
+                  Vector v1 = new Vector(1, 0);
+                  Vector v2 = new Vector(42, 42);
+                  Vector v3 = new Vector(-1, -1);
+
+                  v1.addTo(v2).addTo(v3);
+                  Vector sum = v1.plus(v3);
+
+                  IntBox a = new IntBox(1);
+                  IntBox b = new IntBox(2);
+                  a.swap(b);
+
+                  System.out.println(v1 + " | " + sum + " | " + v1 + " | " + a.value() + "," + b.value());
+              }
+          }
+        expected_output: "(42, 41) | (41, 40) | (42, 41) | 2,1"
+        hints:
+          - "Inside `Vector`, you can read `v.x` and `v.y` directly even though they are `private`, because encapsulation in Java is at the class level."
+          - "In `addTo`, update `this.x += v.x; this.y += v.y;` and `return this;`. In `plus`, return `new Vector(this.x + v.x, this.y + v.y);`."
+          - "In `IntBox.swap`, use a temporary `int tmp = this.value;` to exchange `this.value` and `other.value`."
+
+      - id: exp-sandbox-person-constructors
+        block_type: sandbox
+        runtime: java
+        title: "Practice: Constructor Overloading & `this(...)` Chaining"
+        instructions: |
+          Complete the `Person` class so that:
+          1. `Person(String name, int age)` initializes both private attributes using `this.name` and `this.age`.
+          2. `Person(String name)` delegates to the 2-argument constructor with default age `18` via `this(name, 18);`.
+          3. `Person()` delegates to the 1-argument constructor with default name `"Unknown"` via `this("Unknown");`.
+          4. `toString()` returns `name + " (" + age + ")"`.
+        starter_code: |
+          public class Main {
+              static class Person {
+                  private String name;
+                  private int age;
+
+                  public Person(String name, int age) {
+                      // TODO: assign attributes
+                  }
+
+                  public Person(String name) {
+                      // TODO: chain to Person(name, 18)
+                  }
+
+                  public Person() {
+                      // TODO: chain to Person("Unknown")
+                  }
+
+                  public String toString() {
+                      return "";
+                  }
+              }
+
+              public static void main(String[] args) {
+                  Person p1 = new Person("Ada", 36);
+                  Person p2 = new Person("Linus");
+                  Person p3 = new Person();
+                  System.out.println(p1 + " | " + p2 + " | " + p3);
+              }
+          }
+        solution: |
+          public class Main {
+              static class Person {
+                  private String name;
+                  private int age;
+
+                  public Person(String name, int age) {
+                      this.name = name;
+                      this.age = age;
+                  }
+
+                  public Person(String name) {
+                      this(name, 18);
+                  }
+
+                  public Person() {
+                      this("Unknown");
+                  }
+
+                  public String toString() {
+                      return name + " (" + age + ")";
+                  }
+              }
+
+              public static void main(String[] args) {
+                  Person p1 = new Person("Ada", 36);
+                  Person p2 = new Person("Linus");
+                  Person p3 = new Person();
+                  System.out.println(p1 + " | " + p2 + " | " + p3);
+              }
+          }
+        expected_output: "Ada (36) | Linus (18) | Unknown (18)"
+        hints:
+          - "Remember that `this(...)` must be the very first statement inside a constructor."
+          - "Use `this.name = name; this.age = age;` in the 2-arg constructor to avoid shadowing bugs."
+          - "In `toString()`, return `name + \" (\" + age + \")\"`."
+
+      - id: ref-pass-by-value-rubric
+        block_type: reflection_rubric
+        title: "Synthesis: Pass-by-Value & Class-Level Encapsulation"
+        prompt: |
+          A classmate argues: *"Java passes objects by reference — look at `x.swap(y)` on `IntBox`, it modified `y.value`! And `Vector.addTo(Vector v)` breaks encapsulation because it reads `v.x` even though `x` is `private`."*
+
+          Write a clear, exam-ready rebuttal addressing both claims.
+        self_check_criteria:
+          - "Stated clearly that Java uses EXCLUSIVELY pass-by-value for all parameters."
+          - "Explained that for objects, the reference itself is copied by value, so both references point to the same heap object (allowing field mutation, while reassigning the parameter variable does NOT affect the caller)."
+          - "Contrasted mutable objects with primitives and immutable objects (String, wrapper classes) where no mutation is possible."
+          - "Explained that Java's unit of encapsulation is the class, not the individual object, which is why Vector.addTo(Vector v) can legally access v.x."
+        model_answer: |
+          1. **Java is strictly pass-by-value:** When passing an object to a method, Java copies the *reference* (not the object) into the formal parameter. Because the copied reference points to the exact same heap object, `x.swap(y)` can mutate `other.value`. However, if `swap` executed `other = new IntBox(99);`, the caller's variable `y` would remain untouched — proving it is pass-by-value of a reference, not true pass-by-reference. For primitives and immutable objects (`String`, `Integer`), callers never observe any mutation.
+          2. **Class-level encapsulation:** In Java, `private` restricts access to code outside the *class*, not outside the *instance*. Because `addTo(Vector v)` is declared inside `Vector`, it has full access to `v.x` and `v.y` on any `Vector` instance.
+
+  - id: sec-diagnostics
+    title: "6. Diagnostic Retrieval & Exam Traps"
+    description: "Exam-calibrated diagnostic questions targeting JVM execution, primitive literal rules, String immutability, default constructor loss, this() chaining, and parameter passing."
+    blocks:
+      - id: qz-jvm-jit
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 2
+        related_block_id: th-java-overview
+        title: "JVM Bytecode & Just-In-Time (JIT) Compilation"
+        question: "Which statement accurately describes how the Java Virtual Machine (JVM) achieves both portability and high runtime performance?"
+        options:
+          - "`javac` compiles `.java` files into platform-independent bytecode (`.class`); the JVM interprets it and JIT-compiles hot paths into native machine code at runtime."
+          - "`javac` compiles `.java` files directly into CPU-specific native binaries, and the JVM only manages garbage collection."
+          - "The JVM parses raw `.java` source files directly at runtime without any prior compilation step, exactly like a pure interpreter."
+          - "The JVM guarantees completely predictable real-time performance with zero warmup time because bytecode is pre-optimized."
+        correct_answer: "`javac` compiles `.java` files into platform-independent bytecode (`.class`); the JVM interprets it and JIT-compiles hot paths into native machine code at runtime."
+        explanation: |
+          Java uses a hybrid model: `javac` compiles source code into portable **bytecode** (`.class`), which enables *Write once, run anywhere*. At runtime, the JVM interprets bytecode, profiles execution to identify **hot paths** (*portions chaudes*), and compiles them on-the-fly (**Just-In-Time**) into native machine code with profile-guided optimizations like inlining.
+
+          * Compiling directly to native binaries describes C/C++, not standard `javac`.
+          * Parsing raw source at runtime describes pure interpreters, ignoring `.class` bytecode.
+          * The JVM actually has *less* predictable performance and a measurable **warmup time** (*temps de chauffe*) due to class loading, JIT compilation, and garbage collection.
+        hints:
+          - "Recall the two-stage pipeline shown in Slide 11: what does `javac` output, and what does `java` run?"
+          - "Think about why Slide 10 says the JVM 'combines the best of both worlds' (compiled + interpreted)."
+
+      - id: qz-primitive-literals
+        block_type: quiz_question
+        question_type: multi_select
+        difficulty: 3
+        related_block_id: th-primitives-wrappers
+        title: "Primitive Types, Signedness & Literals"
+        question: "Which of the following statements about Java primitive types and literals are TRUE?"
+        options:
+          - "All four integer primitive types (`byte`, `short`, `int`, `long`) are strictly signed in Java."
+          - "A floating-point literal such as `3.14` has type `double` by default."
+          - "`String` is a 16-bit primitive type built directly into the JVM."
+          - "Assigning an integer literal like `100` to a `byte` variable (`byte b = 100;`) performs an implicit conversion because `100` fits in the `byte` range."
+          - "Java supports the `&` address-of operator on primitive variables, just like C++."
+        correct_answer:
+          - "All four integer primitive types (`byte`, `short`, `int`, `long`) are strictly signed in Java."
+          - "A floating-point literal such as `3.14` has type `double` by default."
+          - "Assigning an integer literal like `100` to a `byte` variable (`byte b = 100;`) performs an implicit conversion because `100` fits in the `byte` range."
+        explanation: |
+          * **True:** Java's integer types (`byte`, `short`, `int`, `long`) are all signed (Slide 13).
+          * **True:** Floating-point literals (`3.14`, `3.14E2`) default to `double`, while integer literals default to `int`.
+          * **True:** When an `int` literal's value is within the target range (`-128..127` for `byte`), Java implicitly converts it during assignment.
+          * **False:** `String` is a **class**, NOT a primitive type (`char` is the 16-bit Unicode primitive).
+          * **False:** Java explicitly forbids taking variable addresses with `&` (Slide 14).
+        hints:
+          - "Check Slide 13 carefully: is `String` a primitive type or a class?"
+          - "Remember the C++ vs. Java difference regarding pointers and the `&` operator."
+
+      - id: qz-string-identity-output
+        block_type: quiz_question
+        question_type: code_output
+        difficulty: 3
+        related_block_id: code-string-immutability
+        title: "Predict Output: String Immutability & Identity (`==`)"
+        question: |
+          What does the following Java snippet print?
+
+          ```java
+          String s = "a";
+          String p = s;
+          boolean b1 = (p == s);
+          s += "!";
+          boolean b2 = (p == s);
+          p = new String("a!");
+          boolean b3 = (p == s);
+          boolean b4 = p.equals(s);
+          System.out.println(b1 + " " + b2 + " " + b3 + " " + b4);
+          ```
+        options:
+          - "true false false true"
+          - "true true true true"
+          - "true false true true"
+          - "false false false true"
+        correct_answer: "true false false true"
+        explanation: |
+          Trace each reference step by step (Slide 18):
+          1. `String s = "a"; String p = s;` -> `p` and `s` hold the exact same reference -> `b1 = (p == s)` is **`true`**.
+          2. `s += "!";` -> Because `String` is **immutable**, Java creates a new `"a!"` object and updates `s` to point to it; `p` still points to `"a"` -> `b2 = (p == s)` is **`false`**.
+          3. `p = new String("a!");` -> Allocates a distinct `"a!"` object on the heap (`"a"` is now unreferenced). `p` and `s` point to two different objects -> `b3 = (p == s)` is **`false`**.
+          4. `p.equals(s)` -> Compares character contents (`"a!"` vs `"a!"`) -> `b4` is **`true`**.
+
+          * `true true true true` assumes `s += "!"` mutates `"a"` in place (wrong — `String` is immutable).
+          * `true false true true` confuses `==` (object identity) with `.equals()` (value equality).
+          * `false false false true` misses that `p = s` copies the reference to the exact same object.
+        hints:
+          - "Does `s += \"!\"` modify the existing `String` object or create a new one?"
+          - "What is the difference between `==` and `.equals()` on object references?"
+
+      - id: qz-default-constructor-loss
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: th-constructors-defaults
+        title: "Default Constructor & Implicit Loss"
+        question: |
+          Consider the following class:
+
+          ```java
+          public class Book {
+              private String title;
+              private int pages;
+
+              public Book(String title) {
+                  this.title = title;
+              }
+          }
+          ```
+
+          What happens when another class executes `Book b = new Book();`?
+        options:
+          - "Compilation error: declaring `Book(String)` causes the compiler to stop generating the implicit default constructor."
+          - "It compiles and creates a `Book` with `title = null` and `pages = 0`."
+          - "It compiles, but throws a `NullPointerException` at runtime."
+          - "It compiles and calls `Book(String)` with `title = \"\"`."
+        correct_answer: "Compilation error: declaring `Book(String)` causes the compiler to stop generating the implicit default constructor."
+        explanation: |
+          According to Java's constructor rules (Slide 25), the compiler synthesizes a 0-argument **default constructor** (*constructeur par défaut*) **only if the class defines no constructors at all**. As soon as `Book(String)` is declared, the implicit default constructor is lost (*perdu*), so `new Book()` fails to compile.
+
+          * Creating a `Book` with `null` and `0` would only happen if *no* constructors were declared, or if a 0-arg `public Book() {}` were explicitly written.
+          * This is a compile-time error, not a runtime exception, and Java never invents an empty string `""` for missing arguments.
+        hints:
+          - "When does the Java compiler generate a default 0-argument constructor?"
+          - "What happens to the default constructor once you write your own constructor?"
+
+      - id: qz-this-chaining-rule
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: code-person-constructors
+        title: "Constructor Chaining with `this(...)`"
+        question: |
+          Why does the following constructor fail to compile?
+
+          ```java
+          public class Person {
+              private String name;
+              private int age;
+
+              public Person(String name, int age) {
+                  this.name = name;
+                  this.age = age;
+              }
+
+              public Person(String name) {
+                  System.out.println("Creating " + name);
+                  this(name, 0);
+              }
+          }
+          ```
+        options:
+          - "A constructor call `this(...)` must be the very first statement inside the constructor body."
+          - "A constructor cannot call another constructor of the same class; only `super(...)` is allowed."
+          - "Calling `this(name, 0)` causes infinite recursion because it invokes `Person(String)` again."
+          - "`System.out.println` cannot be used inside a constructor."
+        correct_answer: "A constructor call `this(...)` must be the very first statement inside the constructor body."
+        explanation: |
+          In Java (Slide 26), delegating to another constructor via `this(...)` is completely valid and avoids duplicating initialization logic, **provided it is the very first statement** of the constructor. Placing `System.out.println(...)` before `this(name, 0);` causes a compile-time error.
+
+          * `this(...)` is legal in constructors alongside `super(...)` (though not both in the same constructor).
+          * `this(name, 0)` matches the 2-argument overload `Person(String, int)`, so there is no recursion.
+          * Logging or side effects are legal in constructors *after* `this(...)`.
+        hints:
+          - "Look at the order of statements inside `Person(String name)`."
+          - "Recall the strict placement rule for `this(...)` from Slide 26."
+
+      - id: qz-pass-by-value-output
+        block_type: quiz_question
+        question_type: code_output
+        difficulty: 4
+        related_block_id: th-param-passing-this
+        title: "Predict Output: Pass-by-Value with Object References"
+        question: |
+          Consider the following Java program:
+
+          ```java
+          public class Main {
+              static class Box {
+                  int val;
+                  Box(int v) { this.val = v; }
+              }
+
+              static void trick(Box b, int n) {
+                  b.val = 10;
+                  b = new Box(99);
+                  b.val = 50;
+                  n = 77;
+              }
+
+              public static void main(String[] args) {
+                  Box x = new Box(1);
+                  int k = 5;
+                  trick(x, k);
+                  System.out.println(x.val + " " + k);
+              }
+          }
+          ```
+
+          What is printed to the console?
+        options:
+          - "10 5"
+          - "50 5"
+          - "1 5"
+          - "50 77"
+        correct_answer: "10 5"
+        explanation: |
+          Java passes **all** arguments strictly **by value** (Slide 28):
+          1. `b` receives a copy of the reference `x` (both point to `Box(1)`).
+          2. `b.val = 10;` mutates the shared heap object — so `x.val` is now **`10`**.
+          3. `b = new Box(99);` reassigns only the local parameter copy `b` to a new object; `x` still points to the original object!
+          4. `b.val = 50;` mutates only the new `Box(99)` object, leaving `x.val` at `10`.
+          5. `n = 77;` modifies only the local `int` copy; `k` remains **`5`**.
+
+          * `50 5` mistakenly assumes Java is pass-by-reference for objects (thinking `b = new Box(99)` rebinds `x`).
+          * `1 5` mistakenly assumes Java copies the entire `Box` object on call.
+          * `50 77` assumes both objects and primitives are passed by reference.
+        hints:
+          - "Trace which heap object `x` points to before and after `b = new Box(99);`."
+          - "Remember: reassigning a formal parameter never changes the caller's variable in Java."
+          - "Check `k` separately: primitives are always copied by value."
+
+      - id: qz-class-encapsulation-chaining
+        block_type: quiz_question
+        question_type: code_output
+        difficulty: 4
+        related_block_id: th-param-passing-this
+        title: "Predict Output: `this` Chaining & Class-Level Encapsulation"
+        question: |
+          Consider the `Vector` class from Slide 32:
+
+          ```java
+          class Vector {
+              private int x, y;
+              Vector(int x, int y) { this.x = x; this.y = y; }
+              Vector addTo(Vector v) {
+                  this.x += v.x;
+                  this.y += v.y;
+                  return this;
+              }
+              public String toString() { return "(" + x + ", " + y + ")"; }
+          }
+          ```
+
+          What is the result of executing:
+
+          ```java
+          Vector v1 = new Vector(1, 0);
+          Vector v2 = new Vector(42, 42);
+          Vector v3 = new Vector(-1, -1);
+          v1.addTo(v2).addTo(v3);
+          System.out.println(v1 + " " + v2);
+          ```
+        options:
+          - "(42, 41) (42, 42)"
+          - "Compilation error: `v.x` and `v.y` are `private` and cannot be accessed from another `Vector` instance."
+          - "(42, 41) (41, 41)"
+          - "(1, 0) (42, 42)"
+        correct_answer: "(42, 41) (42, 42)"
+        explanation: |
+          1. **Class-level encapsulation:** Accessing `v.x` and `v.y` inside `Vector.addTo` is completely valid because `private` in Java restricts access per **class**, not per individual object.
+          2. **Method chaining:** `v1.addTo(v2)` mutates `v1` to `(1+42, 0+42) = (43, 42)` and returns `this` (i.e., `v1`). Then `.addTo(v3)` mutates `v1` again to `(43-1, 42-1) = (42, 41)`.
+          3. `v2` is only read, never mutated, so it stays `(42, 42)`.
+
+          * The compilation-error distractor reflects the common misconception that `private` is object-level rather than class-level.
+          * `(42, 41) (41, 41)` assumes `.addTo(v3)` was applied to `v2` instead of `this` (`v1`).
+          * `(1, 0) (42, 42)` assumes `addTo` returns a new `Vector` without mutating `v1`.
+        hints:
+          - "In Java, is `private` enforced per object or per class?"
+          - "What reference does `v1.addTo(v2)` return, and which object does `.addTo(v3)` mutate?"
+
+      - id: qz-memory-gc-multi
+        block_type: quiz_question
+        question_type: multi_select
+        difficulty: 4
+        related_block_id: th-references-strings
+        title: "Memory Management, Wrappers & Object Lifecycle"
+        question: "Which of the following statements about Java's object lifecycle and wrapper classes are TRUE?"
+        options:
+          - "Java has no destructors; objects that are no longer referenced are automatically reclaimed by the garbage collector (*ramasse-miettes*)."
+          - "Wrapper classes (`Integer`, `Double`, `Boolean`, etc.) are immutable — once created, their internal value cannot be changed."
+          - "Every Java class implicitly inherits from `Object`."
+          - "After executing `Person a = new Person(\"John\"); Person b = new Person(\"Paul\"); a = b;`, the `John` object is copied into `b`."
+          - "A `.java` file containing a `public class Invoice` can be named `Main.java` as long as it has a `main` method."
+        correct_answer:
+          - "Java has no destructors; objects that are no longer referenced are automatically reclaimed by the garbage collector (*ramasse-miettes*)."
+          - "Wrapper classes (`Integer`, `Double`, `Boolean`, etc.) are immutable — once created, their internal value cannot be changed."
+          - "Every Java class implicitly inherits from `Object`."
+        explanation: |
+          * **True:** Java has no destructors (Slide 26); the garbage collector automatically frees unreferenced objects.
+          * **True:** Wrapper classes (`Byte`, `Short`, `Integer`, `Long`, `Float`, `Double`, `Boolean`, `Character`) are immutable and have no `set` methods (Slide 15).
+          * **True:** `Object` is the implicit root of every Java class hierarchy (Slide 19).
+          * **False:** `a = b;` copies the *reference* to `Paul` into `a`, leaving `John` unreferenced and eligible for GC — it never copies `John` into `b` (Slide 16).
+          * **False:** A `public` class must live in a file with the exact same name (`Invoice.java`, Slide 19).
+        hints:
+          - "Review Slide 15 (wrappers), Slide 16 (reference assignment), Slide 19 (public class filenames), and Slide 26 (destructors)."
+          - "What happens to the `John` object when `a = b;` executes?"

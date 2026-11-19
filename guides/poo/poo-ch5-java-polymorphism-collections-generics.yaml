@@ -1,0 +1,1121 @@
+id: poo-ch5-java-polymorphism-collections-generics
+title: "Chapter 5: Polymorphism, Autoboxing, Collections & Generics"
+description: >-
+  Complete coverage of Java polymorphism (taxonomy, substitution, dynamic
+  binding, casting, instanceof, pattern matching, Class reflection),
+  autoboxing/unboxing traps, standard I/O, encapsulation with arrays and the
+  Java Collections Framework (including Java 21 SequencedCollection and C++
+  comparisons), and Generics (type erasure, bounds, generic methods).
+estimated_minutes: 65
+category: Object-Oriented Programming
+track: "POO - Programmation Orientée Objet (TE1)"
+track_order: 5
+difficulty_level: intermediate
+tags:
+  - java
+  - poo
+  - polymorphism
+  - dynamic-binding
+  - instanceof
+  - autoboxing
+  - collections
+  - generics
+  - type-erasure
+prerequisites:
+  - poo-ch4-java-arrays-inheritance-packages
+layout_mode: single-page
+sources:
+  - title: "HEIG-VD POO — 3 Java 3"
+    url_or_path: "sources/POO_TE1/3 Java 3.pdf"
+    notes: >-
+      Slides 61–103: Polymorphism taxonomy, substitution principle,
+      widening/narrowing conversions, dynamic binding (liaison dynamique),
+      casting & instanceof, Autoboxing/Unboxing & wrapper classes, Java
+      Collections Framework (Collection, List, Set, Map, Iterator, foreach),
+      Generics & type erasure/wildcards.
+
+sections:
+  - id: sec-polymorphism-foundations
+    title: "1. Polymorphism Taxonomy, Substitution & Type Conversions"
+    description: >-
+      Understand the four kinds of polymorphism, the Liskov-style substitution
+      principle, primitive widening/narrowing conversions, and the crucial
+      difference between static type and dynamic type.
+    blocks:
+      - id: th-starwars-motivation
+        block_type: markdown
+        title: "Motivating Problem: Heterogeneous Collections (StarWars)"
+        content: |
+          Suppose you model a StarWars roster with a base class `Humanoid` and subclasses `Jedi` (Yoda, Obi-Wan, Anakin, Luke) and `Sith` (Darth Sidious, Darth Vader after corrupting Anakin). You want to store **all** characters (`Paul`, `Yoda`, `Darth Sidious`, `Obi-Wan`, `Darth Vader`, `Luke`) inside a single array `Humanoid[]` and display every character—then filter only those wielding a green lightsaber.
+
+          How can a single `Humanoid[]` array hold `Jedi` and `Sith` objects, call each subclass's own `toString()` automatically, and safely inspect subclass-specific traits like lightsaber color? That is the exact problem solved by **polymorphism** (*polymorphisme*), **dynamic binding** (*liaison dynamique*), and runtime type inspection (`instanceof`).
+
+      - id: th-polymorphism-taxonomy
+        block_type: markdown
+        title: "The Four Kinds of Polymorphism"
+        content: |
+          Following the classic classification ([Strachey 67], [Cardelli 85], [Meyer 88], [Booch 91]), **polymorphism** (*polymorphisme*) splits into two main families—**Universal** (*universel*) and **Ad-hoc**:
+
+          | Family | Kind (EN / FR) | Definition | Java Example |
+          | :--- | :--- | :--- | :--- |
+          | **Universal** | **Parametric** (*paramétrique*) | One operation or data structure works uniformly over many types via type parameters (**generics** / *généricité*). | `List<T>`, `Pair<T, U>`, `<V> Pair<T, V> merge(...)` |
+          | **Universal** | **Inclusion** (*d'inclusion*) | One operation works on types linked by a **subtyping** (*sous-typage*) relation (in Java, inheritance $\implies$ subtyping). | `Person p = new Sportsman(...);` |
+          | **Ad-hoc** | **Overloading** (*surcharge*) | Same identifier bound to distinct implementations distinguished by parameter types/arity. | `println(int)`, `println(String)`, `println(Object)` |
+          | **Ad-hoc** | **Conversion** (*conversion*) | Automatic type conversion (coercion) performed by the compiler. | `int i = 1; double d = i;` |
+
+          ### The Substitution Principle (*Principe de substitution*)
+          In object-oriented programming (inclusion polymorphism): if $C'$ is a subclass of $C$, an instance of $C'$ can be used **anywhere** an instance of $C$ is expected—both in assignments and in method parameter passing:
+
+          ```java
+          Person p = new Sportsman("Roger", 39, "Tennis"); // polymorphic assignment (affectation polymorphique)
+          System.out.println(p);                           // dynamic binding invokes Sportsman::toString
+          ```
+
+          > [!IMPORTANT]
+          > **Static Type vs. Dynamic Type (*Type statique vs. Type dynamique*):**
+          > - The **static type** of `p` is `Person` (the declared type of the variable, known at compile time). It determines **which methods and fields the compiler allows you to call**.
+          > - The **dynamic type** of `p` is `Sportsman` (the actual class instantiated on the heap, known at runtime). It determines **which overridden instance method body actually executes** via **dynamic binding** (*liaison dynamique*).
+
+      - id: diag-polymorphism-taxonomy
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Polymorphism Taxonomy in Java"
+        caption: "Universal polymorphism works across an unbounded family of types; Ad-hoc polymorphism applies to a finite set of explicitly defined overloads or conversions."
+        source: |
+          flowchart TD
+            Root["Polymorphism<br/>(Polymorphisme)"] --> Univ["Universal<br/>(Universel)"]
+            Root --> Adhoc["Ad-hoc"]
+
+            Univ --> Param["Parametric<br/>(Paramétrique / Généricité)<br/>e.g. List&lt;T&gt;, Pair&lt;T, U&gt;"]
+            Univ --> Incl["Inclusion<br/>(Sous-typage / Héritage)<br/>e.g. Person p = new Sportsman()"]
+
+            Adhoc --> Over["Overloading<br/>(Surcharge)<br/>e.g. print(int), print(String)"]
+            Adhoc --> Conv["Conversion<br/>(Conversion automatique)<br/>e.g. int → double"]
+
+            classDef root fill:#ede9fe,stroke:#4f46e5,stroke-width:2px;
+            classDef branch fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px;
+            classDef leaf fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;
+
+            class Root root;
+            class Univ,Adhoc branch;
+            class Param,Incl,Over,Conv leaf;
+
+      - id: th-conversions-and-subtyping
+        block_type: markdown
+        title: "Primitive Conversions & Reference Substitution Limits"
+        content: |
+          ### Primitive Widening vs. Narrowing Conversions
+          An integer can always be used where a real number is expected, but not vice versa. Java performs **widening conversions** (*conversions élargissantes*) **implicitly** at compile time:
+
+          $$\texttt{byte} \rightarrow \texttt{short} \rightarrow \texttt{int} \rightarrow \texttt{long} \rightarrow \texttt{float} \rightarrow \texttt{double}$$
+          $$\texttt{char} \rightarrow \texttt{int} \rightarrow \texttt{long} \rightarrow \texttt{float} \rightarrow \texttt{double}$$
+
+          All other primitive conversions are **narrowing conversions** (*conversions restrictives*) and require an **explicit cast** (*transtypage*), except for compile-time constant literals that fit within the target type's range (e.g., `byte b = 42;`):
+
+          ```java
+          int i = 1;
+          double d = i;         // implicit widening conversion (conversion élargissante)
+          i = (int) (d * 2.3);  // explicit narrowing cast required; truncates to i == 2
+          ```
+
+          ### Reference Substitution Is One-Way
+          A `Student` **is a** `Person`, so passing a `Student` to `void person(Person arg)` is legal. The reverse is **not**—even if a `Person` reference currently points to a `Student` object:
+
+          ```java
+          Student s = new Student();
+          t.person(s);    // OK: Student is a subtype of Person
+          Person p = s;   // OK: polymorphic assignment (upcast)
+          // t.student(p); // COMPILE ERROR! p's static type is Person, not Student
+          t.student(s);   // OK: s's static type is Student
+          ```
+
+      - id: fc-widening-chain
+        block_type: flashcard
+        title: "Primitive Widening Conversion Chain"
+        front: "Which primitive type conversions does the Java compiler perform **implicitly** (*conversions élargissantes*), and when is an explicit cast (*transtypage*) required?"
+        back: |
+          **Implicit widening chains:**
+          - `byte` $\rightarrow$ `short` $\rightarrow$ `int` $\rightarrow$ `long` $\rightarrow$ `float` $\rightarrow$ `double`
+          - `char` $\rightarrow$ `int` $\rightarrow$ `long` $\rightarrow$ `float` $\rightarrow$ `double`
+
+          **Narrowing conversions** (going backwards, or between `byte`/`short` and `char`) require an explicit cast `(Type) expr` — **except** when assigning a compile-time constant whose value fits inside the target type's range (e.g., `short s = 100;`).
+        hint: "Notice where `char` enters the chain (unsigned 16-bit cannot widen implicitly to signed `short`)."
+        tags:
+          - java
+          - conversions
+          - primitives
+
+  - id: sec-casting-instanceof-class
+    title: "2. Casting, instanceof, Dynamic Binding Internals & Pattern Matching"
+    description: >-
+      Master safe downcasting, instanceof compile-time vs. runtime rules,
+      exact-type testing with java.lang.Class, vtable dynamic dispatch, and Java
+      16/21 pattern matching.
+    blocks:
+      - id: th-casting-instanceof
+        block_type: markdown
+        title: "Membership, Downcasting & the instanceof Operator"
+        content: |
+          An instance of class $C$ is **instantiated** (*instancié*) in $C$, and is a **member** (*membre*) of $C$ and **all superclasses** of $C$ (all the way up to `Object`).
+
+          ### Downcasting (*Transtypage*)
+          Syntax: `(TargetType) reference`. Casting forces the compiler to treat a reference as a more specific type so you can invoke subclass-only methods. It is **dangerous**: if the heap object is not actually a member of `TargetType`, the JVM throws **`ClassCastException`** at runtime.
+
+          ```java
+          Person p = new Sportsman("Roger", 39, "Tennis");
+          // p.sport();                    // COMPILE ERROR: sport() is not in Person
+          System.out.println(p);           // OK: dynamic binding invokes Sportsman::toString
+          ((Sportsman) p).sport();         // OK: p actually references a Sportsman
+          Student s = (Student) p;         // COMPILES, but throws ClassCastException at runtime!
+          ```
+
+          ### Safe Runtime Checks with `instanceof`
+          Syntax: `expression instanceof C` $\rightarrow$ `boolean` (returns `true` if the object is a member of `C`, and `false` if `expression` is `null`).
+          - If `C` is a **class**: checks if the object is an instance of `C` or any subclass of `C`.
+          - If `C` is an **interface**: checks if the object's class implements `C`.
+          - If `C` is an **array** `T[]`: checks if the object is an array of `T` (where `T` is a primitive, class, or interface).
+
+          > [!WARNING]
+          > **Compile-Time Compatibility Trap:** In `exp instanceof C`, if `exp` has static class type `R` and `C` is a class, `C` **must** be a superclass or subclass of `R` (they must lie on the same inheritance branch). Testing two sibling classes (e.g., `Red r = new Red(); r instanceof Blue`) is a **compile-time error**!
+
+          ### Java 16 Pattern Matching for `instanceof` (*Filtrage par motif*)
+          Eliminates redundant casts and prevents wrong-cast typos:
+          ```java
+          if (p instanceof Sportsman s) {
+              s.sport(); // s is already typed as Sportsman in this scope!
+          }
+          ```
+          **Design discipline:** Do not overuse `instanceof`—long `if/else if (x instanceof ...)` chains usually signal missing polymorphic method overriding.
+
+      - id: th-class-reflection-vtable
+        block_type: markdown
+        title: "Runtime Meta-Objects (Class), Dynamic Dispatch & Java 21 Pattern Switch"
+        content: |
+          ### Exact Class Testing with `java.lang.Class`
+          Every class, interface, and primitive type has a **unique** `Class` meta-object in the JVM:
+          - **Type literal:** `Sportsman.class`, `int.class`, `String.class`.
+          - **Instance query:** `obj.getClass()` (defined on `Object`) returns the exact `Class` where `obj` was instantiated.
+
+          Compare `instanceof` vs. `getClass()` for `Person p = new Sportsman(...)`:
+          - `p instanceof Person` $\rightarrow$ **`true`** (membership includes superclasses).
+          - `p.getClass() == Person.class` $\rightarrow$ **`false`** (exact instantiated class is `Sportsman.class`).
+          - `p.getClass() == Sportsman.class` $\rightarrow$ **`true`**.
+
+          Useful reflection methods on `Class`: `getName()` (`"java.lang.String"`), `getSimpleName()` (`"String"`), `getSuperclass()`, `isInstance(Object o)` (dynamic equivalent of `instanceof`), and `newInstance()`.
+
+          > [!TIP]
+          > **Hierarchy Ordering Rule:** When looping over a `Class[] types` array with `types[i].isInstance(p)` (or writing `switch` type patterns), always list **most specific subclasses first** (`Student.class`, `Sportsman.class`) before superclasses (`Person.class`, `Object.class`)—otherwise a superclass matches first (or causes a compile error in `switch`).
+
+          ### How Dynamic Binding Works in Memory (Method Tables)
+          Every heap object stores a hidden reference to its runtime `Class` descriptor. Each `Class` descriptor holds a pointer to its `superclass` and a **method table** (*table des méthodes* / vtable) mapping method signatures to bytecode implementations:
+          - `Person` has `set() -> Person::set` and `toString() -> Person::toString`.
+          - `Sportsman` inherits `set() -> Person::set`, overrides `toString() -> Sportsman::toString`, and adds `sport() -> Sportsman::sport`.
+          - When `p.toString()` executes, the JVM follows `p` $\rightarrow$ `Sportsman` `Class` descriptor $\rightarrow$ `Sportsman::toString`.
+          - **Exam Trap — Attributes are NOT polymorphic:** Instance fields are bound **statically** (at compile time) based on the reference's declared type (*attribute hiding* / *masquage*), whereas non-static, non-private methods are bound **dynamically** (*overriding* / *redéfinition*).
+
+          ### Java 21 Pattern Matching for `switch`
+          Java 21 allows type patterns, `null` handling, and guarded `when` clauses directly in `switch` expressions:
+          ```java
+          String sound = switch (o) {
+              case null -> {
+                  System.out.println("No animal...");
+                  yield "";
+              }
+              case Cat c -> c.meow();
+              case Human h when h.age() > 2 -> "Hello!";
+              default -> "Argle-bargle";
+          };
+          ```
+
+      - id: diag-dynamic-dispatch
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Static Type Checking vs. Runtime Dynamic Binding (Method Table)"
+        caption: "The compiler validates method calls against the static type (Person), while the JVM dispatches overridden methods via the heap object's Class descriptor and method table."
+        source: |
+          flowchart LR
+            subgraph Stack ["Stack (Compile-Time View)"]
+              Ref["Person p<br/>Static type: Person<br/>Allows: set(), toString()<br/>Rejects: p.sport()"]
+            end
+
+            subgraph Heap ["Heap (Runtime Object)"]
+              Obj["Sportsman #8<br/>class ptr → Sportsman<br/>name: 'Roger', age: 39<br/>sport: 'Tennis'"]
+            end
+
+            subgraph Meta ["JVM Class Descriptors & Method Tables"]
+              ClsS["Class: Sportsman<br/>super: Person<br/>vtable:<br/>• set() → Person::set<br/>• toString() → Sportsman::toString<br/>• sport() → Sportsman::sport"]
+              ClsP["Class: Person<br/>super: Object<br/>vtable:<br/>• set() → Person::set<br/>• toString() → Person::toString"]
+            end
+
+            Ref -->|"points to"| Obj
+            Obj -->|"getClass()"| ClsS
+            ClsS -->|"superclass"| ClsP
+
+            classDef stack fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px;
+            classDef heap fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;
+            classDef meta fill:#ede9fe,stroke:#4f46e5,stroke-width:1.5px;
+
+            class Ref stack;
+            class Obj heap;
+            class ClsS,ClsP meta;
+
+      - id: code-instanceof-class-traps
+        block_type: code
+        language: java
+        filename: TypeCheckTraps.java
+        title: "instanceof Compile-Time vs. Runtime Traps, Array Covariance & Class"
+        code: |
+          class Color {}
+          class Red extends Color {}
+          class Blue extends Color {}
+
+          public class TypeCheckTraps {
+              public static void main(String[] args) {
+                  Color c = new Blue();
+                  Red r = new Red();
+                  System.out.println(c instanceof Red);   // false (compiles: Red extends Color)
+                  // System.out.println(r instanceof Blue); // COMPILE ERROR: incompatible types
+                  Integer[] ints = new Integer[5];
+                  System.out.println(ints instanceof Object[]); // true (arrays are covariant)
+                  // System.out.println(ints instanceof String[]); // COMPILE ERROR
+                  Object o = ints;
+                  System.out.println(o instanceof String[]);    // false (compiles via Object)
+                  System.out.println(c.getClass() == Color.class); // false (exact class is Blue)
+                  System.out.println(c.getClass() == Blue.class);  // true
+              }
+          }
+        highlight_lines: [9, 10, 12, 15, 16]
+        annotations:
+          - line: 9
+            note: "Compiles because Red is a subclass of c's static type Color; evaluates to false at runtime."
+          - line: 10
+            note: "Compile-time error! Red and Blue are unrelated sibling classes."
+          - line: 12
+            note: "Java arrays are covariant: Integer[] is a subtype of Object[] (and of Object)."
+          - line: 15
+            note: "Upcasting to Object satisfies the compiler; runtime check cleanly returns false."
+          - line: 16
+            note: "getClass() tests exact instantiation class (Blue.class), never superclasses."
+
+      - id: sb-polymorphic-dispatch
+        block_type: sandbox
+        runtime: java
+        title: "Lab 1: Polymorphic Roster Filter & Exact Instance Counter"
+        instructions: |
+          Complete `Main.java` to practice **dynamic binding**, **pattern matching for `instanceof`**, and **exact class counting** (combining the StarWars and `printInstancesCount` exercises from slides 61 & 76):
+          1. In `printGreenSabers(Humanoid[] roster)`, print the `name` of every `Jedi` whose `saberColor` equals `"green"` using pattern matching `if (h instanceof Jedi j && ...)`.
+          2. In `countExactTypes(Object[] items)`, count how many objects have exact runtime class `Humanoid.class`, `Jedi.class`, and `Sith.class` (using `getClass() == ...`, NOT `instanceof`) and print `"Humanoid: X, Jedi: Y, Sith: Z"`.
+        starter_code: |
+          class Humanoid {
+              String name;
+              Humanoid(String name) { this.name = name; }
+          }
+          class Jedi extends Humanoid {
+              String saberColor;
+              Jedi(String name, String saberColor) {
+                  super(name);
+                  this.saberColor = saberColor;
+              }
+          }
+          class Sith extends Humanoid {
+              Sith(String name) { super(name); }
+          }
+
+          public class Main {
+              static void printGreenSabers(Humanoid[] roster) {
+                  // TODO: Use pattern matching instanceof to print names of Jedi with "green" saber
+              }
+
+              static void countExactTypes(Object[] items) {
+                  // TODO: Count exact runtime classes using getClass() == ...
+                  // Print: "Humanoid: X, Jedi: Y, Sith: Z"
+              }
+
+              public static void main(String[] args) {
+                  Humanoid[] roster = {
+                      new Humanoid("Paul"),
+                      new Jedi("Yoda", "green"),
+                      new Jedi("Obi-Wan", "blue"),
+                      new Jedi("Luke", "green"),
+                      new Sith("Darth Vader")
+                  };
+                  printGreenSabers(roster);
+                  countExactTypes(roster);
+              }
+          }
+        solution: |
+          class Humanoid {
+              String name;
+              Humanoid(String name) { this.name = name; }
+          }
+          class Jedi extends Humanoid {
+              String saberColor;
+              Jedi(String name, String saberColor) {
+                  super(name);
+                  this.saberColor = saberColor;
+              }
+          }
+          class Sith extends Humanoid {
+              Sith(String name) { super(name); }
+          }
+
+          public class Main {
+              static void printGreenSabers(Humanoid[] roster) {
+                  for (Humanoid h : roster) {
+                      if (h instanceof Jedi j && "green".equals(j.saberColor)) {
+                          System.out.println(j.name);
+                      }
+                  }
+              }
+
+              static void countExactTypes(Object[] items) {
+                  int humanoids = 0, jedis = 0, siths = 0;
+                  for (Object item : items) {
+                      if (item.getClass() == Humanoid.class) humanoids++;
+                      else if (item.getClass() == Jedi.class) jedis++;
+                      else if (item.getClass() == Sith.class) siths++;
+                  }
+                  System.out.println("Humanoid: " + humanoids + ", Jedi: " + jedis + ", Sith: " + siths);
+              }
+
+              public static void main(String[] args) {
+                  Humanoid[] roster = {
+                      new Humanoid("Paul"),
+                      new Jedi("Yoda", "green"),
+                      new Jedi("Obi-Wan", "blue"),
+                      new Jedi("Luke", "green"),
+                      new Sith("Darth Vader")
+                  };
+                  printGreenSabers(roster);
+                  countExactTypes(roster);
+              }
+          }
+        expected_output: |
+          Yoda
+          Luke
+          Humanoid: 1, Jedi: 3, Sith: 1
+        hints:
+          - "In `printGreenSabers`, write `if (h instanceof Jedi j && \"green\".equals(j.saberColor))` so you never need an explicit cast."
+          - "In `countExactTypes`, `item instanceof Humanoid` would count Jedi and Sith too! Use `item.getClass() == Humanoid.class` to match only exact `Humanoid` instances."
+
+  - id: sec-autoboxing-io
+    title: "3. Autoboxing, Unboxing & Standard I/O"
+    description: >-
+      Understand wrapper classes, the Integer cache identity trap (-128 to 127),
+      autoboxing performance overhead, and standard streams (System.out,
+      System.err, System.in with Scanner).
+    blocks:
+      - id: th-autoboxing-unboxing
+        block_type: markdown
+        title: "Autoboxing, Unboxing & The Integer Cache Trap"
+        content: |
+          Primitive values (`int`, `double`, `boolean`, ...) are **not objects** in Java. Each primitive has an immutable **wrapper class** (*classe enrobeur*): `Integer`, `Double`, `Long`, `Boolean`, `Character`, etc.
+
+          - **Autoboxing:** Automatic conversion from primitive $\rightarrow$ wrapper object.
+            `Integer obj = 1;` is compiled to `Integer obj = Integer.valueOf(1);`.
+          - **Unboxing:** Automatic conversion from wrapper object $\rightarrow$ primitive.
+            `int i = obj;` is compiled to `int i = obj.intValue();`.
+
+          ### Exam Trap 1: Wrapper Caching (`-128` to `127`) & `==` vs. `.equals()`
+          Because wrapper objects are immutable, `Integer.valueOf(int)` **caches** a single shared instance for values in **`[-128, 127]`** (at minimum). Outside that range, each autoboxing allocates a **new** object on the heap!
+          - Comparing `wrapper == primitive` triggers **unboxing** (value comparison $\rightarrow$ `true` for any equal number).
+          - Comparing `wrapper1 == wrapper2` (or `wrapper == object`) compares **object references** (memory addresses)! It returns `true` for `1` (cached) and **`false` for `1000`** (two distinct `Integer` objects).
+          - **Rule:** Always compare wrapper values with `.equals()`, never `==`.
+
+          ### Exam Trap 2: Performance & `NullPointerException`
+          Autoboxing is **not free**. Using `Long sum = 0L;` inside a tight loop (`sum += i;`) unboxes `sum`, adds `i`, and allocates a brand-new `Long` object on every iteration—roughly **5× slower** than primitive `long sum = 0L;`. Furthermore, unboxing a `null` wrapper reference throws a `NullPointerException` at runtime.
+
+      - id: code-autoboxing-traps
+        block_type: code
+        language: java
+        filename: AutoboxingTraps.java
+        title: "Autoboxing Identity, Caching & Performance Pitfalls"
+        code: |
+          public class AutoboxingTraps {
+              public static void main(String[] args) {
+                  Object[] mixed = { 1, 2.4, 4.0 / 2 }; // Integer, Double, Double
+                  Integer a = 1;
+                  int val = a;                          // unboxing
+                  Object obj = val;                     // autoboxing -> cached Integer(1)
+                  System.out.println(a == 1);           // true (unboxing)
+                  System.out.println(a == obj);         // true for 1, FALSE for 1000!
+                  System.out.println(a == Integer.valueOf(1)); // true (cached)
+                  Integer x = 1000, y = 1000;
+                  System.out.println(x == y);           // false (outside -128..127 cache)
+                  System.out.println(x.equals(y));      // true (value equality)
+              }
+          }
+        highlight_lines: [3, 7, 8, 11, 12]
+        annotations:
+          - line: 3
+            note: "4.0 / 2 evaluates to double 2.0, which autoboxes to java.lang.Double, not Integer."
+          - line: 7
+            note: "Comparing Integer to primitive int unboxes a, performing numeric equality."
+          - line: 8
+            note: "Both point to the same cached Integer(1) instance; fails if the value is 1000."
+          - line: 11
+            note: "1000 is outside the [-128, 127] cache, so x and y reference two distinct heap objects."
+          - line: 12
+            note: "Always use .equals() to compare wrapper object values safely."
+
+      - id: th-standard-io
+        block_type: markdown
+        title: "Standard Output (PrintStream) & Standard Input (Scanner)"
+        content: |
+          ### Standard Output & Error (`System.out`, `System.err`)
+          `System.out` and `System.err` are static `PrintStream` fields offering:
+          - Overloaded `print()` and `println()` for primitives, `String`, and `Object`.
+          - C-style `printf(String format, Object... args)` accepting a variable number of arguments (*varargs*).
+          - **Automatic conversion:** When `%s` or `println(obj)` expects a `String`, Java invokes `obj.toString()` (via dynamic binding), and primitive arguments passed to `Object... args` are automatically **autoboxed**:
+            ```java
+            for (int i = 0; i < tableau.length; ++i)
+                System.out.printf("%2d : %s\n", i, tableau[i]); // i autoboxed to Integer; tableau[i].toString() called
+            ```
+
+          ### Standard Input (`System.in` + `Scanner`)
+          `System.in` is a raw `InputStream` (byte-oriented). Wrap it in `java.util.Scanner` to parse tokens and primitives:
+          ```java
+          Scanner sin = new Scanner(System.in);
+          String word = sin.next();      // reads next whitespace-delimited token
+          String line = sin.nextLine();  // reads remainder of the current line (watch for leftover '\n'!)
+          int sum = 0;
+          while (sin.hasNextInt())
+              sum += sin.nextInt();
+          ```
+
+  - id: sec-collections-framework
+    title: "4. Encapsulation, The Java Collections Framework & Iterators"
+    description: >-
+      Protect internal arrays and collections from encapsulation leaks, master
+      the Java 21 Collections hierarchy (Collection, List, Set, Map,
+      SequencedCollection), avoid C++ false friends, and iterate safely.
+    blocks:
+      - id: th-arrays-and-encapsulation
+        block_type: markdown
+        title: "Arrays vs. Collections & Encapsulation Leaks"
+        content: |
+          - **Arrays** (*tableaux*): fast indexed access and native support for primitives, **but fixed size**. Utility class `java.util.Arrays` provides static helpers such as `Arrays.sort(array)` and `Arrays.equals(a, b)`.
+          - **Collections** (`java.util`): dynamic size (lists, sets, maps), **but store object references only** (primitives must be boxed, e.g., `collection.add(2)` autoboxes to `Integer`).
+
+          ### Critical Encapsulation Trap
+          Arrays and collections are **mutable heap objects**. Returning a direct reference to a `private` array or collection destroys encapsulation:
+          ```java
+          public class Holder {
+              private int[] array = { 1, 2, 3 };
+              public int[] getArray() { return array; } // LEAK! Caller can do h.getArray()[2] = 66;
+          }
+          ```
+          **Three Safe Solutions:**
+          1. **Expose element accessors** instead of the backing container: `int getElement(int i) { return array[i]; }`.
+          2. **Return a defensive copy** (e.g., `Arrays.copyOf(array, array.length)` or `new ArrayList<>(list)`).
+          3. **Return an unmodifiable view:** `Collections.unmodifiableCollection(c)` / `Collections.unmodifiableList(list)` (throws `UnsupportedOperationException` on mutation attempts).
+
+      - id: th-collections-types-and-cpp
+        block_type: markdown
+        title: "Collections Interfaces, Java 21 SequencedCollection & C++ Comparison"
+        content: |
+          ### Core `Collection` Contract
+          Implemented by lists and sets (but **NOT** by `Map`!):
+          - `boolean add(E o)` / `boolean remove(Object o)`
+          - `int size()` / `boolean contains(Object o)`
+          - `Iterator<E> iterator()` (inherited from `Iterable<E>`)
+
+          ### Lists, Sets, Maps & Java 21 `SequencedCollection`
+          - **`ArrayList`** (extensible array): $O(1)$ indexed access (`get(i)`), slow middle insertions/removals ($O(n)$ shifting).
+          - **`LinkedList`** (doubly linked list): $O(1)$ head/tail insertions/removals and optimal sequential traversal, slow indexed access ($O(n)$). Also provides `listIterator()` returning a bidirectional `ListIterator`.
+          - **`Set`** (no duplicates): `HashSet` (unordered, $O(1)$ average), `LinkedHashSet` (insertion-ordered), `TreeSet` (sorted).
+          - **`Map`** (key-value dictionary, separate hierarchy): `HashMap` (unordered), `LinkedHashMap` (insertion-ordered), `TreeMap` (sorted by key).
+          - **Java 21 `SequencedCollection` & `SequencedMap`:** Unified interfaces for collections with a well-defined encounter order (implemented by `List`, `LinkedHashSet`, `TreeSet`, etc.; *not* `HashSet`/`HashMap`):
+            - `addFirst(e)` / `addLast(e)`
+            - `getFirst()` / `getLast()`
+            - `removeFirst()` / `removeLast()`
+            - `reversed()` (returns a reversed view)
+
+          ### C++ Containers vs. Java Collections ("False Friends" / *Faux amis*)
+          | Concept | C++ (`std::`) | Java (`java.util`) |
+          | :--- | :--- | :--- |
+          | Resizable array | `std::vector<T>` | `ArrayList<T>` *(not `Vector`)* |
+          | Doubly linked list | `std::list<T>` | `LinkedList<T>` |
+          | Hash set / Ordered set | `std::unordered_set` / `std::set` | `HashSet` / `TreeSet` |
+          | Hash map / Ordered map | `std::unordered_map` / `std::map` | `HashMap` / `TreeMap` |
+
+          **Two Deep Architectural Differences:**
+          1. **Values vs. References:** C++ containers store objects or primitive values directly by value (or pointers); Java collections store **only object references**.
+          2. **Templates vs. Interfaces:** C++ uses compile-time **templates** (duck typing, no shared base interface across containers); Java defines polymorphic **interfaces** (`Collection`, `List`, `Set`, `Map`) shared by multiple implementations.
+
+      - id: diag-collections-hierarchy
+        block_type: kroki
+        diagram_type: plantuml
+        title: "Java 21 Collections Framework Hierarchy"
+        caption: "Iterable -> Collection -> SequencedCollection -> List/Set form one hierarchy, while Map / SequencedMap form a separate key-value hierarchy."
+        source: |
+          @startuml
+          skinparam classAttributeIconSize 0
+          skinparam classBackgroundColor #f8fafc
+          skinparam classBorderColor #475569
+          skinparam interfaceBackgroundColor #e0f2fe
+          skinparam interfaceBorderColor #0284c7
+
+          interface Iterable<E>
+          interface Collection<E>
+          interface SequencedCollection<E> <<Java 21>>
+          interface List<E>
+          interface Set<E>
+          interface SequencedSet<E> <<Java 21>>
+
+          class ArrayList<E>
+          class LinkedList<E>
+          class HashSet<E>
+          class LinkedHashSet<E>
+          class TreeSet<E>
+
+          interface Map<K, V>
+          interface SequencedMap<K, V> <<Java 21>>
+          class HashMap<K, V>
+          class LinkedHashMap<K, V>
+          class TreeMap<K, V>
+
+          Iterable <|-- Collection
+          Collection <|-- SequencedCollection
+          Collection <|-- Set
+          SequencedCollection <|-- List
+          SequencedCollection <|-- SequencedSet
+          Set <|-- SequencedSet
+
+          List <|.. ArrayList
+          List <|.. LinkedList
+          Set <|.. HashSet
+          SequencedSet <|.. LinkedHashSet
+          SequencedSet <|.. TreeSet
+
+          Map <|-- SequencedMap
+          Map <|.. HashMap
+          SequencedMap <|.. LinkedHashMap
+          SequencedMap <|.. TreeMap
+          @enduml
+
+      - id: th-iterators-foreach
+        block_type: markdown
+        title: "Iterators & Enhanced For-Each Loops"
+        content: |
+          An **`Iterator`** starts **before the first element** of a collection and exposes three methods:
+          - `boolean hasNext()` — returns `true` if more elements remain.
+          - `E next()` — advances and returns the next element.
+          - `void remove()` — removes the element last returned by `next()`.
+
+          > [!CAUTION]
+          > **Never modify a collection directly while iterating over it** (e.g., calling `list.remove(x)` inside a `while (it.hasNext())` or `for-each` loop triggers `ConcurrentModificationException`). Always use **`it.remove()`**!
+
+          ### Simplified Iteration (`for-each`)
+          Syntax: `for (Type element : expression) { ... }` works on both **arrays** and any object implementing **`Iterable<E>`** (which requires `public Iterator<E> iterator()`).
+          - Eliminates explicit `Iterator` boilerplate and index errors.
+          - **Restriction:** You still need an explicit `Iterator` to remove elements from a collection during traversal, or an index `i` to overwrite slots in an array.
+
+      - id: fc-collections-comparison
+        block_type: flashcard
+        title: "Collections Comparison & C++ False Friends"
+        front: "Compare `ArrayList`, `LinkedList`, `HashSet`, and `HashMap` in Java—and name the C++ STL equivalents of `ArrayList` and `LinkedList`."
+        back: |
+          - **`ArrayList`** (C++ `std::vector`): Extensible array; $O(1)$ indexed `get(i)`, $O(n)$ middle insert/remove.
+          - **`LinkedList`** (C++ `std::list`): Doubly linked list; $O(1)$ head/tail insert/remove & sequential traversal, $O(n)$ indexed access; offers `ListIterator`.
+          - **`HashSet`**: Unordered `Set` (no duplicates, does **not** implement `SequencedCollection`).
+          - **`HashMap`**: Unordered key-value `Map` (separate hierarchy; does **not** extend `Collection`).
+        hint: "Watch out for the C++ false friend `std::vector` vs `std::list`."
+        tags:
+          - collections
+          - cpp-vs-java
+          - complexity
+
+  - id: sec-generics
+    title: "5. Generics, Type Erasure, Bounds & Custom Linked Lists"
+    description: >-
+      Eliminate raw-type casts with Java Generics, understand type erasure vs.
+      C++ templates, generics invariance, bounded type parameters, generic
+      methods, and custom generic iterators.
+    blocks:
+      - id: th-raw-vs-generic
+        block_type: markdown
+        title: "Why Raw Types Are Dangerous & Generic Collections"
+        content: |
+          Without generics, a collection such as `LinkedList list = new LinkedList();` is a **raw type** (*type brut*), effectively storing `Object` references:
+          - You can accidentally mix `Person`, `String`, and `Integer` in the same list.
+          - Every retrieval requires a manual cast (`((Person) o).print()`), shifting type errors from compile time to runtime `ClassCastException`.
+          - **Rule:** Never use raw collections! If you genuinely need a heterogeneous collection, declare `LinkedList<Object>` explicitly.
+
+          ### Generic Collections & the Diamond Operator (`<>`)
+          ```java
+          List<String> list = new LinkedList<>(); // diamond operator infers <String>
+          list.add("One");
+          // list.add(new Person("John"));        // COMPILE ERROR! Caught immediately
+          String s = list.get(0);                 // No cast needed
+          ```
+          Generic types work seamlessly as method parameters and return types (`public List<String> getNames()`).
+
+      - id: th-type-erasure-bounds-invariance
+        block_type: markdown
+        title: "Type Erasure, Bounded Parameters & Generics Invariance"
+        content: |
+          ### Type Erasure (*Effacement de type*) vs. C++ Templates
+          - In **C++**, instantiating `std::vector<int>` and `std::vector<std::string>` compiles **two separate classes** in machine code.
+          - In **Java**, a generic class/interface (`interface List<E>`) is compiled **once** into a **single `.class` file**. The compiler checks all generic types at compile time, inserts invisible casts where needed, and **erases** the type parameter—replacing `E` with `Object` (or with its upper bound if bounded).
+
+          ### Bounded Type Parameters (`<T extends Type>`)
+          Restricting a type parameter to a class hierarchy unlocks calling the supertype's methods inside the generic class:
+          ```java
+          class PersonList<T extends Person> {
+              // T is guaranteed to be Person or a subclass of Person
+              // Inside this class, you can call Person methods on T instances!
+          }
+          ```
+
+          ### Generics Invariance (vs. Array Covariance)
+          Even though `Student extends Person`:
+          - **Arrays are covariant:** `Student[]` **is** a subtype of `Person[]` (so `Person[] arr = new Student[2];` compiles, but `arr[0] = new Sportsman(...);` fails at runtime with `ArrayStoreException`).
+          - **Generics are invariant:** `List<Student>` is **NOT** a subtype of `List<Person>`! Allowing `List<Person> lp = new ArrayList<Student>();` would let you call `lp.add(new Sportsman(...))`, corrupting the `Student` list without a compile error. To accept any list of `Person` subtypes for reading, Java uses wildcards: `List<? extends Person>`.
+
+      - id: th-generic-methods-simplelist
+        block_type: markdown
+        title: "Multi-Parameter Generics, Generic Methods & SimpleList"
+        content: |
+          A class can take multiple type parameters (e.g., `Pair<T, U>`). Likewise, individual **generic methods** (*méthodes génériques*) declare their own type parameter(s) in `<...>` before the return type—and the compiler **automatically infers** the type argument from the call site:
+
+          ```java
+          public <V> Pair<T, V> merge(Pair<U, V> other) {
+              if (second.equals(other.first))
+                  return new Pair<>(first, other.second);
+              return new Pair<>(null, null);
+          }
+          ```
+
+          ### Design Pattern: Encapsulated `SimpleList<T>` & `Examinator<T>`
+          To build a custom singly linked list without leaking internal nodes:
+          - Place `Element<T>` (holding `T data; Element<T> next;`) as a **package-private** class (or private static nested class) so external callers cannot manipulate pointers.
+          - Keep `private Element<T> head;` inside `public class SimpleList<T>`.
+          - Provide `public Examinator<T> examinator()` returning an iterator holding `private Element<T> current;` with `hasNext()`, `next()`, and `remove()`.
+
+      - id: code-generics-pair-merge
+        block_type: code
+        language: java
+        filename: PairDemo.java
+        title: "Multi-Parameter Generic Class & Generic Method Type Inference"
+        code: |
+          class Pair<T, U> {
+              private final T first;
+              private final U second;
+              public Pair(T first, U second) {
+                  this.first = first;
+                  this.second = second;
+              }
+              public T first() { return first; }
+              public U second() { return second; }
+              public <V> Pair<T, V> merge(Pair<U, V> other) {
+                  if (second.equals(other.first))
+                      return new Pair<>(first, other.second);
+                  return new Pair<>(null, null);
+              }
+              public String toString() { return "(" + first + ", " + second + ")"; }
+          }
+
+          public class PairDemo {
+              public static void main(String[] args) {
+                  Pair<Integer, String> p1 = new Pair<>(10, "Key");
+                  Pair<String, Double> p2 = new Pair<>("Key", 3.14);
+                  Pair<Integer, Double> merged = p1.merge(p2);
+                  System.out.println(merged);
+              }
+          }
+        highlight_lines: [1, 10, 20, 22]
+        annotations:
+          - line: 1
+            note: "Two type parameters T and U; compiled once into a single Pair.class via type erasure."
+          - line: 10
+            note: "Generic method declaring its own type parameter <V> before the return type Pair<T, V>."
+          - line: 20
+            note: "Primitive 10 is autoboxed to Integer; diamond <> infers <Integer, String>."
+          - line: 22
+            note: "Compiler automatically infers V = Double from p2 without writing p1.<Double>merge(p2)."
+
+      - id: sb-generics-iterator
+        block_type: sandbox
+        runtime: java
+        title: "Lab 2: Generic Pair.merge() & Safe Iterator.remove()"
+        instructions: |
+          Complete `Main.java` to combine **Generics** and **safe `Iterator` mutation**:
+          1. Implement the generic method `<V> Pair<T, V> merge(Pair<U, V> other)` inside `Pair<T, U>`: if `this.second.equals(other.first)`, return `new Pair<>(this.first, other.second)`, otherwise `new Pair<>(null, null)`.
+          2. In `removeNegatives(List<Integer> nums)`, remove all negative integers (`< 0`) using an `Iterator<Integer>` and `it.remove()` (do NOT call `nums.remove(...)` inside a `for-each` loop!).
+        starter_code: |
+          import java.util.*;
+
+          class Pair<T, U> {
+              final T first;
+              final U second;
+              Pair(T first, U second) { this.first = first; this.second = second; }
+
+              public <V> Pair<T, V> merge(Pair<U, V> other) {
+                  // TODO: Merge if this.second.equals(other.first), else return Pair(null, null)
+                  return new Pair<>(null, null);
+              }
+
+              public String toString() { return "(" + first + ", " + second + ")"; }
+          }
+
+          public class Main {
+              static void removeNegatives(List<Integer> nums) {
+                  // TODO: Use Iterator<Integer> and it.remove() to remove all elements < 0
+              }
+
+              public static void main(String[] args) {
+                  Pair<Integer, String> p1 = new Pair<>(10, "Key");
+                  Pair<String, Double> p2 = new Pair<>("Key", 3.14);
+                  System.out.println(p1.merge(p2));
+
+                  List<Integer> nums = new ArrayList<>(Arrays.asList(5, -2, 8, -9, 0, 3));
+                  removeNegatives(nums);
+                  System.out.println(nums);
+              }
+          }
+        solution: |
+          import java.util.*;
+
+          class Pair<T, U> {
+              final T first;
+              final U second;
+              Pair(T first, U second) { this.first = first; this.second = second; }
+
+              public <V> Pair<T, V> merge(Pair<U, V> other) {
+                  if (this.second.equals(other.first)) {
+                      return new Pair<>(this.first, other.second);
+                  }
+                  return new Pair<>(null, null);
+              }
+
+              public String toString() { return "(" + first + ", " + second + ")"; }
+          }
+
+          public class Main {
+              static void removeNegatives(List<Integer> nums) {
+                  Iterator<Integer> it = nums.iterator();
+                  while (it.hasNext()) {
+                      if (it.next() < 0) {
+                          it.remove();
+                      }
+                  }
+              }
+
+              public static void main(String[] args) {
+                  Pair<Integer, String> p1 = new Pair<>(10, "Key");
+                  Pair<String, Double> p2 = new Pair<>("Key", 3.14);
+                  System.out.println(p1.merge(p2));
+
+                  List<Integer> nums = new ArrayList<>(Arrays.asList(5, -2, 8, -9, 0, 3));
+                  removeNegatives(nums);
+                  System.out.println(nums);
+              }
+          }
+        expected_output: |
+          (10, 3.14)
+          [5, 8, 0, 3]
+        hints:
+          - "In `merge`, use `.equals()` (not `==`) to compare `this.second` and `other.first`, because `U` is a reference type (`String` here)."
+          - "In `removeNegatives`, obtain `Iterator<Integer> it = nums.iterator();`, loop `while (it.hasNext())`, check `if (it.next() < 0)`, and call `it.remove()`."
+
+      - id: fc-generics-erasure-invariance
+        block_type: flashcard
+        title: "Type Erasure & Generics Invariance"
+        front: "How does Java **type erasure** (*effacement de type*) differ from C++ templates, and why is `List<Student>` **not** a subtype of `List<Person>`?"
+        back: |
+          - **Type Erasure:** A Java generic class is compiled **once** into a single `.class` file; type arguments are checked at compile time and then erased to `Object` (or the upper bound in `<T extends Bound>`). C++ templates generate separate compiled code per instantiation.
+          - **Generics Invariance:** If `List<Student>` were a subtype of `List<Person>`, you could write `List<Person> lp = students; lp.add(new Sportsman());` and silently corrupt a `Student` list at runtime.
+        hint: "Think about how many `.class` files `Pair<T, U>` produces, and what would happen if you inserted a `Sportsman` through a `List<Person>` alias."
+        tags:
+          - generics
+          - type-erasure
+          - invariance
+
+      - id: ref-static-vs-dynamic-encapsulation
+        block_type: reflection_rubric
+        title: "Synthesis: Static/Dynamic Dispatch & Collection Encapsulation"
+        prompt: >-
+          In your own words, answer both exam-style questions: (1) Given
+          `Person p = new Student("Paul");`, why does `p.study()` fail to
+          compile while `p.toString()` executes `Student.toString()` at
+          runtime? (2) Why is returning `private List<Student> students;` from a
+          getter an encapsulation violation, and what are two safe alternatives?
+        self_check_criteria:
+          - "Distinguished p's static type (Person, checked at compile time) from its dynamic type (Student, used for dynamic binding via the method table at runtime)."
+          - "Explained that returning a mutable List reference allows external callers to call .add()/.remove()/.clear() and bypass class invariants."
+          - "Named at least two safe remedies: Collections.unmodifiableList(...), returning a defensive copy (new ArrayList<>(students)), or exposing read-only element accessors."
+        model_answer: >-
+          (1) The Java compiler checks method existence strictly against the
+          variable's static type (`Person`). Because `study()` is not declared
+          on `Person`, `p.study()` is rejected at compile time. However,
+          `toString()` is declared on `Object`/`Person`, so it compiles; at
+          runtime, dynamic binding (*liaison dynamique*) follows the heap
+          object's `Class` pointer to `Student`'s method table and executes
+          `Student::toString`. (2) Because `List` is a mutable reference type,
+          returning the private reference directly lets external code mutate the
+          internal list (e.g., `getStudents().clear()`), breaking encapsulation.
+          Safe fixes include returning an unmodifiable view
+          (`Collections.unmodifiableList(students)`), returning a defensive copy
+          (`new ArrayList<>(students)`), or providing index/size accessors
+          instead of exposing the list.
+
+  - id: sec-diagnostic-quiz
+    title: "6. Diagnostic Knowledge Check (TE1 Exam Calibration)"
+    description: >-
+      Test your mastery of polymorphism, dynamic binding, instanceof traps,
+      autoboxing caching, collections, and generics with TE1-grade diagnostic
+      questions.
+    blocks:
+      - id: qz-polymorphism-taxonomy
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 2
+        related_block_id: th-polymorphism-taxonomy
+        title: "Polymorphism Taxonomy Classification"
+        question: >-
+          According to the Strachey/Cardelli polymorphism taxonomy taught in POO,
+          which pair correctly classifies **Universal** (*universel*) vs.
+          **Ad-hoc** polymorphism?
+        options:
+          - "Universal = Parametric (generics) & Inclusion (subtyping); Ad-hoc = Overloading & Conversion"
+          - "Universal = Inclusion (subtyping) & Overloading; Ad-hoc = Parametric (generics) & Conversion"
+          - "Universal = Parametric (generics) & Conversion; Ad-hoc = Inclusion (subtyping) & Overloading"
+          - "Universal = Dynamic binding & Casting; Ad-hoc = Interfaces & Abstract classes"
+        correct_answer: "Universal = Parametric (generics) & Inclusion (subtyping); Ad-hoc = Overloading & Conversion"
+        explanation: |
+          Universal polymorphism covers operations that work uniformly over an unbounded set of types: **Parametric** (*généricité*, e.g., `List<T>`) and **Inclusion** (*sous-typage*, e.g., `Person p = new Sportsman()`). Ad-hoc polymorphism covers a finite set of explicitly defined behaviors: **Overloading** (*surcharge*) and **Conversion** (*conversion automatique*).
+
+          - Putting Overloading under Universal is wrong because each overload is a separate, ad-hoc implementation.
+          - Putting Conversion under Universal is wrong because primitive widening/coercion applies only to specific predefined type pairs.
+          - Dynamic binding and casting are mechanisms supporting inclusion polymorphism, not the top-level taxonomy categories.
+        hints:
+          - "Universal polymorphism has two kinds that both work over infinitely many types (via type parameters or inheritance hierarchies)."
+          - "Method overloading (`surcharge`) requires writing a distinct method body for each signature—is that uniform/universal or ad-hoc?"
+
+      - id: qz-static-vs-dynamic-dispatch
+        block_type: quiz_question
+        question_type: code_output
+        difficulty: 4
+        related_block_id: th-class-reflection-vtable
+        title: "Static Field Hiding vs. Dynamic Method Binding"
+        question: |
+          Consider the following Java classes:
+
+          ```java
+          class Person {
+              String role = "Person";
+              String describe() { return "I am a Person"; }
+          }
+          class Sportsman extends Person {
+              String role = "Sportsman";
+              @Override
+              String describe() { return "I am a Sportsman"; }
+          }
+
+          Person p = new Sportsman();
+          System.out.println(p.role + " | " + p.describe());
+          ```
+
+          What is printed to the console?
+        options:
+          - "Person | I am a Sportsman"
+          - "Sportsman | I am a Sportsman"
+          - "Person | I am a Person"
+          - "Compile-time error: duplicate field role"
+        correct_answer: "Person | I am a Sportsman"
+        explanation: |
+          In Java, **instance methods** use **dynamic binding** (*liaison dynamique*) based on the runtime object's type (`Sportsman`), so `p.describe()` invokes `Sportsman::describe` and returns `"I am a Sportsman"`. In contrast, **attributes (fields)** are bound **statically** at compile time based on the variable's declared type (`Person`), so `p.role` reads `Person.role` (`"Person"`), a phenomenon called *field hiding* (*masquage*).
+
+          - `"Sportsman | I am a Sportsman"` wrongly assumes fields are polymorphically overridden like methods.
+          - `"Person | I am a Person"` ignores dynamic binding on overridden methods.
+          - Declaring a field with the same name in a subclass is legal in Java (hiding, not a compile error).
+        hints:
+          - "Does dynamic binding (*liaison dynamique*) apply to instance methods, to attributes, or to both?"
+          - "What is the static type of `p`, and what is the dynamic type of the object `p` references?"
+
+      - id: qz-instanceof-compile-vs-runtime
+        block_type: quiz_question
+        question_type: code_output
+        difficulty: 4
+        related_block_id: code-instanceof-class-traps
+        title: "instanceof Compile-Time Compatibility Trap"
+        question: |
+          Given `class Color {}`, `class Red extends Color {}`, and `class Blue extends Color {}`, consider these four lines:
+
+          ```java
+          Color c = new Blue();
+          Red r = new Red();
+          boolean b1 = (c instanceof Red);
+          boolean b2 = (r instanceof Blue);
+          ```
+
+          What happens when you compile and run this code?
+        options:
+          - "Compile-time error on line 4 (`r instanceof Blue`); line 3 compiles and evaluates to `false`"
+          - "Compiles cleanly; `b1` is `false` and `b2` is `false`"
+          - "Compile-time error on both line 3 and line 4"
+          - "Compiles cleanly, but throws `ClassCastException` on line 4"
+        correct_answer: "Compile-time error on line 4 (`r instanceof Blue`); line 3 compiles and evaluates to `false`"
+        explanation: |
+          In `exp instanceof C`, when both `exp`'s static type and `C` are classes, the compiler requires them to be on the **same inheritance branch** (one must be a superclass or subclass of the other).
+          - Line 3 (`c instanceof Red`): `c` has static type `Color`, and `Red extends Color`, so it compiles and evaluates to `false` at runtime (since `c` points to a `Blue`).
+          - Line 4 (`r instanceof Blue`): `r` has static type `Red`. Because `Red` and `Blue` are unrelated sibling classes, no object could ever be both—Java rejects this at **compile time**.
+          - `instanceof` never throws `ClassCastException` (casting does).
+        hints:
+          - "Check the compile-time rule for `exp instanceof C`: what relationship must exist between `exp`'s static class type and `C`?"
+          - "Can an instance of `Red` ever also be an instance of sibling class `Blue` in Java's single-inheritance hierarchy?"
+
+      - id: qz-getclass-vs-instanceof
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: th-class-reflection-vtable
+        title: "Exact Class (getClass) vs. Membership (instanceof)"
+        question: |
+          Given `Person p = new Sportsman("Roger", 39, "Tennis");` (where `Sportsman extends Person`), which pair of boolean values is produced by:
+          1. `p instanceof Person`
+          2. `p.getClass() == Person.class`
+        options:
+          - "`true` and `false`"
+          - "`true` and `true`"
+          - "`false` and `false`"
+          - "`false` and `true`"
+        correct_answer: "`true` and `false`"
+        explanation: |
+          - `p instanceof Person` tests **membership** (*membre de*): a `Sportsman` is a member of `Sportsman`, `Person`, and `Object`, so it returns **`true`**.
+          - `p.getClass() == Person.class` tests the **exact instantiation class**: `p.getClass()` returns the unique `Sportsman.class` meta-object, which is not equal to `Person.class`, so it returns **`false`**.
+        hints:
+          - "Which operator checks whether an object belongs to a class *or any of its subclasses*?"
+          - "What exact `Class` object does `p.getClass()` return for `new Sportsman(...)`?"
+
+      - id: qz-autoboxing-cache-trap
+        block_type: quiz_question
+        question_type: code_output
+        difficulty: 4
+        related_block_id: code-autoboxing-traps
+        title: "Autoboxing Integer Cache & == Comparison"
+        question: |
+          What does the following Java snippet print?
+
+          ```java
+          Integer a = 127;
+          Integer b = 127;
+          Integer x = 128;
+          Integer y = 128;
+          System.out.println((a == b) + " " + (x == y) + " " + (x == 128));
+          ```
+        options:
+          - "`true false true`"
+          - "`true true true`"
+          - "`false false true`"
+          - "`true false false`"
+        correct_answer: "`true false true`"
+        explanation: |
+          1. `a == b`: Autoboxing calls `Integer.valueOf(127)`. Since `127` is inside Java's guaranteed `Integer` cache (`-128` to `127`), `a` and `b` reference the **same** cached `Integer` object $\rightarrow$ **`true`**.
+          2. `x == y`: `128` is **outside** the `[-128, 127]` cache, so `Integer.valueOf(128)` allocates two distinct `Integer` objects on the heap; reference comparison `==` returns **`false`**.
+          3. `x == 128`: Comparing an `Integer` wrapper to a primitive `int` triggers **unboxing** (`x.intValue() == 128`), which compares numeric values $\rightarrow$ **`true`**.
+        hints:
+          - "Recall the exact inclusive range of `Integer` values cached by `Integer.valueOf()`."
+          - "What happens when one operand of `==` is an `Integer` and the other is a primitive `int`?"
+
+      - id: qz-encapsulation-array-leak
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: th-arrays-and-encapsulation
+        title: "Fixing an Encapsulation Leak on a Private Collection"
+        question: |
+          A class declares `private List<String> names = new ArrayList<>();` and exposes `public List<String> getNames() { return names; }`. Why is this considered broken encapsulation, and which fix preserves encapsulation **without** copying the entire list?
+        options:
+          - "Callers can mutate the internal list via `getNames().clear()`; fix by returning `Collections.unmodifiableList(names)`"
+          - "Callers cannot read `private` fields from outside the class, so `getNames()` is already safe"
+          - "Callers can mutate `names`; fix by declaring `private final List<String> names`"
+          - "Callers can mutate `names`; fix by casting `(Object) names` before returning"
+        correct_answer: "Callers can mutate the internal list via `getNames().clear()`; fix by returning `Collections.unmodifiableList(names)`"
+        explanation: |
+          Because `List` is a mutable object, returning the reference directly lets any caller call `.add()`, `.remove()`, or `.clear()` on the class's internal state. Wrapping it in `Collections.unmodifiableList(names)` returns a read-only view (without copying elements) that throws `UnsupportedOperationException` on mutation attempts.
+
+          - `private` only restricts direct field access by name; once the reference is returned, the object itself is exposed.
+          - `final` prevents reassigning the `names` reference to a different list, but does **not** make the list's contents immutable.
+          - Casting to `Object` still leaks the same mutable reference (and ruins the API).
+        hints:
+          - "Does the `final` keyword on a reference variable prevent calling `.add()` or `.clear()` on the referenced `List`?"
+          - "Which static helper on `java.util.Collections` creates a read-only wrapper around an existing collection?"
+
+      - id: qz-iterator-modification
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: th-iterators-foreach
+        title: "Safely Removing Elements During Iteration"
+        question: >-
+          You want to remove all empty strings from a `List<String> words` while
+          iterating through it. Which approach is guaranteed safe and follows
+          the `Iterator` contract?
+        options:
+          - "Obtain `Iterator<String> it = words.iterator();`, advance with `it.next()`, and call `it.remove()` when empty"
+          - "Use `for (String w : words)` and call `words.remove(w)` when `w.isEmpty()`"
+          - "Obtain `Iterator<String> it = words.iterator();` and call `words.remove(it.next())` when empty"
+          - "Call `it.remove()` immediately after creating `words.iterator()` before calling `it.next()`"
+        correct_answer: "Obtain `Iterator<String> it = words.iterator();`, advance with `it.next()`, and call `it.remove()` when empty"
+        explanation: |
+          Modifying a collection directly (via `words.remove(...)`) while an `Iterator` or `for-each` loop is traversing it violates the iterator contract and throws `ConcurrentModificationException`. The only safe structural removal during iteration is via `it.remove()`, called **after** `it.next()` has advanced to the current element.
+
+          - Calling `words.remove(w)` inside `for-each` or `while (it.hasNext())` causes `ConcurrentModificationException`.
+          - An `Iterator` starts *before* the first element, so calling `it.remove()` before `it.next()` throws `IllegalStateException`.
+        hints:
+          - "Where is an `Iterator` positioned right after `words.iterator()` is called?"
+          - "Which object must perform the removal so the iterator's internal cursor stays synchronized?"
+
+      - id: qz-collections-cpp-false-friends
+        block_type: quiz_question
+        question_type: multi_select
+        difficulty: 3
+        related_block_id: th-collections-types-and-cpp
+        title: "Java Collections Architecture & C++ Comparisons"
+        question: >-
+          Which of the following statements about the Java Collections Framework
+          and its comparison with C++ containers are **true**?
+        options:
+          - "Java's `ArrayList` corresponds to C++'s `std::vector`, and Java's `LinkedList` corresponds to C++'s `std::list`."
+          - "`Map` does NOT extend the `Collection` interface."
+          - "Java collections can store primitive `int` values directly without boxing."
+          - "In Java 21, `SequencedCollection` defines `addFirst`/`addLast`, `getFirst`/`getLast`, `removeFirst`/`removeLast`, and `reversed()` for ordered collections."
+        correct_answer:
+          - "Java's `ArrayList` corresponds to C++'s `std::vector`, and Java's `LinkedList` corresponds to C++'s `std::list`."
+          - "`Map` does NOT extend the `Collection` interface."
+          - "In Java 21, `SequencedCollection` defines `addFirst`/`addLast`, `getFirst`/`getLast`, `removeFirst`/`removeLast`, and `reversed()` for ordered collections."
+        explanation: |
+          - **True:** `ArrayList` $\leftrightarrow$ `std::vector` (resizable array) and `LinkedList` $\leftrightarrow$ `std::list` (doubly linked list) are classic C++/Java naming correspondences.
+          - **True:** `Map<K, V>` models key-value pairs and forms its own separate hierarchy (it does not extend `Collection<E>`).
+          - **False:** Unlike C++ containers, Java collections store **only object references**; inserting an `int` always requires boxing it into an `Integer`.
+          - **True:** Java 21 introduced `SequencedCollection` (and `SequencedMap`) to standardize first/last access and `reversed()` views across ordered collections.
+        hints:
+          - "Can you declare `List<int>` in Java, or must you write `List<Integer>`?"
+          - "Check the UML hierarchy: does `Map<K, V>` inherit from `Collection<E>`?"
+
+      - id: qz-generics-erasure-invariance
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 5
+        related_block_id: th-type-erasure-bounds-invariance
+        title: "Type Erasure & Generics Invariance"
+        question: >-
+          Given `class Student extends Person {}`, which statement accurately
+          describes Java Generics?
+        options:
+          - "`Pair<T, U>` compiles into a single `.class` file via type erasure, and `List<Student>` is NOT a subtype of `List<Person>`."
+          - "`Pair<String, Integer>` and `Pair<Double, Boolean>` compile into two separate `.class` files, just like C++ templates."
+          - "Because `Student extends Person`, `List<Person> lp = new ArrayList<Student>();` compiles cleanly."
+          - "Inside `class PersonList<T extends Person>`, type erasure replaces `T` with `Object`, making `Person` methods inaccessible."
+        correct_answer: "`Pair<T, U>` compiles into a single `.class` file via type erasure, and `List<Student>` is NOT a subtype of `List<Person>`."
+        explanation: |
+          Java implements generics via **type erasure** (*effacement de type*): a generic class is compiled **once** into a single `.class` file, unlike C++ templates which generate separate code per instantiation. Furthermore, Java generics are **invariant**: `List<Student>` is NOT a subtype of `List<Person>`, preventing callers from inserting a `Sportsman` into a `List<Student>` through a `List<Person>` reference.
+
+          - Separate `.class` files per type argument is false (that's C++ template instantiation, not Java).
+          - `List<Person> lp = new ArrayList<Student>();` is a **compile-time error** due to generics invariance.
+          - For a bounded type parameter `<T extends Person>`, type erasure replaces `T` with its upper bound `Person` (not `Object`), specifically so `Person`'s methods *are* accessible.
+        hints:
+          - "Think about what would happen if `List<Person> lp = new ArrayList<Student>();` compiled and you then ran `lp.add(new Sportsman(...));`."
+          - "How many `.class` files does `javac` emit for `class Pair<T, U>` regardless of how many different `<T, U>` combinations you use?"

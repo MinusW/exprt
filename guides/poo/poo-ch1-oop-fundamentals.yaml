@@ -1,0 +1,628 @@
+id: poo-ch1-oop-fundamentals
+title: "Chapter 1: Object-Oriented Programming Fundamentals"
+description: "Foundational concepts of Object-Oriented Programming (POO): programming paradigms, historical roots, classes and objects (identity, state, behavior), the four pillars, inheritance, polymorphism, dynamic binding, multiple inheritance, encapsulation, and visibility."
+category: "Object-Oriented Programming"
+track: "POO - Programmation Orientée Objet (TE1)"
+track_order: 1
+estimated_minutes: 35
+layout_mode: single-page
+tags:
+  - poo
+  - oop
+  - paradigms
+  - encapsulation
+  - inheritance
+  - polymorphism
+  - abstraction
+prerequisites: []
+sources:
+  - title: "HEIG-VD POO — 1 Programmation Orientée Objet"
+    url_or_path: "sources/POO_TE1/1 Programmation Orientée Objet.pdf"
+    notes: "Pages 1–15: Programming paradigms, OOP paradigm, objects, classes, encapsulation, relationships, inheritance, polymorphism, and OOP principles."
+
+sections:
+  - id: sec-paradigms-and-history
+    title: "1. Programming Paradigms & OOP History"
+    blocks:
+      - id: th-paradigms-taxonomy
+        block_type: markdown
+        title: "Programming Paradigms & the Evolution of OOP"
+        bookmarkable: true
+        content: |
+          Before diving into classes and objects, it helps to situate **Object-Oriented Programming (OOP / *Programmation orientée objet*)** within the broader landscape of **programming paradigms (*paradigmes de programmation*)**.
+
+          Programming languages fall into three main families:
+
+          | Paradigm Family | Sub-Paradigms | Representative Languages | Core Mental Model |
+          | :--- | :--- | :--- | :--- |
+          | **Machine Language** (*Langage machine*) | Assembly (*Assembleur*) | x86, ARM Assembly | Direct hardware instructions operating on registers and memory addresses |
+          | **Imperative Programming** (*Programmation impérative*) | Unstructured (*Non structurée*) → Procedural (*Procédurale*) → Object-Oriented (*Orientée objet*) | Fortran, Basic → C, Pascal → C++, Java | Explicit sequences of statements that mutate program state |
+          | **Declarative Programming** (*Programmation déclarative*) | Logic (*Logique*), Functional (*Fonctionnelle*), Data Manipulation (*Manipulation de données*) | Prolog, Lisp, Haskell, SQL | Describe *what* result is desired rather than step-by-step control flow |
+
+          > [!IMPORTANT]
+          > **Key Exam Distinction:** OOP is **not** a declarative paradigm—it is the direct **evolution (*évolution*)** of **imperative programming (*programmation impérative*)**:
+          >
+          > $$\text{Unstructured (Fortran, Basic)} \;\longrightarrow\; \text{Procedural (C, Pascal)} \;\longrightarrow\; \text{Object-Oriented (C++, Java)}$$
+          >
+          > Procedural languages organized code into procedures operating on separate data structures; OOP unified data and the operations acting on that data into self-contained **objects**.
+
+      - id: diag-paradigms-tree
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Taxonomy of Programming Paradigms"
+        caption: "OOP sits inside the imperative family as an evolution from unstructured and procedural programming, distinct from machine language and declarative paradigms."
+        bookmarkable: true
+        source: |
+          flowchart TD
+            Root["Programming Paradigms<br/>(Paradigmes de programmation)"]
+
+            Mach["Machine Language<br/>(Langage machine)"]
+            Asm["Assembly<br/>(Assembleur)"]
+
+            Imp["Imperative Programming<br/>(Programmation impérative)"]
+            Unstruct["Unstructured<br/>(Non structurée)<br/>Fortran, Basic..."]
+            Proc["Procedural<br/>(Procédurale)<br/>C, Pascal..."]
+            OOP["Object-Oriented<br/>(Orientée objet)<br/>C++, Java..."]
+
+            Decl["Declarative Programming<br/>(Programmation déclarative)"]
+            Log["Logic (Logique)<br/>Prolog..."]
+            Func["Functional (Fonctionnelle)<br/>Lisp, Haskell..."]
+            Data["Data Manipulation<br/>(Manipulation de données)<br/>SQL..."]
+
+            Root --> Mach --> Asm
+            Root --> Imp --> Unstruct
+            Unstruct -->|évolution| Proc
+            Proc -->|évolution| OOP
+            Root --> Decl
+            Decl --> Log
+            Decl --> Func
+            Decl --> Data
+
+            classDef root fill:#f1f5f9,stroke:#475569,stroke-width:2px;
+            classDef imp fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px;
+            classDef oop fill:#d1fae5,stroke:#059669,stroke-width:2.5px;
+            classDef other fill:#f8fafc,stroke:#94a3b8,stroke-width:1px;
+
+            class Root root;
+            class Imp,Unstruct,Proc imp;
+            class OOP oop;
+            class Mach,Asm,Decl,Log,Func,Data other;
+
+      - id: th-oop-history
+        block_type: markdown
+        title: "Historical Milestones of Object-Oriented Languages"
+        bookmarkable: true
+        content: |
+          Object-oriented concepts did not appear overnight—they evolved over decades of language design:
+
+          * **1967 — Simula (Birth of OOP):** First object-oriented language. Introduced the idea of representing **real-world entities (*entités du monde réel*)** as computational structures combining both **state (*état*)** and **behavior (*comportement*)**: an **object (*objet*)**.
+          * **1972–1980 — Smalltalk:** Formalized the pure object model across three landmark versions:
+            * **1972:** Objects communicating via **message passing (*envoi de messages*)**.
+            * **1976:** Introduction of the **metaclass (*métaclasse*)** concept (classes themselves are objects).
+            * **1980:** Pure **"everything is an object" (*« tout objet »*)** philosophy.
+          * **1970s–1980s — LISP:** Object-oriented extensions added to LISP.
+          * **1985–2014+ — Modern Mainstream Adoption:**
+            * **1985:** C++, ObjectPascal
+            * **1986:** Eiffel
+            * **1989:** Newton
+            * **1991:** Python
+            * **1994:** Ada-95
+            * **1995:** Java, Ruby
+            * **2000:** C#
+            * **2004:** Scala
+            * **2014:** Swift
+
+      - id: fc-smalltalk-milestones
+        block_type: flashcard
+        title: "Simula & Smalltalk Historical Milestones"
+        bookmarkable: true
+        front: "What foundational OOP concepts were introduced by **Simula (1967)** and **Smalltalk (1972, 1976, 1980)**?"
+        back: |
+          * **Simula (1967):** Birth of OOP — modeling real-world entities as computational structures combining **state (*état*)** and **behavior (*comportement*)** (objects).
+          * **Smalltalk-72:** Objects communicating via **message passing (*envoi de messages*)**.
+          * **Smalltalk-76:** Concept of **metaclass (*métaclasse*)**.
+          * **Smalltalk-80:** Pure **"everything is an object" (*« tout objet »*)** design.
+        hint: "Think of the progression: birth of objects → messages → metaclasses → pure OO."
+        tags:
+          - history
+          - simula
+          - smalltalk
+
+  - id: sec-objects-classes-pillars
+    title: "2. The Object Paradigm: Classes, Objects & the Four Pillars"
+    blocks:
+      - id: th-four-pillars-overview
+        block_type: markdown
+        title: "The Four Pillars & Core Concepts of OOP"
+        bookmarkable: true
+        content: |
+          The **object paradigm (*paradigme objet*)** combines three things into a single entity called an **object (*objet*)**:
+          1. Its uniqueness — its **identity (*identité*)**.
+          2. Its data — its **state (*état*)**.
+          3. Its **behavior (*comportement*)** — functions operating on its data, called **methods (*méthodes*)**.
+
+          The **type** of an object (its data and behavior) is described by its **class (*classe*)**.
+
+          ### The 4 Pillars of OOP (*Les 4 Piliers de la POO*)
+
+          | Concept | French Term | Core Definition |
+          | :--- | :--- | :--- |
+          | **Encapsulation** | *Encapsulation* | Protecting an object's data (*protéger les données des objets*) against direct external access |
+          | **Abstraction** | *Abstraction* | Managing complexity by hiding unnecessary details from the user (*gérer la complexité en cachant les détails inutiles à l'utilisateur*) |
+          | **Inheritance** | *Héritage* | Extending an existing class into a new subclass (*extension d'une classe dans une nouvelle sous-classe*) |
+          | **Polymorphism** | *Polymorphisme* | Literally *"having multiple forms"* (*« avoir plusieurs formes »*), multiple names (*plusieurs noms*) |
+
+          Alongside the four pillars stand the two structural building blocks:
+          * **Objects (*Objets*):** Entities combining state and applicable operations (*état et opérations applicables*).
+          * **Classes (*Classes*):** Blueprints that allow defining objects (*permettent de définir des objets*).
+
+      - id: th-class-vs-object
+        block_type: markdown
+        title: "Class vs. Object: Blueprint and Instances"
+        bookmarkable: true
+        content: |
+          ### Class (*Classe*)
+          A **class** describes abstract or concrete real-world entities (*entités abstraites ou concrètes du monde réel*), perceived within a given context (*perçues dans un contexte donné*), that share the same properties:
+          * **Static structure (*structure statique*):** its **attributes** or **fields** (*attributs ou champs*).
+          * **Dynamic behavior (*comportement dynamique*):** its **methods** or **operations** (*méthodes ou opérations*).
+
+          Conceptually:
+
+          $$\text{Class} \;\approx\; \text{Type} \;(+ \text{inheritance / héritage})$$
+
+          For example, the class `Person` defines:
+          * Attributes: `name : String`, `birthday : Date`
+          * Methods: `age() : int`, `print()`
+
+          ### Object (*Objet*)
+          An **object** is an **instance (*instance*)** of a class. Every object possesses:
+          1. **State (*état*):** the concrete values stored in its attributes (e.g., `name = 'Paul'`, `birthday = 9/6/80`).
+          2. **Behavior (*comportement*):** the set of operations (methods) that can be applied to it (`age() : int`, `print()`).
+          3. **Identity (*identité*):** an object **exists independently of its state** (*un objet existe indépendamment de son état*). It can always be distinguished from every other object and can be **referenced by other objects** (*être référencé par d'autres objets*).
+
+          > [!NOTE]
+          > **Why Identity Matters:** Even if two `Person` objects happen to share the exact same attribute values (`name = 'Paul'`, `birthday = 9/6/80`), they remain **two distinct objects** with separate identities—changing one's state does not change the other's.
+
+      - id: diag-class-vs-instances
+        block_type: kroki
+        diagram_type: plantuml
+        title: "Class Blueprint vs. Object Instances & Subclass Specialization"
+        caption: "The Person class defines static structure (attributes) and dynamic behavior (methods). Paul and John are distinct instances with their own identity and state; Sportsman specializes Person via inheritance."
+        bookmarkable: true
+        source: |
+          @startuml
+          skinparam classAttributeIconSize 0
+          skinparam classBackgroundColor #f8fafc
+          skinparam classBorderColor #475569
+          skinparam objectBackgroundColor #ecfdf5
+          skinparam objectBorderColor #059669
+
+          class Person {
+            name : String
+            birthday : Date
+            --
+            age() : int
+            print()
+          }
+
+          class Sportsman {
+            sport : String
+            --
+            sport() : String
+            print()
+          }
+
+          object "Paul : Person" as paul {
+            name = 'Paul'
+            birthday = 9/6/80
+          }
+
+          object "John : Sportsman" as john {
+            name = 'John'
+            birthday = 9/3/82
+            sport = 'tennis'
+          }
+
+          Person <|-- Sportsman : "est un (is-a)"
+          Person <.. paul : "instance of"
+          Sportsman <.. john : "instance of"
+          @enduml
+
+      - id: fc-identity-vs-state
+        block_type: flashcard
+        title: "The Three Properties of an Object"
+        bookmarkable: true
+        front: "What are the **three fundamental properties** of an object (*objet*), and what makes **identity (*identité*)** special?"
+        back: |
+          1. **State (*état*):** The current values of its attributes.
+          2. **Behavior (*comportement*):** The set of applicable operations (methods).
+          3. **Identity (*identité*):** Uniqueness that exists **independently of state**—allowing an object to be distinguished from other objects (even with identical attribute values) and referenced by other objects.
+        hint: "Recall the three bullet points on the Object slide: state, behavior, and uniqueness."
+        tags:
+          - object
+          - identity
+          - state
+          - behavior
+
+  - id: sec-inheritance-polymorphism
+    title: "3. Inheritance, Polymorphism & Dynamic Binding"
+    blocks:
+      - id: th-inheritance-semantics
+        block_type: markdown
+        title: "Inheritance (*Héritage*) & the is-a Relationship"
+        bookmarkable: true
+        content: |
+          **Inheritance (*héritage*)** defines a new class by **specializing (*spécialisant*)** an existing class (its superclass / *super-classe*). A subclass (*sous-classe*) can optionally:
+          * **Add new properties (*ajout de nouvelles propriétés*):** e.g., `Sportsman` adds attribute `sport : String` and method `sport() : String`.
+          * **Override / redefine inherited properties (*redéfinition de propriétés héritées*):** e.g., `Sportsman` redefines `print()` to also display the sport.
+
+          ### Semantics: `is-a` (*est un*) & Population Inclusion
+          Inheritance expresses an asymmetric **is-a (*est un*)** relationship, corresponding mathematically to **inclusion of populations (*inclusion de populations*)**:
+          * Every `Sportsman` (*sportif*) **is a** `Person` (*personne*): $\text{Sportifs} \subseteq \text{Personnes}$.
+          * **Not the reverse:** a `Person` is not necessarily a `Sportsman`.
+
+          ### Inherited Property Access & Hierarchies
+          * A subclass can access all **non-private (*non privées*)** properties it inherits from its superclass (`public` and `protected`, but **not** `private`).
+          * Repeated specialization produces **class diagrams / hierarchies (*diagrammes / hiérarchies de classes*)**.
+
+      - id: th-polymorphism-dynamic-binding
+        block_type: markdown
+        title: "Polymorphism (*Polymorphisme*) & Dynamic Binding (*Liaison dynamique*)"
+        bookmarkable: true
+        content: |
+          Because inheritance defines population inclusion, an instance of a class is simultaneously a member of **all superclasses** of its class:
+          * A `Button` object **is a** `Window` object.
+          * A `Sportsman` object **is a** `Person` object.
+
+          ### Polymorphism: Viewing an Object Generically
+          Through **polymorphism (*polymorphisme*)**, code can manipulate an object from a **more generic viewpoint (*point de vue plus générique*)** than the concrete class from which it was instantiated—for example, holding a `Button` through a `Window` reference (`aWindow`).
+
+          ### Dynamic Binding (*Liaison dynamique*)
+          When a method (such as `Window::draw()`) is **overridden (*redéfinie*)** in subclasses (`Button`, `ListBox`, etc.), **dynamic binding (*liaison dynamique*)** ensures that **at runtime (*à l'exécution*)**, the **most specialized method (*méthode la plus spécialisée*)** for the actual object is automatically invoked:
+          * Calling `aWindow.draw()` invokes `Button::draw()` if `aWindow` actually refers to an instance of `Button`.
+
+          > [!WARNING]
+          > **Critical Rule (*Attention*):** The invoked method **must be declared in the superclass** (the static type of the reference). Polymorphism narrows your *compile-time* view to the superclass interface, while dynamic binding selects the *runtime* implementation from the actual subclass.
+
+          ### Worked Trace: `Person p` & `Sportsman s`
+          Suppose `p` is a `Person` reference pointing to `Paul` (`'Paul'`, `1/8/81`), and `s` is a `Sportsman` reference pointing to `John` (`'John'`, `9/3/82`, `'tennis'`):
+
+          | Statement | Legal? | What Happens & Why |
+          | :--- | :--- | :--- |
+          | `p.print();` | Yes | Invokes `Person::print` (both static and dynamic type are `Person`). |
+          | `p = s;` | Yes | **Polymorphism:** `p` now references `John`, viewed from the `Person` viewpoint (*point de vue*). |
+          | `p.sport();` | **Illegal!** | `sport()` is **not declared on `Person`**. The static viewpoint (`Person`) does not expose `sport()`, even though `John` is a `Sportsman`. |
+          | `p.print();` | Yes | Invokes `Sportsman::print` via **dynamic binding (*liaison dynamique*)**, because `print()` is declared on `Person` and overridden on `John`'s actual class (`Sportsman`). |
+
+      - id: th-multiple-inheritance
+        block_type: markdown
+        title: "Multiple Inheritance (*Héritage multiple*)"
+        bookmarkable: true
+        content: |
+          Some OO languages—such as **C++**, but **not Java**—allow a class to inherit directly from **more than one superclass**.
+
+          * **Conceptual motivation:** Represents **intersections of populations (*intersections de populations*)**. For example, `AssistantEtudiant` inherits from both `Assistant` and `Etudiant`, which both inherit from `Personne`:
+
+            $$\text{AssistantEtudiant} = \text{Assistants} \cap \text{Etudiants} \;\subseteq\; \text{Personnes}$$
+
+          * **Two major drawbacks:**
+            1. **Object creation issues (*problèmes à la création des objets*):** Constructing an `AssistantEtudiant` raises ambiguity about how the shared base class (`Personne`) is initialized or whether its attributes are duplicated (the classic diamond problem).
+            2. **Method invocation ambiguities (*ambiguïtés lors de l'invocation*):** If a method with the same name is defined in both `Assistant` and `Etudiant`, calling it on an `AssistantEtudiant` is ambiguous unless explicitly disambiguated.
+
+      - id: ref-polymorphism-rubric
+        block_type: reflection_rubric
+        title: "Synthesis: Static Viewpoint vs. Dynamic Binding"
+        bookmarkable: true
+        prompt: "After executing `p = s;` (where `p` has type `Person` and `s` points to a `Sportsman` instance `John`), explain clearly why `p.sport()` is illegal while `p.print()` executes `Sportsman::print`."
+        self_check_criteria:
+          - "Identified that `p = s` is valid because of polymorphism (`Sportsman` is-a `Person`, so `John` can be viewed through a `Person` reference)."
+          - "Explained that `p.sport()` is illegal because the invoked method must be declared on the superclass (`Person`), which is the static viewpoint of `p`."
+          - "Explained that `p.print()` is legal because `print()` IS declared in `Person`, and executes `Sportsman::print` at runtime via dynamic binding (*liaison dynamique*) because `John`'s actual class is `Sportsman`."
+        model_answer: "Assigning `p = s` is allowed by polymorphism because every `Sportsman` is a `Person`; however, `p` now observes `John` strictly through the more generic `Person` viewpoint. Because `sport()` is not declared in `Person`, calling `p.sport()` is illegal—a method called through a superclass reference must be declared in that superclass. By contrast, `print()` is declared in `Person` and overridden in `Sportsman`, so calling `p.print()` is legal and dynamic binding (*liaison dynamique*) automatically dispatches at runtime to the most specialized implementation, `Sportsman::print`."
+
+  - id: sec-encapsulation-why-oop
+    title: "4. Encapsulation, Visibility & Why OOP Matters"
+    blocks:
+      - id: th-encapsulation-principles
+        block_type: markdown
+        title: "Encapsulation (*Encapsulation*): Rules, Benefits & Trade-offs"
+        bookmarkable: true
+        content: |
+          **Encapsulation (*encapsulation*)** protects an object's **state** (the values of its attributes) against any direct external access (*contre tout accès direct*).
+
+          ### Core Design Rules
+          * Reading (*consultation*) and modifying (*modification*) an object's state should only be allowed through methods of its **public interface (*interface publique*)**.
+          * The internal implementation of an object's state should remain **private (*privée*)**: hidden from other objects (*cachée aux autres objets*).
+          * **Minimize the public surface:** limit public methods to the strict minimum (*limiter au strict nécessaire les méthodes publiques*).
+          * **Private methods (*méthodes privées*):** encapsulation also applies to behavior—internal helper methods that should not be called from outside the class should be declared `private`.
+
+          ### Three Core Advantages (*Avantages*)
+          1. **Modularity (*Modularité*):** A class's implementation can be developed independently of other classes.
+          2. **Information Hiding (*Masquage de l'information*):** Private properties and internal representations can be modified without affecting any other classes that rely only on the public interface.
+          3. **Consistency / Coherence (*Cohérence*):** Every mutator method can (and must) validate inputs and enforce invariants so the object's state always remains coherent (e.g., rejecting a negative age or invalid date).
+
+          > [!NOTE]
+          > **Practical Trade-off:** Strict encapsulation can sometimes feel **too rigid (*parfois trop rigide*)**, leading to a proliferation of boilerplate accessor methods (*multiplication des méthodes d'accès aux attributs*). Good OO design exposes meaningful domain operations rather than blindly generating getters and setters for every field.
+
+      - id: diag-encapsulation-visibility
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Encapsulation Boundary & Visibility Levels"
+        caption: "External callers interact only with the public interface; subclasses can also access protected members; private state and helper methods stay hidden inside the class."
+        bookmarkable: true
+        source: |
+          flowchart LR
+            Ext["External Classes<br/>(Autres classes)"]
+            Sub["Subclasses<br/>(Sous-classes)"]
+
+            subgraph ClassBoundary ["Class Boundary (Classe)"]
+              Pub["public (publique)<br/>Minimal public interface<br/>Validates state & exposes behavior"]
+              Prot["protected (protégée)<br/>Accessible to class & subclasses"]
+              Priv["private (privée)<br/>Hidden state (attributes)<br/>& internal helper methods"]
+            end
+
+            Ext -->|"Allowed"| Pub
+            Sub -->|"Allowed"| Pub
+            Sub -->|"Allowed"| Prot
+            Pub -->|"Enforces coherence"| Priv
+            Prot -->|"Internal access"| Priv
+
+            classDef ext fill:#f1f5f9,stroke:#64748b,stroke-width:1.5px;
+            classDef pub fill:#d1fae5,stroke:#059669,stroke-width:2px;
+            classDef prot fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px;
+            classDef priv fill:#ffe4e6,stroke:#e11d48,stroke-width:2px;
+
+            class Ext,Sub ext;
+            class Pub pub;
+            class Prot prot;
+            class Priv priv;
+
+      - id: th-visibility-and-why-oop
+        block_type: markdown
+        title: "Visibility Levels & Why We Use OOP"
+        bookmarkable: true
+        content: |
+          ### Visibility (*Visibilité*) of Properties (Attributes & Methods)
+          Every property (attribute or method) of an object has at least one of three visibility levels:
+
+          | Visibility | French Term | Where It Is Visible |
+          | :--- | :--- | :--- |
+          | **`public`** | *publique* | Visible outside its class (*visible en dehors de sa classe*) |
+          | **`protected`** | *protégée* | Visible within its class and its subclasses (*visible dans sa classe et ses sous-classes*) |
+          | **`private`** | *privée* | Not visible outside its class (*non visible en dehors de sa classe*) |
+
+          > [!TIP]
+          > **Language Note (*Remarque*):** Some OO languages (such as **Java**, **C#**, etc.) offer additional visibility levels beyond these three (for instance, Java's package-private default visibility or C#'s `internal`).
+
+          ### Why OOP? (*Pourquoi la POO ?*)
+          Object-oriented programming delivers concrete gains in **productivity (*productivité*)** and **programming safety (*sécurité de programmation*)** by enabling:
+          * **Reusable code (*code réutilisable*):** cleanly packaged into classes.
+          * **Extensibility (*extensible*):** adding new behaviors by creating subclasses through **inheritance and dynamic binding (*héritage et liaison dynamique*)**.
+          * **Impact-free evolution:** hiding and changing implementation choices without breaking client code through **encapsulation (*encapsulation*)**.
+          * **Managing complexity:** designing, modeling, implementing, maintaining, and extending **complex software solutions (*solutions informatiques complexes*)**.
+
+      - id: fc-visibility-levels
+        block_type: flashcard
+        title: "The Three Standard Visibility Levels"
+        bookmarkable: true
+        front: "Compare the three standard visibility levels (`public`, `protected`, `private`) for attributes and methods in OOP."
+        back: |
+          * **`public` (*publique*):** Visible outside its class (forms the public interface).
+          * **`protected` (*protégée*):** Visible within its own class **and** its subclasses.
+          * **`private` (*privée*):** Not visible outside its own class (hidden even from subclasses).
+
+          *Note:* Some OO languages (e.g., Java, C#) define additional visibility levels.
+        hint: "Think in concentric rings: own class only → own class + subclasses → everywhere."
+        tags:
+          - encapsulation
+          - visibility
+
+      - id: fc-encapsulation-advantages
+        block_type: flashcard
+        title: "Encapsulation: 3 Advantages & 1 Trade-off"
+        bookmarkable: true
+        front: "What are the **three main advantages** of encapsulation (*encapsulation*), and what is its main practical drawback?"
+        back: |
+          **3 Advantages:**
+          1. **Modularity (*Modularité*):** Implement each class independently of others.
+          2. **Information Hiding (*Masquage de l'information*):** Change private properties without impacting other classes.
+          3. **Consistency / Coherence (*Cohérence*):** Mutator methods can verify and enforce that object state stays valid.
+
+          **Trade-off:** Can sometimes feel **too rigid**, leading to a proliferation of attribute accessor methods (*multiplication des méthodes d'accès*).
+        hint: "Remember M-I-C: Modularity, Information hiding, Coherence."
+        tags:
+          - encapsulation
+          - design
+
+      - id: ref-feynman-encapsulation-abstraction
+        block_type: feynman_prompt
+        title: "Feynman Check: Abstraction vs. Encapsulation"
+        bookmarkable: true
+        concept: "Distinguishing Abstraction from Encapsulation"
+        target_audience: "a first-year computer science student"
+        prompt: "Students frequently mix up Abstraction and Encapsulation. Explain the difference in plain language using a real-world analogy (like a car dashboard or a coffee machine), making clear what each pillar hides and why."
+        key_points_to_cover:
+          - "Abstraction manages complexity by showing only relevant high-level concepts/operations and hiding unnecessary details from the user."
+          - "Encapsulation protects internal state from direct external tampering by restricting access to a controlled public interface."
+          - "How both work together to keep code modular and safe to evolve."
+
+  - id: sec-diagnostic-quiz
+    title: "5. Diagnostic Knowledge Check"
+    blocks:
+      - id: qz-paradigms-classification
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Situating OOP Among Programming Paradigms"
+        difficulty: 2
+        related_block_id: th-paradigms-taxonomy
+        bookmarkable: true
+        question: "According to the standard taxonomy of programming paradigms, how does Object-Oriented Programming (e.g., C++, Java) relate to other paradigms?"
+        options:
+          - "It is an evolution of imperative programming, following unstructured and procedural programming."
+          - "It is a branch of declarative programming alongside functional and logic programming."
+          - "It is a direct extension of machine language and assembly programming."
+          - "It completely replaces imperative state mutation with pure mathematical functions."
+        correct_answer: "It is an evolution of imperative programming, following unstructured and procedural programming."
+        explanation: |
+          Object-Oriented Programming belongs to the **imperative programming (*programmation impérative*)** family, representing an evolution from unstructured (Fortran, Basic) → procedural (C, Pascal) → object-oriented (C++, Java).
+
+          * *Declarative programming* comprises logic (Prolog), functional (Lisp, Haskell), and data manipulation (SQL) languages—not OOP.
+          * *Machine language / assembly* is a separate low-level paradigm family.
+          * *Replacing state mutation with pure functions* describes functional programming, whereas OOP explicitly models mutable object state (*état*) manipulated by methods.
+        hints:
+          - "Recall the three top-level paradigm families: Machine language, Imperative, and Declarative."
+          - "In OOP, methods mutate an object's state step by step—which family focuses on step-by-step state mutation?"
+
+      - id: qz-object-identity-state
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Object Identity vs. Object State"
+        difficulty: 3
+        related_block_id: th-class-vs-object
+        bookmarkable: true
+        question: "Two `Person` instances `p1` and `p2` are created with the exact same attribute values: `name = 'Paul'` and `birthday = 9/6/80`. Which statement is true?"
+        options:
+          - "`p1` and `p2` are still two distinct objects because an object's identity exists independently of its state."
+          - "`p1` and `p2` represent the exact same object because two instances with identical state share the same identity."
+          - "`p1` and `p2` cannot coexist in memory because a class enforces unique attribute values across instances."
+          - "`p1` and `p2` have different behaviors because each instance defines its own set of methods."
+        correct_answer: "`p1` and `p2` are still two distinct objects because an object's identity exists independently of its state."
+        explanation: |
+          An object's **identity (*identité*)** exists **independently of its state (*état*)**: it allows an object to be distinguished from all other objects and referenced independently, even when two instances happen to hold identical attribute values.
+
+          * Assuming identical state implies identical identity confuses *equality of values* with *object identity*.
+          * A class does not forbid two instances from having equal attribute values.
+          * All instances of the same class (`Person`) share the same **behavior (*comportement*)**—the methods declared by their class.
+        hints:
+          - "Recall the three properties of every object: state, behavior, and identity."
+          - "Ask yourself: if you change `p1`'s name later, does `p2`'s name automatically change?"
+
+      - id: qz-inheritance-is-a
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Inheritance Semantics & Inherited Property Access"
+        difficulty: 3
+        related_block_id: th-inheritance-semantics
+        bookmarkable: true
+        question: "Class `Sportsman` inherits from class `Person`. Which statement accurately reflects the semantics and visibility rules of inheritance?"
+        options:
+          - "Every `Sportsman` is a `Person` (population inclusion), and `Sportsman` can access all non-private properties inherited from `Person`."
+          - "Every `Person` is a `Sportsman`, and `Sportsman` can directly access all properties of `Person`, including `private` ones."
+          - "Every `Sportsman` is a `Person`, and `Sportsman` can directly access `Person`'s `private` attributes because it is a subclass."
+          - "Inheritance means `Sportsman` contains a `Person` component (`has-a`), and can only call `public` methods of `Person`."
+        correct_answer: "Every `Sportsman` is a `Person` (population inclusion), and `Sportsman` can access all non-private properties inherited from `Person`."
+        explanation: |
+          Inheritance models the asymmetric **is-a (*est un*)** relationship (inclusion of populations: $\text{Sportifs} \subseteq \text{Personnes}$), and a subclass can access all **non-private (*non privées*)** inherited properties (`public` and `protected`).
+
+          * Claiming every `Person` is a `Sportsman` reverses the inclusion direction.
+          * `private` properties are never visible outside their declaring class—not even to subclasses (that is what `protected` is for).
+          * `has-a` describes composition/aggregation, not inheritance (`is-a`).
+        hints:
+          - "Check the direction of the `is-a` (*est un*) arrow: is every person a sportsman, or is every sportsman a person?"
+          - "Which visibility level hides properties even from subclasses?"
+
+      - id: qz-polymorphism-static-vs-dynamic
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Polymorphic Reference: Legal vs. Illegal Calls"
+        difficulty: 4
+        related_block_id: th-polymorphism-dynamic-binding
+        bookmarkable: true
+        question: "Suppose `Person` declares `age()` and `print()`, while its subclass `Sportsman` adds `sport()` and overrides `print()`. Given `Person p` and `Sportsman s` (pointing to `John`), we execute `p = s;`. What happens if we then execute `p.sport();` followed by `p.print();`?"
+        options:
+          - "`p.sport()` is illegal because `sport()` is not declared on `Person`; `p.print()` is legal and invokes `Sportsman::print` via dynamic binding."
+          - "Both `p.sport()` and `p.print()` are legal and execute `Sportsman::sport` and `Sportsman::print` because `p` points to a `Sportsman`."
+          - "`p.sport()` is illegal, and `p.print()` invokes `Person::print` because `p` is declared with type `Person`."
+          - "The assignment `p = s;` itself is illegal because `p` and `s` do not have the exact same class."
+        correct_answer: "`p.sport()` is illegal because `sport()` is not declared on `Person`; `p.print()` is legal and invokes `Sportsman::print` via dynamic binding."
+        explanation: |
+          After `p = s;`, `p` references `John` through the **generic viewpoint (*point de vue*)** of class `Person`:
+          1. **`p.sport()` is illegal** because any method invoked through a superclass reference **must be declared in that superclass** (`Person` has no `sport()` method).
+          2. **`p.print()` is legal** because `print()` IS declared in `Person`, and **dynamic binding (*liaison dynamique*)** automatically dispatches at runtime to the most specialized implementation on the actual object (`Sportsman::print`).
+
+          * Believing `p.sport()` is legal ignores the compile-time superclass declaration requirement.
+          * Believing `p.print()` calls `Person::print` ignores dynamic binding.
+          * Rejecting `p = s;` contradicts polymorphism (`Sportsman` is-a `Person`).
+        hints:
+          - "Separate two questions: (1) Is the method declared in `p`'s static type (`Person`)? (2) If yes, which object does `p` actually point to at runtime?"
+          - "Remember the slide's warning: *Attention : la méthode invoquée doit être déclarée dans la super-classe*."
+
+      - id: qz-dynamic-binding-window
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Dynamic Binding in a GUI Class Hierarchy"
+        difficulty: 3
+        related_block_id: th-polymorphism-dynamic-binding
+        bookmarkable: true
+        question: "A GUI library defines `Window` with a method `draw()`, overridden by subclasses `Button` and `ListBox`. A variable `aWindow` of type `Window` currently references a `Button` instance. What happens when `aWindow.draw()` is executed?"
+        options:
+          - "`Button::draw()` is automatically invoked at runtime through dynamic binding."
+          - "`Window::draw()` is invoked because `aWindow` is declared as a `Window`."
+          - "A runtime ambiguity error occurs because both `Window` and `Button` define `draw()`."
+          - "The call fails to compile because `aWindow` cannot hold a `Button`."
+        correct_answer: "`Button::draw()` is automatically invoked at runtime through dynamic binding."
+        explanation: |
+          Because `Button` is a subclass of `Window`, `aWindow` can polymorphically reference a `Button`. Since `draw()` is declared in `Window` and overridden in `Button`, **dynamic binding (*liaison dynamique*)** resolves the call at runtime to the **most specialized method (*méthode la plus spécialisée*)** of the actual instance: `Button::draw()`.
+
+          * Invoking `Window::draw()` would be *static* binding, not dynamic binding.
+          * Overriding a superclass method in a single-inheritance chain is never ambiguous (ambiguity arises in *multiple* inheritance when two sibling/parent superclasses define the same method).
+          * Holding a `Button` in a `Window` reference is completely valid by polymorphism.
+        hints:
+          - "What is the role of dynamic binding (*liaison dynamique*) at runtime?"
+          - "Is `draw()` declared in the superclass `Window`?"
+
+      - id: qz-multiple-inheritance-hazards
+        block_type: quiz_question
+        question_type: multi_select
+        title: "Multiple Inheritance: Properties & Pitfalls"
+        difficulty: 4
+        related_block_id: th-multiple-inheritance
+        bookmarkable: true
+        question: "Which of the following statements about **multiple inheritance (*héritage multiple*)** are accurate? (Select all that apply)"
+        options:
+          - "It is supported by C++, but not by Java."
+          - "It conceptually models intersections of populations (such as `AssistantEtudiant` inheriting from both `Assistant` and `Etudiant`)."
+          - "It can cause ambiguities when invoking a method defined in more than one superclass."
+          - "It can create problems during object creation/initialization."
+          - "It eliminates the need for encapsulation because subclasses merge their parents' states."
+        correct_answer:
+          - "It is supported by C++, but not by Java."
+          - "It conceptually models intersections of populations (such as `AssistantEtudiant` inheriting from both `Assistant` and `Etudiant`)."
+          - "It can cause ambiguities when invoking a method defined in more than one superclass."
+          - "It can create problems during object creation/initialization."
+        explanation: |
+          Multiple inheritance allows a class to inherit from more than one superclass:
+          * **Supported in C++, not in Java.**
+          * **Population intersection:** models entities belonging to two populations simultaneously (`AssistantEtudiant` = `Assistant` ∩ `Etudiant` ⊂ `Personne`).
+          * **Two main hazards:** issues at **object creation (*problèmes à la création des objets*)** and **ambiguities (*ambiguïtés*)** when invoking a method defined in multiple superclasses.
+
+          * The final distractor is false: multiple inheritance has nothing to do with eliminating encapsulation—protecting internal state remains essential regardless of the inheritance model.
+        hints:
+          - "Recall the `AssistantEtudiant` example from the slides—what set operation does it represent?"
+          - "Check both the language support (C++ vs. Java) and the two specific drawbacks mentioned on the Multiple Inheritance slide."
+
+      - id: qz-encapsulation-coherence
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Encapsulation Benefits in Practice"
+        difficulty: 3
+        related_block_id: th-encapsulation-principles
+        bookmarkable: true
+        question: "A developer makes the `birthday` attribute of `Person` `private` and requires all updates to go through `setBirthday(Date d)`, which rejects future dates. Later, the developer changes how `birthday` is stored internally (from a `Date` object to an integer timestamp) without breaking any other class. Which two encapsulation advantages are directly demonstrated here?"
+        options:
+          - "Consistency/coherence (*cohérence*) and information hiding (*masquage de l'information*)."
+          - "Polymorphism (*polymorphisme*) and dynamic binding (*liaison dynamique*)."
+          - "Multiple inheritance (*héritage multiple*) and population inclusion (*inclusion de populations*)."
+          - "Rigidity (*rigidité*) and accessor multiplication (*multiplication des méthodes d'accès*)."
+        correct_answer: "Consistency/coherence (*cohérence*) and information hiding (*masquage de l'information*)."
+        explanation: |
+          This scenario directly illustrates two of the three core advantages of encapsulation:
+          1. **Consistency / Coherence (*Cohérence*):** Rejecting invalid future dates inside `setBirthday` ensures the object's state always stays valid.
+          2. **Information Hiding (*Masquage de l'information*):** Changing the private internal representation (`Date` → integer timestamp) does not impact any client class relying only on the public interface.
+
+          * Polymorphism and dynamic binding concern method overriding across class hierarchies, not hiding private attributes.
+          * Multiple inheritance and population inclusion relate to inheritance hierarchies.
+          * Rigidity / accessor multiplication is a potential *drawback* of over-using trivial getters/setters, not the advantage demonstrated by invariant checking and safe internal refactoring.
+        hints:
+          - "Match each action in the scenario to the three advantages of encapsulation: Modularity, Information Hiding, and Coherence."
+          - "Which advantage enforces valid state on modification? Which advantage lets you change private fields without breaking other classes?"

@@ -1,0 +1,1064 @@
+id: poo-ch4-java-arrays-inheritance-packages
+title: "Chapter 4: Java Arrays, Exceptions Preview, Inheritance & Packages"
+category: Object-Oriented Programming
+track: "POO - Programmation Orientée Objet (TE1)"
+track_order: 4
+prerequisites:
+  - poo-ch3-java-basics-classes
+layout_mode: single-page
+description: >-
+  Complete TE1 study guide covering Java arrays (1D, 2D/ragged, references,
+  on-the-fly creation, varargs), exceptions overview, single inheritance
+  (extends, super, constructor chaining, overriding, Object.toString), and
+  packages, CLASSPATH, and visibility modifiers.
+estimated_minutes: 55
+tags:
+  - java
+  - poo
+  - arrays
+  - exceptions
+  - inheritance
+  - packages
+  - visibility
+  - te1
+sources:
+  - title: "HEIG-VD POO — 3 Java 2"
+    url_or_path: "sources/POO_TE1/3 Java 2.pdf"
+    notes: >-
+      Slides 34–60: Arrays (1D, 2D/ragged, references, varargs/loops),
+      Exceptions overview, Inheritance (extends, super, constructors, Object
+      class, toString), Packages & visibility modifiers (public, protected,
+      package-private, private).
+
+sections:
+  - id: sec-arrays
+    title: "1. Arrays (Tableaux), Reference Semantics & Varargs (Ellipse)"
+    blocks:
+      - id: md-arrays-fundamentals
+        block_type: markdown
+        title: "Arrays as Objects, 3-Step Creation & Varargs"
+        content: |
+          In Java, an **array** (*tableau*) is a full-fledged **object** on the heap:
+          - It implicitly inherits from `java.lang.Object`.
+          - Its fixed capacity is exposed via the public `final` attribute **`length`** (a field, *not* a method like `String.length()`).
+          - All elements share the **same declared type** (either a primitive type or an object reference type).
+          - Elements are indexed from `0` to `length - 1` using `ref[i]`, which behaves like any normal variable or reference (e.g., `ref[i].method()`). Accessing an out-of-range index throws `ArrayIndexOutOfBoundsException`.
+
+          ### General 3-Step Array Lifecycle (*Déclaration générale*)
+          1. **Declare the reference:** `Type[] ref;` (preferred Java style) or `Type ref[];` (C-style, valid but discouraged). No array exists yet.
+          2. **Instantiate the array object:** `ref = new Type[size];` allocates a contiguous block of `size` slots on the heap:
+             - **Primitive arrays** (*tableaux de types primitifs*): every slot is initialized to its default value (`0` for `int`/`long`/`short`/`byte`, `0.0` for `double`/`float`, `false` for `boolean`, `'\u0000'` for `char`). After `int[] a = new int[10];`, `a[0]` is `0`.
+             - **Object arrays** (*tableaux d'objets*): creating the array **does NOT instantiate the elements**! Every slot is initialized to `null`. After `Person[] p = new Person[10];`, `p[0]` is `null` — calling `p[0].toString()` immediately throws `NullPointerException`.
+          3. **Populate the elements:** assign primitive values (`a[4] = 2000;`) or instantiate/assign objects (`p[0] = new Person("Ada");`).
+
+          > [!WARNING]
+          > **Reference Aliasing:** Because an array variable holds a *reference* to the heap array object, writing `int[] b = a;` does **not** copy the array — both `a` and `b` point to the exact same array in memory. Mutating `b[0]` immediately mutates `a[0]`.
+
+          ### Simplified & On-the-Fly Initialization (*Déclaration simplifiée & « à la volée »*)
+          When elements are known upfront, you may use brace notation **only at declaration time**:
+          - `double[] scores = { 1.2, 12.33, 33 };`
+          - `String[] rgb = { "rouge", "vert", "bleu" };`
+          - `int[][] matrix = { { 2, 3 }, { 3, 4 }, { 5, 6 } };`
+          - `Integer[] boxed = { Integer.valueOf(1), Integer.valueOf(12) };` *(prefer `Integer.valueOf(...)` over the deprecated `new Integer(...)`)*.
+
+          To pass an array **on the fly** (*à la volée*) as a method argument (or reassign an existing array variable), brace-only syntax is a **compile-time error** because the compiler cannot infer the type unambiguously:
+          - Invalid: `notes.setGrades({ 4, 2.5f, 3 });`
+          - Valid: `notes.setGrades(new float[] { 4, 2.5f, 3 });`
+
+          ### Multidimensional & Ragged Arrays (*Tableaux multidimensionnels*)
+          Java represents a 2D array `String[][] matrix = new String[5][10];` as an **array of references to 1D arrays**. Consequently, rows do not even need to have the same length (**ragged / jagged arrays**):
+          - `int[][] ragged = { { 1, 2, 3 }, { 4 }, { 5, 6 } };` -> `ragged.length == 3`, `ragged[0].length == 3`, `ragged[1].length == 1`.
+
+          ### `main()` Arguments & Ellipsis / Varargs (*Ellipse `...`*)
+          - The entry point `public static void main(String[] args)` receives command-line arguments in `args`. Running `java Test un deux trois` sets `args[0] = "un"`, `args[1] = "deux"`, `args[2] = "trois"` (unlike C/C++, the program name is **not** in `args[0]`).
+          - **Varargs** (*ellipse*): `ReturnType method(FixedType x, ElementType... args)` accepts zero or more arguments of `ElementType` and packages them into an array `ElementType[]` inside the method body.
+            - Unlike C's untyped `...`, Java varargs are **strongly typed**.
+            - The varargs parameter **must be the last parameter** in the method signature (at most one per method).
+            - `main` can therefore also be written `public static void main(String... args)`.
+
+      - id: diag-array-memory
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Heap Memory Layout: Primitive, Object & 2D Ragged Arrays"
+        caption: "Primitive arrays store values inline; object arrays store references (defaulting to null); 2D arrays are arrays of references to independent 1D row arrays."
+        source: |
+          flowchart LR
+            subgraph Stack ["Stack (Local References)"]
+              rInt["int[] nums"]
+              rObj["Person[] team"]
+              r2D["int[][] ragged"]
+            end
+
+            subgraph Heap ["Heap (Array & Element Objects)"]
+              arrInt["int[3] (length=3)\n[0]: 0 | [1]: 42 | [2]: 0"]
+              arrObj["Person[2] (length=2)\n[0]: ref | [1]: null"]
+              p0["Person object\nname='Ada'"]
+              arr2D["int[][2] (length=2)\n[0]: ref | [1]: ref"]
+              row0["int[3]: {1, 2, 3}"]
+              row1["int[1]: {9}"]
+            end
+
+            rInt --> arrInt
+            rObj --> arrObj
+            arrObj -->|"[0]"| p0
+            r2D --> arr2D
+            arr2D -->|"[0]"| row0
+            arr2D -->|"[1]"| row1
+
+            classDef stack fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;
+            classDef arr fill:#ede9fe,stroke:#6366f1,stroke-width:1.5px;
+            classDef obj fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;
+
+            class rInt,rObj,r2D stack;
+            class arrInt,arrObj,arr2D,row0,row1 arr;
+            class p0 obj;
+
+      - id: code-arrays-varargs
+        block_type: code
+        language: java
+        filename: "ArrayAndVarargsDemo.java"
+        title: "Arrays, On-the-Fly Arguments & Varargs in Action"
+        code: |
+          public class ArrayAndVarargsDemo {
+              public void setGrades(float[] grades) {
+                  System.out.println("Count: " + grades.length);
+              }
+
+              public void printAll(String prefix, String... items) {
+                  for (int i = 0; i < items.length; i++) {
+                      System.out.println(prefix + " " + i + ": " + items[i]);
+                  }
+              }
+
+              public static void main(String... args) {
+                  Object[] mixed = new Object[3];
+                  mixed[0] = "toto";
+                  mixed[1] = Integer.valueOf(42);
+                  // mixed[2] is still null!
+
+                  ArrayAndVarargsDemo demo = new ArrayAndVarargsDemo();
+                  demo.setGrades(new float[] { 4, 2.5f, 3 });
+                  new ArrayAndVarargsDemo().printAll("Arg", "foo", "bar");
+              }
+          }
+        highlight_lines: [6, 12, 13, 19, 20]
+        annotations:
+          - line: 6
+            note: "Varargs (String... items) MUST be the last parameter; inside the method, items is a regular String[] array."
+          - line: 12
+            note: "main() can be declared with String... args instead of String[] args."
+          - line: 13
+            note: "An Object[] can store any subclass of Object (String, Integer, Person...), and unused slots default to null."
+          - line: 19
+            note: "On-the-fly array ('à la volée'): new float[] { ... } is required here; bare { 4, 2.5f, 3 } fails to compile."
+          - line: 20
+            note: "Anonymous object ('objet anonyme') created with new ArrayAndVarargsDemo() solely to invoke printAll(...)."
+
+      - id: fc-array-traps
+        block_type: flashcard
+        title: "Java Array Traps: Initialization, On-the-Fly & Varargs"
+        front: |
+          Identify the 3 classic Java array traps:
+          1. What is `p[0]` right after `Person[] p = new Person[10];`?
+          2. Why does `obj.setGrades({ 4, 2.5f, 3 });` fail to compile?
+          3. Where must an ellipsis (`Type... args`) appear in a method signature?
+        back: |
+          1. **`null`** — instantiating an object array allocates only the reference slots, **never** the `Person` objects themselves. (Only primitive arrays get numeric/`false` defaults.)
+          2. **Ambiguity** — simplified `{ ... }` syntax is legal *only* in a variable declaration. Passing an array on the fly (*à la volée*) requires **`new float[] { 4, 2.5f, 3 }`**.
+          3. **Strictly last** in the parameter list (and at most one per method). Inside the method, `args` is accessed as a normal `Type[]` array.
+        hint: "Distinguish primitive slots from reference slots, and declaration syntax from expression syntax."
+        tags: ["java", "arrays", "varargs"]
+
+  - id: sec-exceptions-preview
+    title: "2. Exceptions Overview (Exceptions — Aperçu)"
+    blocks:
+      - id: md-exceptions-overview
+        block_type: markdown
+        title: "What Is an Exception? Generation & Recovery"
+        content: |
+          An **exception** is an **object** describing an abnormal runtime condition that should not occur during normal execution. Every exception is an instance of a subclass of `java.lang.Exception`.
+          - The most frequently encountered family is **`RuntimeException`** and its subclasses, such as:
+            - `NullPointerException` (dereferencing a `null` reference),
+            - `ArrayIndexOutOfBoundsException` (invalid array index `< 0` or `>= length`),
+            - `ArithmeticException` (e.g., integer division by zero),
+            - `NumberFormatException` (e.g., `Integer.parseInt("abc")`).
+
+          ### How Exceptions Are Generated (*Génération*)
+          1. **Automatically by the JVM:** accessing a field/method on `null`, dividing an `int` by `0`, accessing an out-of-bounds array element, or opening a missing file.
+          2. **Manually by the programmer** using `throw`:
+             ```java
+             if (o == null)
+                 throw new NullPointerException("Object is null!");
+             ```
+
+          ### How Exceptions Are Handled (*Traitement*)
+          - If the throwing statement sits inside a **`try { ... }`** block, execution jumps immediately to the first matching **`catch (ExceptionType e) { ... }`** block, which can recover and restore a coherent execution state.
+          - If no enclosing `try / catch` handles the exception, it propagates up the call stack and **aborts the program** (*exécution abandonnée*).
+
+      - id: code-division-exception
+        block_type: code
+        language: java
+        filename: "Division.java"
+        title: "Course Example: Manual throw & try/catch Recovery"
+        code: |
+          public class Division {
+              public static void main(String... args) {
+                  if (args.length != 2)
+                      throw new RuntimeException("java Division <n1> <n2>");
+                  String result = args[0] + " / " + args[1] + " = ";
+                  try {
+                      int a = Integer.parseInt(args[0]);
+                      int b = Integer.parseInt(args[1]);
+                      result += "" + a / b;
+                  } catch (RuntimeException e) {
+                      result += "<undefined>";
+                  }
+                  System.out.println(result);
+              }
+          }
+        highlight_lines: [4, 7, 9, 10]
+        annotations:
+          - line: 4
+            note: "Manual throw outside try: if argument count != 2, the program aborts immediately with this message."
+          - line: 7
+            note: "Throws NumberFormatException (a subclass of RuntimeException) if args[0] is not a valid integer."
+          - line: 9
+            note: "Throws ArithmeticException (also a RuntimeException) if b == 0."
+          - line: 10
+            note: "Catches RuntimeException and all its subclasses (both NumberFormatException and ArithmeticException), allowing execution to continue cleanly to println."
+
+  - id: sec-inheritance-constructors
+    title: "3. Inheritance (Héritage) & Constructor Chaining (super)"
+    blocks:
+      - id: md-inheritance-basics
+        block_type: markdown
+        title: "Single Inheritance, extends & The 3-Step Constructor Execution Order"
+        content: |
+          **Inheritance** (*héritage*) defines a **subclass** (*sous-classe* / *classe dérivée*) as a specialized sub-population of a **superclass** (*super-classe* / *classe parent*) using the keyword **`extends`**:
+          ```java
+          public class Sportsman extends Person { ... }
+          ```
+          - **Single inheritance only** (*pas d'héritage multiple*): in Java, every class has **at most one direct superclass**.
+          - A subclass inherits all properties (attributes and methods) of its parent and can add new ones or override (*redéfinir*) inherited methods.
+          - Every Java class directly or indirectly inherits from **`java.lang.Object`** (the root of the entire class hierarchy).
+
+          ### Inheritance & Constructors (*Héritage et constructeurs*)
+          A subclass constructor is responsible for initializing **all** attributes of the object, including inherited ones.
+          - The compiler-generated **default constructor** (*constructeur par défaut*) contains a single call `super();`, invoking the parent's no-argument constructor (which in `Object` does nothing).
+          - A user-defined constructor can explicitly call a parent constructor via `super();` or `super(arg1, arg2);`, **strictly as its very first statement** (just like `this(...)` — you cannot call both `this(...)` and `super(...)` in the same constructor).
+          - **Why `super(...)` matters:**
+            1. **Factorizes initialization** (avoids duplicating parent setup logic, like `this(...)`).
+            2. **Initializes `private` superclass attributes** that the subclass cannot directly touch!
+
+          ### Exact 3-Phase Execution Order of Any Constructor (*Fonctionnement d'un constructeur*)
+          Whenever `new SubClass(...)` runs, Java executes these **exact 3 phases in order**:
+          1. **Parent / Chained Constructor First:** Either the explicit `super(...)` / `this(...)` on line 1 executes, OR the compiler silently inserts **`super();`** (the parent's no-argument constructor).
+             > [!CAUTION]
+             > **The #1 TE1 Exam Trap:** If a subclass constructor does not explicitly call `super(...)` or `this(...)`, the parent class **MUST** have an accessible no-argument constructor! If the parent defines *any* parameterized constructor (e.g., `Person(String name)`) and does *not* explicitly declare `Person()`, the implicit `super();` fails to compile!
+          2. **Local Field Initializers:** Explicit field initializers (`int i = 2;`, `A a = new A();`) and default values for attributes declared in the *current* class execute — **after** the superclass is completely constructed, and **before** the subclass constructor body!
+          3. **Constructor Body:** The remaining statements inside the constructor execute.
+
+      - id: diag-inheritance-chaining
+        block_type: kroki
+        diagram_type: plantuml
+        title: "UML Hierarchy Rooted at Object & Constructor Chaining"
+        caption: "Every class inherits from Object. Constructing a Sportsman chains super(aName, anAge) up to Person and Object before initializing Sportsman's own sport field."
+        source: |
+          @startuml
+          skinparam classAttributeIconSize 0
+          skinparam classBackgroundColor #f8fafc
+          skinparam classBorderColor #475569
+
+          class Object {
+            + Object()
+            + toString(): String
+          }
+
+          class Person {
+            - name: String
+            - age: int
+            + Person(aName: String, anAge: int)
+            + toString(): String
+          }
+
+          class Sportsman {
+            - sport: String
+            + Sportsman(aName: String, anAge: int, aSport: String)
+            + sport(): String
+            + toString(): String
+          }
+
+          Object <|-- Person : implicit extends
+          Person <|-- Sportsman : extends
+
+          note right of Sportsman::Sportsman
+            1. super(aName, anAge) -> initializes private name & age
+            2. Local field initializers of Sportsman
+            3. Body: sport = aSport;
+          end note
+          @enduml
+
+      - id: code-constructor-order
+        block_type: code
+        language: java
+        filename: "ConstructorOrderTrace.java"
+        title: "Classic Exam Trace: super(), this() & Field Initializer Order"
+        code: |
+          class A {
+              A() {
+                  System.out.println("A()");
+              }
+              A(double x) {
+                  this();
+                  System.out.println("A(double)");
+              }
+          }
+
+          class B extends A {
+              A a = new A();
+              B(int i) {
+                  super(i);
+                  System.out.println("B(int)");
+              }
+          }
+
+          public class ConstructorOrderTrace {
+              public static void main(String[] args) {
+                  B b = new B(3);
+                  // B b2 = new B(); // COMPILE ERROR: no default B() exists!
+              }
+          }
+        highlight_lines: [6, 12, 14, 15, 22]
+        annotations:
+          - line: 6
+            note: "Step 2: A(double) delegates to A() via this(), printing 'A()' first, then resumes to print 'A(double)'."
+          - line: 12
+            note: "Step 3: Runs AFTER super(i) finishes and BEFORE B(int)'s body! Instantiates a fresh A, printing 'A()' a second time."
+          - line: 14
+            note: "Step 1: super(3) widens int 3 to double and invokes A(double)."
+          - line: 15
+            note: "Step 4: Finally B(int)'s body executes, printing 'B(int)'. Total output: A(), A(double), A(), B(int)."
+          - line: 22
+            note: "Because B defines B(int), Java does NOT generate a default no-arg constructor B()."
+
+      - id: fc-constructor-rules
+        block_type: flashcard
+        title: "Constructor Execution Order & super() Rules"
+        front: |
+          When `new Sub(args)` is executed, what are the **3 exact phases** in order, and when does an implicit `super()` fail to compile?
+        back: |
+          **3-Phase Execution Order:**
+          1. **Chained constructor:** Explicit `super(...)` / `this(...)` (must be line 1) OR implicit `super()`. Superclasses are fully built first.
+          2. **Local attribute initializers:** Explicit field initializers (`A a = new A();`) and default values of the current class.
+          3. **Constructor body:** Remaining statements in `{ ... }`.
+
+          **Compile Error:** Implicit `super()` fails whenever the direct superclass has **no accessible no-argument constructor** (e.g., the parent defined `Parent(int x)` without also writing `Parent()`).
+        hint: "Think: Parent first -> Local field declarations -> Constructor body."
+        tags: ["java", "inheritance", "constructors", "super"]
+
+  - id: sec-overriding-tostring
+    title: "4. Method Overriding (Redéfinition), Dynamic Binding & toString()"
+    blocks:
+      - id: md-overriding-tostring
+        block_type: markdown
+        title: "Overriding vs. Overloading & The Magic of Object.toString()"
+        content: |
+          ### Overriding (*Redéfinition*) vs. Overloading (*Surcharge*)
+          A subclass can redefine an inherited method to specialize its behavior:
+          - **Overriding (*redéfinition*):**
+            - Exact same **method name**, same **number**, same **order**, and same **types of parameters** (parameter variable names do not matter), and (in first approximation) the same **return type** — i.e., the **same method signature**.
+            - Activates **dynamic binding** (*liaison dynamique*): at runtime, the JVM invokes the method matching the **actual object's class**, even when called through a superclass reference!
+            - Inside the overriding method, call the parent implementation using **`super.method(args)`** to extend rather than rewrite parent behavior.
+          - **Overloading (*surcharge*):**
+            - Same method name, **different parameter list**.
+            - Treated as a completely separate method — **no dynamic binding** between the two signatures.
+
+          ### The `toString()` Trick (*Tour de magie : `toString()`*)
+          Every class inherits `public String toString()` from `Object`:
+          - Java invokes `toString()` **automatically** whenever an object must be converted to text — e.g., `System.out.println(p)` (which accepts an `Object` parameter) or string concatenation `"" + p`.
+          - The default `Object.toString()` returns `ClassName@hashCodeHex` (e.g., `Person@4aa298b7`), which is rarely helpful.
+          - Overriding `toString()` in your classes gives human-readable output **and** works seamlessly with **polymorphic references** (*affectation polymorphique*):
+            ```java
+            public String toString() {
+                return super.toString() + ", " + sport;
+            }
+            // ...
+            Sportsman s = new Sportsman("John", 22, "Tennis");
+            Person p = s;           // Polymorphic assignment
+            System.out.println(p);  // Dynamic binding -> prints "John, 22, Tennis"
+            ```
+
+      - id: sandbox-starwars-hierarchy
+        block_type: sandbox
+        runtime: java
+        title: "Course Exercise: Star Wars Polymorphic Hierarchy (Slides 60–61)"
+        instructions: |
+          Complete the Star Wars class hierarchy from Slides 60–61:
+          1. `Humanoid` stores `private String name;` and overrides `toString()` to return `"Humanoid " + name`.
+          2. `ForceUser extends Humanoid` stores `force`, `lightsaber`, and `master` (nullable `ForceUser`), and overrides `toString()` to format:
+             `<type> <name>, force: <force>, lightsaber: <lightsaber>, master: <masterNameOrNone>`
+             *(use `getType()` overridden by `Jedi` -> `"Jedi"` and `Sith` -> `"Sith"`; if `master == null`, print `"none"`).*
+          3. `Sith` has lightsaber `"red"` and a method `Sith corrupt(Jedi target, String sithName)` that returns a new `Sith(sithName, target.getForce(), this)`.
+          4. In `Main.main`, create Paul, Yoda (19000, green), Obi-Wan (17000, blue, master Yoda), Anakin (27000, green, master Obi-Wan), Luke (23000, green, master Obi-Wan), and Darth Sidious (20000); have Darth Sidious corrupt Anakin into `"Darth Vader"`; store Paul, Yoda, Darth Sidious, Obi-Wan, Darth Vader, and Luke in a `Humanoid[]` array and print each element.
+        starter_code: |
+          class Humanoid {
+              private String name;
+
+              public Humanoid(String name) {
+                  this.name = name;
+              }
+
+              public String getName() {
+                  return name;
+              }
+
+              public String toString() {
+                  return "Humanoid " + name;
+              }
+          }
+
+          class ForceUser extends Humanoid {
+              private int force;
+              private String lightsaber;
+              private ForceUser master;
+
+              public ForceUser(String name, int force, String lightsaber, ForceUser master) {
+                  super(name);
+                  this.force = force;
+                  this.lightsaber = lightsaber;
+                  this.master = master;
+              }
+
+              public int getForce() {
+                  return force;
+              }
+
+              protected String getType() {
+                  return "ForceUser";
+              }
+
+              public String toString() {
+                  // TODO: return "<type> <name>, force: <force>, lightsaber: <lightsaber>, master: <masterName or none>"
+                  return super.toString();
+              }
+          }
+
+          class Jedi extends ForceUser {
+              public Jedi(String name, int force, String lightsaber, Jedi master) {
+                  super(name, force, lightsaber, master);
+              }
+
+              // TODO: override getType() to return "Jedi"
+          }
+
+          class Sith extends ForceUser {
+              public Sith(String name, int force, Sith master) {
+                  super(name, force, "red", master);
+              }
+
+              // TODO: override getType() to return "Sith"
+
+              public Sith corrupt(Jedi target, String sithName) {
+                  // TODO: return a new Sith with sithName, target.getForce(), and this as master
+                  return null;
+              }
+          }
+
+          public class Main {
+              public static void main(String[] args) {
+                  Humanoid paul = new Humanoid("Paul");
+                  Jedi yoda = new Jedi("Yoda", 19000, "green", null);
+                  Jedi obiWan = new Jedi("Obi-Wan", 17000, "blue", yoda);
+                  Jedi anakin = new Jedi("Anakin", 27000, "green", obiWan);
+                  Jedi luke = new Jedi("Luke", 23000, "green", obiWan);
+                  Sith sidious = new Sith("Darth Sidious", 20000, null);
+
+                  Sith vader = sidious.corrupt(anakin, "Darth Vader");
+
+                  Humanoid[] cast = { paul, yoda, sidious, obiWan, vader, luke };
+                  for (int i = 0; i < cast.length; i++) {
+                      System.out.println(cast[i]);
+                  }
+              }
+          }
+        solution: |
+          class Humanoid {
+              private String name;
+
+              public Humanoid(String name) {
+                  this.name = name;
+              }
+
+              public String getName() {
+                  return name;
+              }
+
+              public String toString() {
+                  return "Humanoid " + name;
+              }
+          }
+
+          class ForceUser extends Humanoid {
+              private int force;
+              private String lightsaber;
+              private ForceUser master;
+
+              public ForceUser(String name, int force, String lightsaber, ForceUser master) {
+                  super(name);
+                  this.force = force;
+                  this.lightsaber = lightsaber;
+                  this.master = master;
+              }
+
+              public int getForce() {
+                  return force;
+              }
+
+              protected String getType() {
+                  return "ForceUser";
+              }
+
+              public String toString() {
+                  String masterName = (master == null) ? "none" : master.getName();
+                  return getType() + " " + getName() + ", force: " + force
+                      + ", lightsaber: " + lightsaber + ", master: " + masterName;
+              }
+          }
+
+          class Jedi extends ForceUser {
+              public Jedi(String name, int force, String lightsaber, Jedi master) {
+                  super(name, force, lightsaber, master);
+              }
+
+              protected String getType() {
+                  return "Jedi";
+              }
+          }
+
+          class Sith extends ForceUser {
+              public Sith(String name, int force, Sith master) {
+                  super(name, force, "red", master);
+              }
+
+              protected String getType() {
+                  return "Sith";
+              }
+
+              public Sith corrupt(Jedi target, String sithName) {
+                  return new Sith(sithName, target.getForce(), this);
+              }
+          }
+
+          public class Main {
+              public static void main(String[] args) {
+                  Humanoid paul = new Humanoid("Paul");
+                  Jedi yoda = new Jedi("Yoda", 19000, "green", null);
+                  Jedi obiWan = new Jedi("Obi-Wan", 17000, "blue", yoda);
+                  Jedi anakin = new Jedi("Anakin", 27000, "green", obiWan);
+                  Jedi luke = new Jedi("Luke", 23000, "green", obiWan);
+                  Sith sidious = new Sith("Darth Sidious", 20000, null);
+
+                  Sith vader = sidious.corrupt(anakin, "Darth Vader");
+
+                  Humanoid[] cast = { paul, yoda, sidious, obiWan, vader, luke };
+                  for (int i = 0; i < cast.length; i++) {
+                      System.out.println(cast[i]);
+                  }
+              }
+          }
+        expected_output: |
+          Humanoid Paul
+          Jedi Yoda, force: 19000, lightsaber: green, master: none
+          Sith Darth Sidious, force: 20000, lightsaber: red, master: none
+          Jedi Obi-Wan, force: 17000, lightsaber: blue, master: Yoda
+          Sith Darth Vader, force: 27000, lightsaber: red, master: Darth Sidious
+          Jedi Luke, force: 23000, lightsaber: green, master: Obi-Wan
+        hints:
+          - "In ForceUser.toString(), check `master == null ? \"none\" : master.getName()` to avoid a NullPointerException for Yoda and Darth Sidious."
+          - "In Jedi and Sith, override `protected String getType()` (same or wider visibility) so dynamic binding inside ForceUser.toString() prints 'Jedi' or 'Sith'."
+          - "In Sith.corrupt(Jedi target, String sithName), return `new Sith(sithName, target.getForce(), this);` so Darth Sidious becomes Darth Vader's master."
+
+  - id: sec-packages-visibility
+    title: "5. Packages (Paquetages), CLASSPATH & Visibility (Visibilité)"
+    blocks:
+      - id: md-packages-classpath
+        block_type: markdown
+        title: "Packages, Imports & CLASSPATH Resolution"
+        content: |
+          A **package** (*paquetage*) is a namespace / library grouping related classes.
+          - Declared at the very top of a `.java` file: `package people;` or hierarchically `package people.officials;`. All classes in that file belong to that package.
+          - If no `package` line is present, the classes belong to the **default package** (*paquetage par défaut*).
+          - **Directory-to-Package Mapping:** Compiled `.class` files of `package nom1.nom2;` **must** live in directory `nom1/nom2/`.
+
+          ### Using Classes from Other Packages (*Utilisation des paquetages*)
+          By default, the compiler searches only the current package (plus `java.lang.*`). To use a class from another package:
+          1. **Fully qualified dotted name** (*notation pointée*): `people.Person p = new people.Person("John");`
+          2. **Single-class import:** `import people.Person;` -> then write `Person p = new Person("John");`
+          3. **Wildcard import:** `import people.*;` imports all accessible classes directly in `people`.
+             > [!IMPORTANT]
+             > **Wildcard Trap:** `import people.*;` does **NOT** import sub-packages! To use `people.officials.Referee` from `package ui;`, you must explicitly add `import people.officials.*;` (or `import people.officials.Referee;`).
+
+          ### `CLASSPATH`, Compiling & Running (*Accès aux paquetages*)
+          - `CLASSPATH` is an environment variable listing root directories and `.jar` archives (separated by `:` on Linux/macOS) where `javac` and `java` search for packages:
+            ```bash
+            export CLASSPATH=/home/fred/proj_a:/home/fred/contrib:/usr/lib/UIFramework.jar
+            ```
+            If unset, `CLASSPATH` defaults to the current directory (`.`).
+          - From root directory `r`, for class `C` in package `p` (`r/p/C.java`):
+            - **Compile** (uses file path `/`): `javac p/C.java`
+            - **Execute** (uses qualified class name `.`, no `.class`): `java p.C`
+          - Standard JDK libraries (`java.*`, `javax.*`) are always available, and **`java.lang.*` is implicitly imported** in every file (`Object`, `String`, `System`, `Math`, `Integer`, `RuntimeException`, etc.).
+
+      - id: md-visibility-matrix
+        block_type: markdown
+        title: "Visibility Modifiers (Visibilité), Private Constructors & Overriding Rules"
+        content: |
+          Visibility modifiers enforce **encapsulation** on attributes, methods, constructors, and classes.
+
+          ### Member Visibility Matrix (Attributes, Methods, Constructors)
+          | Modifier | Same Class | Same Package (Non-Subclass) | Different Package (Subclass) | Different Package (Non-Subclass) |
+          | :--- | :---: | :---: | :---: | :---: |
+          | **`private`** | Yes | No | No | No |
+          | ***(none / package-private)*** | Yes | **Yes** | No | No |
+          | **`protected`** | Yes | **Yes** | **Yes** | No |
+          | **`public`** | Yes | Yes | Yes | Yes |
+
+          > [!TIP]
+          > Notice the #1 misconception about `protected`: in Java, **`protected` grants access BOTH to subclasses (in any package) AND to all classes in the same package** (even non-subclasses like `Visibility` in Slide 58)!
+
+          ### Special Visibility Rules
+          - **Prefer `private` for attributes** to preserve encapsulation.
+          - **`private` constructors** are valid and useful in two cases:
+            1. A `public` constructor delegates to it via `this(...)`.
+            2. **Forbidding instantiation** of a utility class containing only `static` members (e.g., `java.lang.Math`), overriding the compiler's otherwise `public` default constructor.
+          - **Top-level class visibility:**
+            - *(none / package-private)*: visible only inside its package (keeps internal helper classes unexposed).
+            - `public`: visible everywhere; **must** be placed in a `.java` file with the exact same name (`Clazz.java`).
+            - `private` and `protected` on classes are **only legal for inner classes** (*classes internes*): `private` is visible to the class and its enclosing class; `protected` is visible to the package and subclasses.
+          - **Visibility & Inheritance (*Visibilité et héritage*):**
+            When overriding an inherited method, a subclass **may widen (increase)** visibility along the lattice:
+            $$\text{private} \;<\; \text{(none / package)} \;<\; \text{protected} \;<\; \text{public}$$
+            It **may NEVER restrict (narrow)** visibility — doing so breaks the superclass's interface contract! For example, overriding `protected void m()` as `public void m()` is **legal**, whereas overriding it as package-private `void m()` or `private void m()` is a **compile error**.
+
+      - id: diag-package-visibility
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Package Boundaries & Member Access (Slide 58)"
+        caption: "Same-package non-subclasses (Visibility) can access default and protected members; cross-package subclasses (SubClazz) can access protected but NOT package-private members."
+        source: |
+          flowchart TD
+            subgraph PkgTest ["package test"]
+              Clazz["public class Clazz\n- privateInt (private)\n~ defaultInt (package)\n# protectedInt (protected)\n+ publicInt (public)"]
+              Vis["class Visibility\n(same package, not subclass)"]
+            end
+
+            subgraph PkgOther ["default / other package (import test.*)"]
+              Sub["class SubClazz extends Clazz\n(cross-package subclass)"]
+              Ext["class External\n(cross-package, unrelated)"]
+            end
+
+            Vis -->|"default, protected, public OK\nprivate DENIED"| Clazz
+            Sub -->|"protected, public OK\nprivate, default DENIED"| Clazz
+            Ext -->|"public ONLY\nprivate, default, protected DENIED"| Clazz
+
+            classDef pkg fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;
+            classDef ok fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;
+            classDef warn fill:#fef3c7,stroke:#d97706,stroke-width:1.5px;
+            classDef ext fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px;
+
+            class Clazz pkg;
+            class Vis ok;
+            class Sub warn;
+            class Ext ext;
+
+      - id: fc-visibility-matrix
+        block_type: flashcard
+        title: "Java's 4 Visibility Levels & Overriding Lattice"
+        front: |
+          Compare `package-private` (no modifier) vs. `protected` in Java, and state the **overriding visibility rule**.
+        back: |
+          - **No modifier (`package-private`):** Accessible **only** within the same package (blocked for subclasses in other packages).
+          - **`protected`:** Accessible within the **same package** (even non-subclasses!) **AND** in **subclasses** located in *any* package.
+          - **Overriding rule:** A subclass may **widen** visibility (`package` -> `protected` -> `public`), but may **never restrict** it (e.g., `protected` -> `package` or `private` is a compile error).
+        hint: "Remember that protected is strictly wider than package-private in Java."
+        tags: ["java", "visibility", "packages", "inheritance"]
+
+      - id: sandbox-constructor-override
+        block_type: sandbox
+        runtime: java
+        title: "Practice: Constructor Chaining, Visibility Widening & Polymorphic Array"
+        instructions: |
+          Complete `ElectricCar extends Vehicle`:
+          1. In `ElectricCar(String brand, int batteryKwh)`, chain to `Vehicle(String brand)` using `super(brand)` and store `batteryKwh`.
+          2. Override `protected String specs()` in `ElectricCar` by **widening** its visibility to `public`, returning `super.specs() + ", " + batteryKwh + "kWh"`.
+          3. In `Main.main`, create a `Vehicle[] fleet` containing `new Vehicle("Dacia")` and `new ElectricCar("Polestar", 82)`, then print `fleet[i].toString()` for each vehicle.
+        starter_code: |
+          class Vehicle {
+              private String brand;
+
+              public Vehicle(String brand) {
+                  this.brand = brand;
+              }
+
+              protected String specs() {
+                  return brand;
+              }
+
+              public String toString() {
+                  return "Vehicle[" + specs() + "]";
+              }
+          }
+
+          class ElectricCar extends Vehicle {
+              private int batteryKwh;
+
+              public ElectricCar(String brand, int batteryKwh) {
+                  super("TODO");
+                  this.batteryKwh = 0;
+              }
+
+              // TODO: override specs() with public visibility using super.specs()
+          }
+
+          public class Main {
+              public static void main(String[] args) {
+                  Vehicle[] fleet = new Vehicle[] {
+                      new Vehicle("Dacia"),
+                      new ElectricCar("Polestar", 82)
+                  };
+                  for (int i = 0; i < fleet.length; i++) {
+                      System.out.println(fleet[i]);
+                  }
+              }
+          }
+        solution: |
+          class Vehicle {
+              private String brand;
+
+              public Vehicle(String brand) {
+                  this.brand = brand;
+              }
+
+              protected String specs() {
+                  return brand;
+              }
+
+              public String toString() {
+                  return "Vehicle[" + specs() + "]";
+              }
+          }
+
+          class ElectricCar extends Vehicle {
+              private int batteryKwh;
+
+              public ElectricCar(String brand, int batteryKwh) {
+                  super(brand);
+                  this.batteryKwh = batteryKwh;
+              }
+
+              public String specs() {
+                  return super.specs() + ", " + batteryKwh + "kWh";
+              }
+          }
+
+          public class Main {
+              public static void main(String[] args) {
+                  Vehicle[] fleet = new Vehicle[] {
+                      new Vehicle("Dacia"),
+                      new ElectricCar("Polestar", 82)
+                  };
+                  for (int i = 0; i < fleet.length; i++) {
+                      System.out.println(fleet[i]);
+                  }
+              }
+          }
+        expected_output: |
+          Vehicle[Dacia]
+          Vehicle[Polestar, 82kWh]
+        hints:
+          - "Pass `brand` directly to `super(brand)` in `ElectricCar`'s constructor since `brand` is `private` in `Vehicle`."
+          - "Change `protected String specs()` to `public String specs()` (widening visibility is legal) and call `super.specs()` inside it."
+
+      - id: ref-visibility-inheritance
+        block_type: reflection_rubric
+        title: "Synthesis: Encapsulation, Visibility & Inheritance Contracts"
+        prompt: |
+          Answer these three exam-style conceptual questions in your own words:
+          1. Why does overriding a `protected` method with package-private (no modifier) or `private` visibility fail to compile?
+          2. Why would a class like `java.lang.Math` declare a `private` constructor?
+          3. Why does `import people.*;` not allow you to write `new Referee()` when `Referee` lives in `package people.officials;`?
+        self_check_criteria:
+          - "Explained that restricting visibility in a subclass violates the inherited superclass interface contract (callers expecting protected/package access via a superclass reference would be broken)."
+          - "Noted that a private constructor prevents external instantiation of utility classes with only static members (because otherwise Java generates a public default constructor)."
+          - "Explained that Java packages are flat with respect to wildcard imports: `import people.*;` imports only classes directly in `people`, never sub-packages like `people.officials`."
+        model_answer: |
+          1. **Contract Preservation:** If superclass `Invisible` exposes `protected void m()`, any class in the same package (or any subclass) is guaranteed by `Invisible`'s contract that `m()` is callable on any `Invisible` reference — including a polymorphic reference holding a `Visible` subclass instance. Restricting `m()` to `private` or package-private in `Visible` would violate that contract, so Java forbids narrowing visibility (only widening is allowed).
+          2. **Preventing Instantiation:** When a class declares no constructors, Java automatically generates a `public` default constructor. Declaring `private Math() {}` suppresses that default constructor and makes `new Math()` illegal outside the class, which is ideal for pure-static utility classes (or when a public constructor delegates to a private helper constructor via `this(...)`).
+          3. **Non-Recursive Wildcard Imports:** Even though directories are nested (`people/officials/`), `import people.*;` only imports types directly inside `people`. Sub-packages are treated as distinct namespaces, so `people.officials.Referee` requires either `import people.officials.*;`, `import people.officials.Referee;`, or its fully qualified name.
+
+  - id: sec-diagnostic-quiz
+    title: "6. Diagnostic Mastery Check (TE1 Exam Prep)"
+    blocks:
+      - id: qz-array-null-npe
+        block_type: quiz_question
+        question_type: code_output
+        difficulty: 2
+        related_block_id: md-arrays-fundamentals
+        title: "Object Array Default Elements"
+        question: |
+          What happens when the following Java snippet executes?
+          ```java
+          String[] names = new String[4];
+          System.out.println(names.length);
+          System.out.println(names[0].length());
+          ```
+        options:
+          - "Prints 4, then throws NullPointerException"
+          - "Prints 4, then prints 0"
+          - "Throws ArrayIndexOutOfBoundsException on line 3"
+          - "Fails to compile because names[0] was not initialized"
+        correct_answer: "Prints 4, then throws NullPointerException"
+        explanation: |
+          Instantiating an array of objects (`new String[4]`) allocates 4 reference slots initialized to **`null`** — it does **not** create 4 empty `String` objects.
+          - `names.length` evaluates cleanly to `4`.
+          - `names[0]` is `null`, so invoking `names[0].length()` triggers a **`NullPointerException`** at runtime.
+          - `'Prints 4, then prints 0'` confuses object arrays with primitive arrays (or assumes empty strings `""` are allocated).
+          - `'ArrayIndexOutOfBoundsException'` would only occur for index `< 0` or `>= 4`.
+          - `'Fails to compile'` is false because array elements always receive default values (`null` for references).
+        hints:
+          - "Does `new String[4]` create `String` objects, or only an array of `String` references?"
+          - "What is the default value of every slot in an object array?"
+
+      - id: qz-array-aliasing-onfly
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: code-arrays-varargs
+        title: "Array Aliasing & On-the-Fly Syntax"
+        question: |
+          Consider:
+          ```java
+          int[] a = { 10, 20, 30 };
+          int[] b = a;
+          b[1] = 99;
+          ```
+          Which statement is **TRUE** about `a[1]` and passing an array on the fly (*à la volée*) to `void process(int[] data)`?
+        options:
+          - "a[1] is 99, and calling process(new int[] { 1, 2 }) is valid while process({ 1, 2 }) fails to compile."
+          - "a[1] is 20, and calling process(new int[] { 1, 2 }) is valid while process({ 1, 2 }) fails to compile."
+          - "a[1] is 99, and both process({ 1, 2 }) and process(new int[] { 1, 2 }) compile."
+          - "a[1] is 20, and process(new int[2] { 1, 2 }) is the required syntax."
+        correct_answer: "a[1] is 99, and calling process(new int[] { 1, 2 }) is valid while process({ 1, 2 }) fails to compile."
+        explanation: |
+          - **Reference aliasing:** Arrays are objects; `int[] b = a;` copies the *reference*, not the elements. Modifying `b[1] = 99` mutates the single shared array, so `a[1]` becomes **`99`**.
+          - **On-the-fly arrays:** Bare `{ 1, 2 }` is only legal in a variable declaration (`int[] a = { ... };`). Passing an array directly to a method requires `new int[] { 1, 2 }` (with **no** size inside `[]`).
+          - Options claiming `a[1]` is `20` mistakenly assume value-copy semantics.
+          - `new int[2] { 1, 2 }` is a syntax error (you cannot specify both a dimension and an initializer list).
+        hints:
+          - "In Java, is an array variable a primitive value or a reference to a heap object?"
+          - "Recall Slide 37: why did `n.definirNotes({ 4, 2.5f, 3 })` fail to compile?"
+
+      - id: qz-varargs-exceptions
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: code-division-exception
+        title: "Exceptions & Varargs Behavior in Division"
+        question: |
+          In the `Division` class from Slide 41:
+          ```java
+          public static void main(String... args) {
+              if (args.length != 2)
+                  throw new RuntimeException("java Division <n1> <n2>");
+              String result = args[0] + " / " + args[1] + " = ";
+              try {
+                  int a = Integer.parseInt(args[0]);
+                  int b = Integer.parseInt(args[1]);
+                  result += "" + a / b;
+              } catch (RuntimeException e) {
+                  result += "<undefined>";
+              }
+              System.out.println(result);
+          }
+          ```
+          What happens if you run `java Division 10 0` versus `java Division 10`?
+        options:
+          - "`java Division 10 0` prints `10 / 0 = <undefined>`; `java Division 10` aborts with an uncaught RuntimeException."
+          - "Both commands print `<undefined>` because catch (RuntimeException e) handles all RuntimeExceptions in main."
+          - "`java Division 10 0` aborts with ArithmeticException because catch only catches exact RuntimeException instances."
+          - "The program fails to compile because main() must take String[] args, not String... args."
+        correct_answer: "`java Division 10 0` prints `10 / 0 = <undefined>`; `java Division 10` aborts with an uncaught RuntimeException."
+        explanation: |
+          - For `java Division 10 0`: `args.length == 2`, so execution enters the `try` block. `10 / 0` throws `ArithmeticException`, which is a **subclass of `RuntimeException`**, so `catch (RuntimeException e)` catches it, appends `"<undefined>"`, and prints `10 / 0 = <undefined>`.
+          - For `java Division 10`: `args.length != 2`, so `throw new RuntimeException(...)` executes **outside** the `try` block and is never caught, aborting the program.
+          - `String... args` is completely valid for `main` (Slide 39).
+        hints:
+          - "Is the `if (args.length != 2) throw ...` statement inside or outside the `try` block?"
+          - "Is `ArithmeticException` a subclass of `RuntimeException`?"
+
+      - id: qz-constructor-chaining-trace
+        block_type: quiz_question
+        question_type: code_output
+        difficulty: 4
+        related_block_id: code-constructor-order
+        title: "Constructor Chaining & Field Initializer Execution Order"
+        question: |
+          What exact output is printed by `new B(3);`?
+          ```java
+          class A {
+              A() { System.out.println("A()"); }
+              A(double x) { this(); System.out.println("A(double)"); }
+          }
+          class B extends A {
+              A a = new A();
+              B(int i) { super(i); System.out.println("B(int)"); }
+          }
+          ```
+        options:
+          - "A(), A(double), A(), B(int)"
+          - "A(), A(), A(double), B(int)"
+          - "A(double), A(), A(), B(int)"
+          - "A(), A(double), B(int), A()"
+        correct_answer: "A(), A(double), A(), B(int)"
+        explanation: |
+          Follow Java's strict 3-phase constructor execution order (Slides 45 & 47):
+          1. `B(int)` immediately runs `super(3)` (widened to `double`), entering `A(double)`.
+          2. `A(double)` immediately runs `this()`, entering `A()` -> prints **`A()`**.
+          3. `A(double)` finishes its body -> prints **`A(double)`**.
+          4. Now that the superclass `A` is fully initialized, `B`'s **local field initializer** `A a = new A();` runs -> prints **`A()`**.
+          5. Finally, `B(int)`'s body runs -> prints **`B(int)`**.
+          - `'A(), A(), A(double), B(int)'` wrongly runs `B`'s field initializer before `A(double)` finishes.
+          - `'A(), A(double), B(int), A()'` wrongly runs field initializers *after* the constructor body.
+        hints:
+          - "Which runs first in `B(int)`: `super(i)`, the field initializer `A a = new A()`, or `System.out.println(\"B(int)\")`?"
+          - "Trace `A(double)` carefully: `this()` is executed *before* `System.out.println(\"A(double)\")`."
+
+      - id: qz-missing-noarg-super
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 4
+        related_block_id: md-inheritance-basics
+        title: "Implicit super() Compilation Error"
+        question: |
+          Why does the following code **fail to compile**?
+          ```java
+          class Person {
+              private String name;
+              public Person(String name) { this.name = name; }
+          }
+          class Student extends Person {
+              private int id;
+              public Student(int id) { this.id = id; }
+          }
+          ```
+        options:
+          - "Student(int) implicitly inserts super(), but Person has no no-argument constructor."
+          - "Student cannot inherit from Person because Person's attribute name is private."
+          - "Student must declare a default no-argument constructor Student()."
+          - "this.id = id cannot appear in a subclass constructor without calling this()."
+        correct_answer: "Student(int) implicitly inserts super(), but Person has no no-argument constructor."
+        explanation: |
+          Because `Student(int id)` does not start with an explicit `super(...)` or `this(...)`, the compiler automatically inserts **`super();`** as its first statement. However, because `Person` defines a parameterized constructor `Person(String)`, Java **does not** generate a default no-argument `Person()` constructor. Therefore `super();` fails to compile.
+          - Subclasses *can* inherit from classes with `private` attributes — they just initialize them via `super(...)`.
+          - Declaring `Student()` would suffer the exact same missing `Person()` error.
+        hints:
+          - "What hidden first line does the Java compiler insert into `Student(int id)`?"
+          - "Does `Person` still have a compiler-generated default no-argument constructor?"
+
+      - id: qz-override-vs-overload
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: md-overriding-tostring
+        title: "Overriding (Redéfinition) vs. Overloading (Surcharge)"
+        question: |
+          `Person` defines `public String toString()`. Inside `Sportsman extends Person`, a student writes:
+          ```java
+          public String toString(String prefix) {
+              return prefix + super.toString();
+          }
+          ```
+          Then executes:
+          ```java
+          Person p = new Sportsman("John", 22, "Tennis");
+          System.out.println(p);
+          ```
+          What happens?
+        options:
+          - "toString(String) overloads rather than overrides toString(); println(p) calls Person.toString()."
+          - "Dynamic binding invokes Sportsman.toString(String) with prefix = \"\"."
+          - "The code fails to compile because toString() cannot accept parameters."
+          - "println(p) prints Sportsman@hashCode because Sportsman hid Object.toString()."
+        correct_answer: "toString(String) overloads rather than overrides toString(); println(p) calls Person.toString()."
+        explanation: |
+          **Overriding (*redéfinition*)** requires the exact same parameter list (same count, order, and types). Adding a `String prefix` parameter creates an **overload (*surcharge*)**, which does **not** participate in dynamic binding with `Object.toString()`. Consequently, `System.out.println(p)` invokes `p.toString()` (0 arguments), resolving to `Person.toString()` — not `Sportsman.toString(String)`.
+          - Java never invents a default `""` argument.
+          - Overloading `toString` with parameters is legal Java syntax (just usually a bug when overriding was intended).
+        hints:
+          - "Compare the parameter list of `Object.toString()` with `toString(String prefix)`."
+          - "Does overloading (*surcharge*) participate in dynamic binding when `println(Object)` calls `toString()`?"
+
+      - id: qz-protected-cross-package
+        block_type: quiz_question
+        question_type: multi_select
+        difficulty: 4
+        related_block_id: diag-package-visibility
+        title: "Visibility Across Package Boundaries (Slide 58)"
+        question: |
+          Given `package test; public class Clazz` declaring `private int priv;`, `int def;` (no modifier), and `protected int prot;`:
+          - `class Visibility` is in `package test` (NOT a subclass of `Clazz`).
+          - `class SubClazz extends Clazz` is in another package (`import test.*;`).
+
+          Which of the following accesses **compile legally**? (Select all that apply)
+        options:
+          - "`c.def = 1;` inside `Visibility` (same package, non-subclass)"
+          - "`c.prot = 1;` inside `Visibility` (same package, non-subclass)"
+          - "`prot = 1;` inside `SubClazz` (different package, subclass)"
+          - "`def = 1;` inside `SubClazz` (different package, subclass)"
+          - "`c.priv = 1;` inside `Visibility` (same package, non-subclass)"
+        correct_answer:
+          - "`c.def = 1;` inside `Visibility` (same package, non-subclass)"
+          - "`c.prot = 1;` inside `Visibility` (same package, non-subclass)"
+          - "`prot = 1;` inside `SubClazz` (different package, subclass)"
+        explanation: |
+          Apply the 4-level Java visibility matrix (Slides 56 & 58):
+          - `c.def = 1;` in `Visibility`: **Legal** — `Visibility` is in the same package `test`.
+          - `c.prot = 1;` in `Visibility`: **Legal** — `protected` in Java grants access to the **entire same package** as well as subclasses!
+          - `prot = 1;` in `SubClazz`: **Legal** — `SubClazz` is a subclass of `Clazz`, so `protected` is accessible even across packages.
+          - `def = 1;` in `SubClazz`: **Illegal** — package-private (`def`) is strictly limited to `package test`, even for subclasses.
+          - `c.priv = 1;` in `Visibility`: **Illegal** — `private` is visible *only* inside `Clazz` itself.
+        hints:
+          - "Remember the Java `protected` rule: does it include same-package non-subclasses?"
+          - "Can a subclass in a *different* package access a package-private (no modifier) field?"
+
+      - id: qz-package-import-visibility-widen
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 5
+        related_block_id: md-visibility-matrix
+        title: "Sub-Package Imports & Overriding Visibility Rules"
+        question: |
+          Suppose `Referee` is a `public` class in `package people.officials;` with method `protected void whistle()`.
+          In `package ui;`, a developer writes:
+          ```java
+          package ui;
+          import people.*;
+
+          public class HeadReferee extends people.officials.Referee {
+              void whistle() { }
+          }
+          ```
+          Which statement accurately diagnoses **all** compilation issues?
+        options:
+          - "`void whistle()` fails to compile because it narrows visibility from `protected` to package-private; `import people.*;` does not import `people.officials.*` (so the qualified name was actually necessary)."
+          - "The code compiles cleanly because `import people.*;` imports sub-packages and package-private is equivalent to `protected`."
+          - "Only `extends people.officials.Referee` fails because `Referee` cannot be extended from another package."
+          - "`void whistle()` compiles cleanly, but `import people.*;` causes a compile error because `people.officials` is a sub-package."
+        correct_answer: "`void whistle()` fails to compile because it narrows visibility from `protected` to package-private; `import people.*;` does not import `people.officials.*` (so the qualified name was actually necessary)."
+        explanation: |
+          Two core rules from Slides 52–53 and 59 intersect here:
+          1. **Overriding visibility:** `Referee.whistle()` is `protected`. In `HeadReferee`, `void whistle()` has **package-private** (default) visibility, which is **narrower** than `protected` (`private` < `package` < `protected` < `public`). Java forbids restricting visibility on an overridden method (it must be `protected` or `public`).
+          2. **Wildcard imports:** `import people.*;` is valid syntax, but it does **NOT** import sub-packages like `people.officials`. Writing `extends people.officials.Referee` works only because the fully qualified name was used — bare `extends Referee` would also fail without `import people.officials.*;`.
+        hints:
+          - "Compare the visibility of `protected void whistle()` vs `void whistle()` (no modifier) on the lattice."
+          - "Does `import people.*;` automatically import classes inside `people.officials`?"

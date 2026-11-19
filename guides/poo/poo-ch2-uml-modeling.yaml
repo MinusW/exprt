@@ -1,0 +1,810 @@
+id: poo-ch2-uml-modeling
+title: "Chapter 2: UML Modeling & Class Diagrams"
+description: >-
+  Complete guide to UML modeling and class diagrams (HEIG-VD POO Chapter 2):
+  abstraction, UML diagram taxonomy, class anatomy and visibility, inheritance,
+  abstract classes, interfaces, associations, multiplicities, aggregation vs.
+  composition, association classes, navigability, code implementation, and
+  object/sequence diagrams.
+estimated_minutes: 50
+category: Object-Oriented Programming
+track: POO - Programmation Orientée Objet (TE1)
+track_order: 2
+difficulty_level: intermediate
+tags:
+  - poo
+  - oop
+  - uml
+  - class-diagrams
+  - modeling
+prerequisites:
+  - poo-ch1-oop-fundamentals
+layout_mode: single-page
+sources:
+  - title: "HEIG-VD POO — 2 UML 24"
+    url_or_path: "sources/POO_TE1/2 UML 24.pdf"
+    notes: >-
+      Pages 1–27: Modeling, UML overview, class diagrams, visibility,
+      attributes/operations, associations, multiplicities, roles, navigability,
+      aggregation, composition, generalization, abstract classes, interfaces,
+      dependencies, and exercises.
+
+sections:
+  - id: sec-modeling-and-uml-overview
+    title: "1. Modeling & UML Overview"
+    blocks:
+      - id: th-modeling-fundamentals
+        block_type: markdown
+        title: "Why Model? Abstraction & the Origins of UML"
+        bookmarkable: true
+        content: |
+          ### Modeling (*Modélisation*)
+          **Modeling** (*modélisation*) is an **abstraction process** (*processus d'abstraction*) used to represent a problem by identifying real-world entities (*entités du monde réel*) and their operations (*traitements*).
+
+          Modeling is an essential phase of software development because it lets engineers:
+          * **Design without implementation constraints** (*conception sans être contraint par des considérations d'implémentation*).
+          * Verify that the application represents all necessary objects and delivers the required functionality.
+          * Address **documentation, security, extensibility, reusability, and maintainability** (*extensibilité, réutilisabilité, maintenance*) **before** writing code makes structural changes costly and difficult.
+
+          ### What Is UML?
+          **UML** (*Unified Modeling Language* / *langage de modélisation unifié*) is the industry-standard graphical language for specifying and visualizing the components of an object-oriented application:
+          * Built on **precise semantics** (*sémantique précise*) and an **expressive graphical notation** (*notation graphique expressive*).
+          * Composed of **multiple diagram types** (class, use case, object, sequence, etc.), each offering a different view of the system.
+          * Standardized in **1997** by the **OMG** (*Object Management Group*, `www.omg.org`).
+          * Born from the unification of three major OO methods—the "Three Amigos":
+            * **OMT** (*Object Modeling Technique*, Rumbaugh *et al.*, 1991)
+            * **Booch** (Grady Booch, 1991 — object designs and interdependencies)
+            * **Objectory** (Ivar Jacobson *et al.*, 1992 — use-case-driven OO design)
+          * Also influenced by **Entity-Relational Modeling** (Codd, 1980), **CRC cards** (Beck), **Odell** (activity diagrams), **Real-Time OOM** (Selic), **OPEN/SOMA** (Graham), and OO languages (**Smalltalk, C++, Eiffel, Ada**).
+
+          > [!IMPORTANT]
+          > **Classic Exam Trap — Language vs. Methodology:**
+          > **UML is NOT a methodology** (*UML n'est pas associé à une méthodologie particulière*). It defines *how to express* models (notation + semantics), **not** the step-by-step software engineering process (*génie logiciel*) for producing them.
+
+          *Reference books & tools cited in the course:* Booch/Rumbaugh/Jacobson (*Le guide de l'utilisateur UML*), Muller/Gaertner (*Modélisation objet avec UML*), Fowler (*UML Distilled*); open-source tools including HEIG-VD's **Slyum**, **PlantUML**, **Mermaid**, **UMLet**, **ArgoUML**, plus **Draw.io**, **StarUML**, **Visual Paradigm**, and **IntelliJ IDEA**.
+
+      - id: th-uml-diagram-taxonomy
+        block_type: markdown
+        title: "Taxonomy of UML Diagrams"
+        bookmarkable: true
+        content: |
+          UML organizes system views into **static (structural)** and **dynamic (behavioral)** diagrams:
+
+          | Diagram Type (EN / FR) | Category | Primary Role |
+          | :--- | :--- | :--- |
+          | **Use Case Diagram** (*Diagramme de cas d'utilisation*) | Behavioral | Partitions system functionality according to actor needs (**what** the system does, not **how**; non-technical scenarios). |
+          | **Class Diagram** (*Diagramme de classes*) | Structural (**Core of UML**) | Static description of classes, their attributes/operations, and the links between them (*cœur du langage*). |
+          | **Object Diagram** (*Diagramme d'objets*) | Structural | Snapshot of specific runtime **instances** (*instanciations particulières*) conforming to a class diagram. |
+          | **Sequence Diagram** (*Diagramme de séquences*) | Behavioral | Dynamic, **time-ordered** description of operations: which objects exchange which messages. |
+          | **Other Diagrams** | Both | Collaboration/communication, state (*états*), activity (*activités*), component (*composants*), deployment (*déploiement*). |
+
+          ### Anatomy of a Use Case Diagram (*Diagramme de cas d'utilisation*)
+          A use case diagram captures high-level functional requirements without diving into implementation:
+          * **Actor** (*acteur*): stick figure representing an external role interacting with the system (e.g., `Passenger`, `Tour Guide`). Actors can use **generalization** (`Tour Guide` $\longrightarrow$ `Passenger` with a hollow triangle).
+          * **System / Business Boundary** (*frontière*): rectangle enclosing the use cases (e.g., `«Business» Airport`).
+          * **Use Case** (*cas d'utilisation*): oval representing a user-visible goal (e.g., `Group Check-In`, `Individual Check-In`, `Baggage Check-In`, `Security Screening`).
+          * **Association & Multiplicity**: solid line linking an actor to a use case, optionally annotated with multiplicities (e.g., `1..*` `Passenger` to `1` `Security Screening`).
+          * **`«include»` relationship**: dashed arrow indicating a **mandatory** sub-use-case always executed as part of the base case (`Group Check-In` `..>` `Individual Check-In`).
+          * **`«extend»` relationship**: dashed arrow pointing *from* the optional extension *to* the base use case (`Baggage Check-In` `..>` `Individual Check-In`).
+
+  - id: sec-classes-visibility-and-inheritance
+    title: "2. Classes, Visibility, Inheritance, Abstract Classes & Interfaces"
+    blocks:
+      - id: th-class-anatomy-visibility
+        block_type: markdown
+        title: "Class Representation, Compartments & Visibility"
+        bookmarkable: true
+        content: |
+          A **class diagram** (*diagramme de classes*) provides a **static model of reality** (*modélisation statique de la réalité*). Each **class** represents a set of real-world entities perceived in a given context, described by **attributes** (*attributs*), **operations / methods** (*opérations / méthodes*), and connected by **inheritance** (*héritages*) and **associations**.
+
+          ### The Three Compartments of a Class
+          1. **Class Name** (top): centered, bold (or *italic* if abstract).
+          2. **Attributes** (middle): `visibility name : Type` (e.g., `- name : String`, `- birthday : Date`).
+          3. **Operations / Methods** (bottom): `visibility name(params) : ReturnType` (e.g., `+ age() : int`, `+ print()`).
+
+          > [!NOTE]
+          > **Optional Detail & Class-Level (Static) Members:**
+          > * Attributes and methods **do not have to be shown** when high-level overview clarity is preferred (a class can be drawn as a single-compartment box with only its name).
+          > * **Class properties** (*propriétés de classe* — static attributes and static methods belonging to the class itself rather than to individual instances) are **underlined** (*soulignées*).
+
+          ### Visibility Modifiers (*Visibilités*)
+          | Symbol | Visibility (EN) | Visibility (FR) | Access Scope |
+          | :--- | :--- | :--- | :--- |
+          | `+` | **Public** | *publique* | Accessible from any class. |
+          | `-` | **Private** | *privée* | Accessible only within the declaring class itself. |
+          | `#` | **Protected** | *protégée* | Accessible within the declaring class, its subclasses (and same package in Java). |
+          | `~` (or omitted) | **Package** | *paquetage* | Accessible to classes within the same package. |
+
+      - id: th-inheritance-abstract-interfaces
+        block_type: markdown
+        title: "Inheritance, Populations, Abstract Classes, Interfaces & Dependencies"
+        bookmarkable: true
+        content: |
+          ### Inheritance / Generalization (*Héritage / Généralisation–Spécialisation*)
+          * Denoted by a **solid line with a hollow triangular arrowhead** pointing from the **subclass** (*sous-classe*) to the **superclass** (*super-classe*), e.g., `Sportsman` $\longrightarrow$ `Person`.
+          * All properties (attributes and methods) of the superclass are inherited by the subclass.
+          * The subclass can add new properties and **override** (*redéfinir*) inherited methods, enabling **dynamic binding** (*liaison dynamique*).
+
+          ### Abstract Classes & Abstract Methods (*Classe abstraite / Méthode abstraite*)
+          * **Abstract class**: models an abstract concept that does not exist directly on its own (*non instanciable directement*) and requires concrete subclasses (e.g., `Animal` with subclasses `Chat`, `Chien`). It factors out common properties and may contain **both concrete and abstract methods**.
+          * **Abstract method**: declares only its **signature** (no implementation). Any class declaring at least one abstract method is **necessarily abstract** (*forcément abstraite*), and concrete subclasses must implement it (e.g., `Animal.son()` overridden to bark in `Chien` and meow in `Chat`).
+          * **UML typography rule:** Both **abstract class names** and **abstract method names** are written in **italics** (*en italique*).
+
+          ### Inheritance Populations (*Héritage : populations*)
+          Viewing a superclass $A$ and its subclasses $B$ and $C$ as sets of runtime instances reveals three cases:
+
+          | Population Case | Set Condition | Allowed in OO? | Meaning |
+          | :--- | :--- | :--- | :--- |
+          | **Disjoint** (*Disjonction*) | $B \cap C = \emptyset$ and $B \cup C \neq A$ | **Yes** | Subclasses do not overlap, and concrete superclass $A$ may have direct instances that are neither $B$ nor $C$. |
+          | **Partition** | $B \cap C = \emptyset$ and $B \cup C = A$ | **Yes** | Subclasses are mutually exclusive and cover all of $A$ — typical when $A$ is **abstract** (no direct instances of $A$). |
+          | **Overlapping** | $B \cap C \neq \emptyset$ | **No** (*Pas en OO*; possible in databases / *BD*) | A single object cannot simultaneously be an instance of two sibling classes in standard single-classification OO. |
+
+          ### Interfaces & Realization (*Interface / Implémentation*)
+          * An **interface** (*interface*) defines a set of **abstract methods** that classes can implement to **guarantee a behavior** (*garantir un comportement*).
+          * An interface **has no state** (*ne possède pas d'état* — no instance attributes) and its name is written in **italics** (often accompanied by the `«interface»` stereotype).
+          * **Implementation / Realization** (*implémentation d'une interface*) is drawn as a **dashed line with a hollow triangular arrowhead** pointing from the implementing class to the interface (e.g., `Date` `..|>` `Comparable`).
+
+          ### Dependency (*Dépendance*)
+          * Drawn as a **dashed line with an open arrowhead** (`A ..> B`), indicating a weaker, temporary *"uses-a"* relationship (e.g., `A` receives `B` as a method parameter or creates a local variable of type `B`, without storing `B` as a persistent association). Do not confuse dependency (`..>`) with interface realization (`..|>`).
+
+      - id: diag-class-hierarchy-uml
+        block_type: kroki
+        diagram_type: plantuml
+        title: "UML Class Anatomy, Inheritance, Abstract Classes & Interfaces"
+        caption: "Demonstrates visibility (+, -, #, ~), static/class members (underlined), inheritance (<|--), abstract classes/methods (italics), interface realization (<|..), and dependency (..>)."
+        bookmarkable: true
+        source: |
+          @startuml
+          skinparam classAttributeIconSize 0
+          skinparam classBackgroundColor #f8fafc
+          skinparam classBorderColor #475569
+          skinparam arrowColor #334155
+
+          class Person {
+            - {static} count : int
+            - name : String
+            - birthday : Date
+            # address : String
+            ~ internalId : int
+            + {static} getCount() : int
+            + age() : int
+            + print()
+          }
+
+          class Sportsman {
+            - sport : String
+            + print()
+          }
+
+          abstract class Animal {
+            - name : String
+            + getName() : String
+            {abstract} + son() : String
+          }
+
+          class Chien {
+            + son() : String
+          }
+
+          class Chat {
+            + son() : String
+          }
+
+          interface Comparable {
+            {abstract} + compareTo(o : Object) : int
+          }
+
+          class Date {
+            - day : int
+            - month : int
+            - year : int
+            + compareTo(o : Object) : int
+          }
+
+          Person <|-- Sportsman
+          Animal <|-- Chien
+          Animal <|-- Chat
+          Comparable <|.. Date
+          Person ..> Date : uses
+          @enduml
+
+      - id: fc-visibility-and-notation
+        block_type: flashcard
+        title: "UML Class Typography & Visibility Symbols"
+        front: "In a UML class diagram, what do the symbols `+`, `-`, `#`, `~`, **underlined** text, and *italic* text each signify?"
+        back: |
+          * **`+`** : **public** (*publique*)
+          * **`-`** : **private** (*privée*)
+          * **`#`** : **protected** (*protégée*)
+          * **`~`** (or omitted) : **package** (*paquetage*)
+          * **Underlined** (*souligné*) : **class-level / `static`** attribute or method (belongs to the class, not an instance)
+          * ***Italic*** (*italique*) : **abstract class**, **abstract method**, or **interface**
+        hint: "Four visibility symbols + two text-formatting cues (underline vs. italics)."
+        tags:
+          - uml
+          - visibility
+          - notation
+
+      - id: fc-uml-arrows
+        block_type: flashcard
+        title: "UML Class Diagram Relationship Lines & Arrows"
+        front: "Match each UML connector to its relationship: solid + hollow triangle, dashed + hollow triangle, solid line, solid + open arrow, hollow diamond, filled diamond, dashed + open arrow."
+        back: |
+          * **Solid line + hollow triangle (`<|--`)** : Inheritance / Generalization (*héritage / généralisation*)
+          * **Dashed line + hollow triangle (`<|..`)** : Interface realization (*implémentation d'interface*)
+          * **Solid line (`--`)** : Bidirectional association (*association*)
+          * **Solid line + open arrow (`-->`)** : Unidirectional navigability (*navigabilité*)
+          * **Solid line + hollow diamond (`o--`)** : Aggregation (*agrégation* — shared whole-part)
+          * **Solid line + filled diamond (`*--`)** : Composition (*composition* — exclusive structural whole-part)
+          * **Dashed line + open arrow (`..>`)** : Dependency (*dépendance* — temporary "uses-a")
+        hint: "Separate triangles (inheritance/interface), diamonds (whole-part), and open arrows (navigability/dependency)."
+        tags:
+          - uml
+          - arrows
+          - relationships
+
+  - id: sec-associations-multiplicities-aggregation
+    title: "3. Associations, Multiplicities, Arity, Navigability & Whole-Part Links"
+    blocks:
+      - id: th-associations-roles-multiplicities
+        block_type: markdown
+        title: "Associations, Roles, Multiplicities, Arity & Navigability"
+        bookmarkable: true
+        content: |
+          ### Associations (*Associations*)
+          An **association** represents a structural relationship between objects where each object plays a specific **role** (*rôle*). Drawn as a solid line connecting classes, an association is characterized by:
+          * **Name** (*nom*): typically a conjugated verb, optionally paired with a reading-direction triangle (`< Travaille pour`, `Possède >`).
+          * **Roles** (*rôles*): placed near each end to describe how that class is viewed by the other class (e.g., `employeur` on `Entreprise`, `employé` on `Personne`).
+          * **Naming rule:** Either the **association name** OR the **roles** must be specified.
+          * **Cardinalities / Multiplicities** (*cardinalités / multiplicités*): indicate how many objects of one class can be linked to **a single object** of the other class.
+
+          ### Reading & Placing Multiplicities (*Cardinalités*)
+          > [!IMPORTANT]
+          > **The Target-End Placement Rule (Most Common Exam Mistake!):**
+          > Always place the multiplicity on the **far (target) end** of the sentence!
+          > * *"A person can own several cars, but a car has only one owner"* (*« Une personne peut posséder plusieurs voitures, mais une voiture n'a qu'un seul propriétaire »*):
+          >   `Personne` **`1`** ——— `Possède >` ——— **`*`** `Voiture`
+          > * Read left-to-right: **1** `Personne` owns **`*`** `Voiture`s.
+          > * Read right-to-left: **1** `Voiture` is owned by **`1`** `Personne`.
+
+          | Notation | Meaning (EN) | Meaning (FR) |
+          | :--- | :--- | :--- |
+          | `1` | Exactly 1 | *1 et un seul* |
+          | `0..1` | Zero or 1 (optional) | *zéro ou 1* |
+          | `0..*` or `*` | Zero to many | *de zéro à plusieurs* |
+          | `1..*` | At least 1 | *au moins 1* |
+          | `n` | Exactly $n$ ($n \in \mathbb{N}$) | *exactement n* |
+          | `n..m` | From $n$ to $m$ ($m > n$) | *de n à m* |
+          | `n..*` | $n$ or more | *n ou plus* |
+
+          ### Association Arity (*Arité des associations*)
+          * **Binary** (*binaire*): links two distinct classes (note: two classes may be connected by **more than one** distinct association).
+          * **Reflexive** (*réflexive*): links a class to **itself**, distinguished by explicit roles. Example: `Personne` linked to `Personne` with role `parent` (`0..2`) and role `enfant` (`*`).
+          * **N-ary** (*n-aire*): links 3 or more classes through a central diamond; each occurrence binds one object from every participating class. Example: `réservation` connecting `Personne` (`*`), `Vol` (`1..*`), and `Place` (`*`) — *"A seat is reservable on a flight for a person."*
+            * *Design rule from the course:* N-ary associations are non-trivial to define—**when in doubt, prefer binary associations** (*dans le doute préférer des associations binaires*).
+
+          ### Navigability (*Navigabilité*)
+          * By default, an association with no arrowheads is **navigable in both directions** (*parcourue dans tous les sens*).
+          * To **reduce coupling** (*réduire le couplage*), add an **open arrowhead** (`-->`) on the target end.
+          * Example: `Personne "1" --> "*" Voiture` means a `Personne` object directly references its `Voiture` objects, whereas `Voiture` objects **do not** hold a reference back to their owner.
+
+      - id: th-aggregation-vs-composition
+        block_type: markdown
+        title: "Aggregation vs. Composition (Whole–Part Relationships)"
+        bookmarkable: true
+        content: |
+          Both **aggregation** and **composition** are specialized associations expressing a **whole–part** (*tout–partie*) relationship, with the diamond always placed on the **whole** side:
+
+          | Criterion | Aggregation (*Agrégation*) | Composition (*Composition*) |
+          | :--- | :--- | :--- |
+          | **UML Symbol** | **Hollow diamond** (`o--`) on the whole | **Filled (black) diamond** (`*--`) on the composite |
+          | **Semantics** | Weak "contains / is composed of" (*un tout « est composé de » parties*) | Strong **structural containment** (*contenance structurelle*) |
+          | **Part Sharing** | A part **can belong to multiple wholes** simultaneously | A part belongs to **at most one** composite (exclusive ownership) |
+          | **Lifecycle Coupling** | Destroying the whole does **not** destroy its parts | Destroying the composite **destroys all its component parts** |
+          | **Whole-Side Multiplicity** | Unrestricted (e.g., `*`, `0..*`, `1..*`) | **At most 1** (`1` or `0..1`) — strictly enforced! |
+          | **Course Example** | `Polygone "*" o-- "3..*" Point` (*a point can belong to more than one polygon*) | `Ordinateur "1" *-- "1..*" Pièce` (*destroying the computer destroys its parts*) |
+
+          > [!WARNING]
+          > **Instant Sanity Check for Composition:**
+          > If you ever see `*` or `1..*` next to a **filled black diamond** (`*--`), the diagram is **invalid**! Because a component cannot be structurally owned by two composites at once, the composite-side multiplicity is strictly bounded by `1` (or `0..1`).
+
+      - id: diag-associations-agg-comp
+        block_type: kroki
+        diagram_type: plantuml
+        title: "Associations, Roles, Reflexive Links, Navigability, Aggregation & Composition"
+        caption: "Side-by-side illustration of course examples: Entreprise–Personne (roles), Personne reflexive (parent/enfant), Personne-->Voiture (navigability), Polygone o-- Point (aggregation), and Ordinateur *-- Piece (composition)."
+        bookmarkable: true
+        source: |
+          @startuml
+          skinparam classAttributeIconSize 0
+          skinparam classBackgroundColor #f8fafc
+          skinparam classBorderColor #475569
+          skinparam arrowColor #334155
+
+          class Entreprise
+          class Personne
+          class Voiture
+          class Polygone
+          class Point
+          class Ordinateur
+          class Piece
+
+          Entreprise "employeur *" -- "employé *" Personne : < Travaille pour
+          Personne "parent 0..2" -- "enfant *" Personne
+          Personne "1" --> "*" Voiture : Possède >
+          Polygone "*" o-- "3..*" Point : Contient >
+          Ordinateur "1" *-- "1..*" Piece : Composé >
+          @enduml
+
+      - id: fc-multiplicity-and-agg-comp
+        block_type: flashcard
+        title: "Aggregation vs. Composition — The Exclusivity & Lifecycle Rule"
+        front: "Why can `Polygone` have multiplicity `*` on the diamond end of `Polygone o-- Point`, whereas `Ordinateur` can only have `1` or `0..1` on the diamond end of `Ordinateur *-- Pièce`?"
+        back: |
+          * **Aggregation (`o--`)** allows **shared parts** with independent lifecycles: a single `Point` can belong to multiple `Polygone`s at once, so `*` on `Polygone` is valid.
+          * **Composition (`*--`)** enforces **exclusive structural containment** and **cascading destruction**: a `Pièce` can belong to **at most one** `Ordinateur` (`1` or `0..1`), and destroying the `Ordinateur` destroys its `Pièce`s.
+        hint: "Think about what happens to a shared part if one of its two owners is destroyed."
+        tags:
+          - uml
+          - aggregation
+          - composition
+
+  - id: sec-association-classes-and-implementation
+    title: "4. Association Classes & Implementing Associations in Code"
+    blocks:
+      - id: th-association-classes
+        block_type: markdown
+        title: "Association Classes (*Classes d'association*)"
+        bookmarkable: true
+        content: |
+          Sometimes an attribute or method belongs **neither** to class $A$ **nor** to class $B$ alone, but to the **relationship itself**. UML models this with an **association class** (*classe d'association*):
+          * Attached to the association line by a **dashed line** (*ligne en traitillé*).
+          * Does not strictly need its own name if identifiable from the association, and **can itself be linked to other classes**.
+          * **Strict 1-to-1 correspondence:** Every occurrence of the association—e.g., a pair `(professeur, classe)`—is linked to **one and only one** instance of the association class (`Enseignement`), and vice versa.
+          * **Multiple occurrences allowed:** The same `Professeur` and the same `Classe` can still be linked by *several* occurrences of `Enseigne` (for instance, a professor teaching two distinct courses to the same class, producing two distinct `Enseignement` objects).
+
+          In the course's school model:
+          * `Professeur` (`1..*`) `Enseigne >` `Classe` (`*`) has association class `Enseignement` (`- annéeAcadémique : int`, `- description : String`, `+ print()`).
+          * `Enseignement` is itself linked to `Unité` (`*` `Relatif >` `1`) and `Leçon` (`1` `Horaire >` `1..*`, with `- date : Date` and `- nbPériodes : int`).
+
+      - id: diag-association-class
+        block_type: kroki
+        diagram_type: plantuml
+        title: "Association Class Example: Enseignement"
+        caption: "Each occurrence of the Enseigne association between a Professeur and a Classe corresponds to exactly one Enseignement object, which itself connects to Unité and Leçon."
+        bookmarkable: true
+        source: |
+          @startuml
+          skinparam classAttributeIconSize 0
+          skinparam classBackgroundColor #f8fafc
+          skinparam classBorderColor #475569
+          skinparam arrowColor #334155
+
+          class Professeur
+          class Classe
+          class Enseignement {
+            - anneeAcademique : int
+            - description : String
+            + print()
+          }
+          class Unite
+          class Lecon {
+            - date : Date
+            - nbPeriodes : int
+          }
+
+          Professeur "1..*" -- "*" Classe : Enseigne >
+          (Professeur, Classe) .. Enseignement
+          Enseignement "*" -- "1" Unite : Relatif >
+          Enseignement "1" -- "1..*" Lecon : Horaire >
+          @enduml
+
+      - id: th-implementing-associations
+        block_type: markdown
+        title: "Translating Associations into Object-Oriented Code"
+        bookmarkable: true
+        content: |
+          Programming languages like Java or C++ do not have native syntax for UML associations, n-ary diamonds, or association classes. You translate them using two mechanisms:
+
+          ### 1. Reifying N-ary Associations & Association Classes into Regular Classes
+          * **N-ary Association $\to$ Dedicated Class** (*attention à l'inversion des cardinalités !*):
+            The ternary `réservation` linking `Personne (*)` – `Vol (1..* )` – `Place (*)` becomes a regular class `Réservation` connected by three binary associations:
+            * `Personne "1" -- "*" Réservation`
+            * `Vol "1" -- "1..*" Réservation`
+            * `Place "1" -- "*" Réservation`
+            Notice how the multiplicities **invert**: each `Réservation` object references exactly `1` `Personne`, `1` `Vol`, and `1` `Place`, while the original multiplicities move onto the `Réservation` ends!
+          * **Association Class $\to$ Dedicated Class** (*attention au déplacement des cardinalités !*):
+            `Professeur "1..*" -- "*" Classe` with `Enseignement` becomes:
+            * `Professeur "1" -- "*" Enseignement : Donne >`
+            * `Enseignement "1..*" -- "1" Classe : < Suit`
+            Each `Enseignement` belongs to `1` `Professeur` and `1` `Classe`, while `Professeur` has `*` `Enseignement`s and `Classe` has `1..*` `Enseignement`s.
+
+          ### 2. Implementing Binary Associations with References & Collections
+          Depending on **multiplicity** and **navigability**, add fields to the navigable source class(es):
+          * Multiplicity **`0..1` or `1`** $\Rightarrow$ a single **object reference** attribute (e.g., `- propriétaire : Personne`).
+          * Multiplicity **`> 1`** (`*`, `1..*`, `n..m`) $\Rightarrow$ a **collection** (array, `List`, `Set`…) of references (e.g., `- voitures : List<Voiture>`).
+
+          > [!CAUTION]
+          > **Golden UML Modeling Rule:**
+          > **Never write association reference attributes or collections inside class boxes on a UML class diagram!** (*Ne jamais indiquer dans un diagramme de classes les références ou les collections de références utilisées pour implémenter les associations.*) The association line itself already represents those references—duplicating them as attributes is redundant and an exam error.
+
+          ### 3. Maintaining Bidirectional Reference Consistency (*Cohérence des références*)
+          For a **bidirectional** association (`Personne "1" -- "*" Voiture`), every link creates **two** runtime references:
+          $$\text{Paul owns Fiat} \iff \text{Fiat.propriétaire} == \text{Paul}$$
+
+          **Ownership Transfer Example (Course Slide 24):** Suppose **Ringo sells his BMW to Paul**. Updating the model requires **3 synchronized operations**:
+          1. Add `BMW` to `Paul.voitures` (*Paul possède la BMW*).
+          2. Set `BMW.propriétaire = Paul` (*la BMW a pour propriétaire Paul*).
+          3. Remove `BMW` from `Ringo.voitures` (*Ringo ne possède plus la BMW*).
+
+          Omitting step 3 breaks referential integrity: `Ringo` would still list `BMW` even though `BMW` points to `Paul`!
+
+      - id: ref-model-domain-scenario
+        block_type: reflection_rubric
+        title: "Design Exercise: Modeling a University Course System in UML"
+        prompt: |
+          Sketch (on paper or mentally) a UML class diagram for the following specification, and note every relationship type, multiplicity, role, navigability, and class modifier:
+          1. A `University` structurally owns one or more `Department`s (if the university closes, its departments cease to exist).
+          2. A `Professor` can belong to several `Department`s, and a `Department` has at least one `Professor`.
+          3. `Person` is an abstract class with private `name : String`, an abstract method `getRole() : String`, and subclasses `Professor` and `Student` (partition).
+          4. A `Student` enrolls in zero or more `Course`s, and a `Course` has at least 5 `Student`s; each enrollment records a `grade : double` and `semester : String`.
+          5. A `Course` needs to access its `Syllabus` (`1`), but `Syllabus` never navigates back to `Course`.
+        self_check_criteria:
+          - "Used composition (`University 1 *-- 1..* Department`) with multiplicity `1` on the filled diamond side."
+          - "Used aggregation (`Department * o-- 1..* Professor`) because a Professor can be shared across multiple Departments."
+          - "Marked `Person` and `getRole()` in italics (abstract) and used solid-line hollow-triangle inheritance (`<|--`) from `Professor` and `Student` to `Person`."
+          - "Modeled `grade` and `semester` as an association class (`Enrollment`) attached with a dashed line to `Student 5..* -- * Course` (not as attributes on `Student` or `Course`)."
+          - "Used unidirectional navigability (`Course 1 --> 1 Syllabus`) and omitted all reference/collection attributes from the class boxes."
+        model_answer: |
+          * **Composition:** `University "1" *-- "1..*" Department` (filled diamond on `University`; exclusive ownership and lifecycle dependency).
+          * **Aggregation:** `Department "*" o-- "1..*" Professor` (hollow diamond on `Department`; professors can belong to multiple departments and survive department closure).
+          * **Abstract Hierarchy (Partition):** *`Person`* (italics) with `- name : String` and *`+ getRole() : String`* (italics). `Professor` and `Student` inherit via `<|--` and implement `getRole()`.
+          * **Association Class:** `Student "5..*" -- "*" Course : enrolls in >` with dashed link to association class `Enrollment` (`- grade : double`, `- semester : String`). Note multiplicity placement: `5..*` is on the `Student` end (a course has at least 5 students), `*` is on the `Course` end (a student takes zero or more courses).
+          * **Navigability:** `Course "1" --> "1" Syllabus` (open arrowhead pointing to `Syllabus`). No `List<Student>`, `Syllabus`, or `Department` fields appear inside the UML class boxes.
+
+  - id: sec-complete-example-and-dynamic-views
+    title: "5. End-to-End Class Model, Object Diagrams & Sequence Diagrams"
+    blocks:
+      - id: th-complete-ecommerce-and-views
+        block_type: markdown
+        title: "Integrating Static & Dynamic Views (Pages 25–27)"
+        bookmarkable: true
+        content: |
+          ### 1. Complete Class Diagram Synthesis (E-Commerce Example)
+          The course concludes class diagrams with an end-to-end `Customer`–`Order` model that combines every core construct:
+          * **Bidirectional association:** `Customer "1" -- "0..*" Order` (a customer places 0 or more orders; each order belongs to 1 customer).
+          * **Unidirectional navigability:** `Order "1" --> "1..*" Payment` (an order knows its payment(s); payment does not navigate back) and `OrderDetail "0..*" --> "1" Item`.
+          * **Abstract class & generalization:** *`Payment`* (abstract, in italics, holding `amount`) generalized over `Credit` (`number`, `type`, `expDate`, `authorized()`), `Cash` (`cashTendered`), and `Check` (`name`, `bankID`, `authorized()`).
+          * **Aggregation with role name:** `Order "1" o-- "1..*" OrderDetail` with role `line item` on the `OrderDetail` end.
+
+          ### 2. Object Diagrams (*Diagrammes d'objets*)
+          An **object diagram** captures a concrete **runtime snapshot** of objects and links at a specific instant:
+          * Box header is **underlined** and formatted as `instanceName : ClassName` (e.g., `Joseph Osborne : Account`, `Ord-2005-10-31-JO-01 : Order`) or `: ClassName` for an **anonymous instance** (e.g., `:StockItem`).
+          * Attribute slots show **concrete values** (`quantity = 2`, `Author = Martin Fowler`, `ListPrice = $30.00`).
+          * Links between objects represent concrete instances of associations (so **no multiplicities** are written on object links). For example, two different `LineItem` instances belonging to two different customers (`Joseph Osborne` and `Francis Redfield`) can both link to the same shared `:StockItem` (*UML Distilled*).
+
+          ### 3. Sequence Diagrams (*Diagrammes de séquences*)
+          A **sequence diagram** models **dynamic behavior** over time (top-to-bottom):
+          * **Frame:** labeled `sd <interactionName>` (e.g., `sd submit_comments`).
+          * **Lifelines** (*lignes de vie*): vertical dashed lines descending from participating objects (e.g., `:window`, `«javascript» :Comments`, `«ajax» :Proxy`, `«servlet» :DWRServlet`).
+          * **Execution specification:** vertical rectangle (activation bar) showing when an object is actively executing.
+          * **Message arrow types:**
+            * **Synchronous message** (*message synchrone*): **solid line + filled arrowhead** (e.g., `validate()`) — sender blocks until reply.
+            * **Asynchronous message** (*message asynchrone*): **solid line + open arrowhead** (e.g., `«ajax»`) — sender continues immediately.
+            * **Return message** (*message de retour*): **dashed line + open arrowhead**.
+            * **Object creation** (`«create»`): dashed open arrow pointing directly to the newly created object's header box.
+            * **Destruction occurrence:** large **`X`** terminating a lifeline.
+          * **Additional annotations:** **gates** (entry/exit points on the frame border), **duration constraints** (e.g., `{10..200ms}`), and **interaction uses** (`ref Handle Errors` referencing another sequence diagram).
+
+      - id: diag-ecommerce-complete
+        block_type: kroki
+        diagram_type: plantuml
+        title: "Complete E-Commerce Class Diagram (Course Synthesis Example)"
+        caption: "Combines bidirectional association, unidirectional navigability, aggregation with role name, abstract class, and generalization into a single coherent domain model."
+        bookmarkable: true
+        source: |
+          @startuml
+          skinparam classAttributeIconSize 0
+          skinparam classBackgroundColor #f8fafc
+          skinparam classBorderColor #475569
+          skinparam arrowColor #334155
+
+          class Customer {
+            name
+            address
+          }
+
+          class Order {
+            date
+            status
+            calcTax()
+            calcTotal()
+            calcTotalWeight()
+          }
+
+          abstract class Payment {
+            amount
+          }
+
+          class Credit {
+            number
+            type
+            expDate
+            authorized()
+          }
+
+          class Cash {
+            cashTendered
+          }
+
+          class Check {
+            name
+            bankID
+            authorized()
+          }
+
+          class OrderDetail {
+            quantity
+            taxStatus
+            calcSubTotal()
+            calcWeight()
+          }
+
+          class Item {
+            shippingWeight
+            description
+            getPriceForQuantity()
+            getWeight()
+          }
+
+          Customer "1" -- "0..*" Order
+          Order "1" --> "1..*" Payment
+          Payment <|-- Credit
+          Payment <|-- Cash
+          Payment <|-- Check
+          Order "1" o-- "line item 1..*" OrderDetail
+          OrderDetail "0..*" --> "1" Item
+          @enduml
+
+      - id: ref-bidirectional-consistency
+        block_type: reflection_rubric
+        title: "Implementation Check: Reifying Associations & Preserving Bidirectional Integrity"
+        prompt: |
+          1. How do you translate the association class `Enseignement` (attached to `Professeur 1..* -- * Classe`) into regular classes and binary associations, and what happens to the multiplicities?
+          2. In a bidirectional `Personne 1 -- * Voiture` implementation, write out the exact fields on both classes and the exact steps required when `Ringo` sells his `BMW` to `Paul`. What bug occurs if you only update `BMW.propriétaire` and `Paul.voitures`?
+        self_check_criteria:
+          - "Placed multiplicity `1` on `Professeur` and `1` on `Classe`, while moving `*` and `1..*` onto the `Enseignement` ends (`Professeur 1 -- * Enseignement 1..* -- 1 Classe`)."
+          - "Declared a collection (`List<Voiture> voitures`) in `Personne` and a single reference (`Personne proprietaire`) in `Voiture`."
+          - "Listed all three atomic updates for the sale: add BMW to Paul's list, set BMW's owner to Paul, and remove BMW from Ringo's list."
+          - "Identified the dangling/inconsistent reference bug if Ringo's list still contains BMW while BMW points to Paul."
+        model_answer: |
+          1. **Reifying `Enseignement`:** Replace the association class with a standard class `Enseignement` linked via two binary associations:
+             * `Professeur "1" -- "*" Enseignement : Donne >`
+             * `Enseignement "1..*" -- "1" Classe : < Suit`
+             Each `Enseignement` instance references exactly `1` `Professeur` and `1` `Classe`, while the original multiplicities shift onto the `Enseignement` ends.
+          2. **Bidirectional `Personne`–`Voiture`:**
+             * `Personne` holds `- voitures : List<Voiture>` (because multiplicity is `*`).
+             * `Voiture` holds `- proprietaire : Personne` (because multiplicity is `1`).
+             * **Sale of BMW from Ringo to Paul (3 steps):** (1) `paul.voitures.add(bmw)`, (2) `bmw.proprietaire = paul`, (3) `ringo.voitures.remove(bmw)`.
+             * **Bug if step 3 is skipped:** Referential integrity breaks—`ringo.voitures` still contains `bmw` (a ghost reference), even though `bmw.proprietaire` is `paul`, violating the invariant $p \text{ owns } v \iff v.\text{proprietaire} == p$.
+
+  - id: sec-diagnostic-quiz
+    title: "6. Diagnostic Knowledge Check"
+    blocks:
+      - id: qz-uml-nature-and-diagrams
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Nature of UML & Static vs. Dynamic Diagrams"
+        difficulty: 2
+        related_block_id: th-modeling-fundamentals
+        bookmarkable: true
+        question: "Which statement accurately characterizes UML (*Unified Modeling Language*)?"
+        options:
+          - "UML is a standardized graphical modeling language with precise semantics, independent of any specific development methodology."
+          - "UML is a complete software development methodology that prescribes the exact order of phases from requirements to deployment."
+          - "UML class diagrams model the chronological exchange of messages between runtime objects."
+          - "UML was designed exclusively for Java and C++ and cannot model abstract problems independently of implementation."
+        correct_answer: "UML is a standardized graphical modeling language with precise semantics, independent of any specific development methodology."
+        explanation: |
+          UML (standardized by the OMG in 1997 from Booch, OMT, and Objectory) is a **modeling language** with precise semantics and graphical notation, **not a methodology**—it does not prescribe a software engineering process.
+          * Calling UML a "complete development methodology" is the most common conceptual confusion; processes belong to software engineering (*génie logiciel*), not UML.
+          * Chronological message exchanges are modeled by **sequence diagrams** (*diagrammes de séquences*), whereas **class diagrams** provide a static structural view.
+          * Modeling is specifically intended to abstract away implementation language constraints.
+        hints:
+          - "Recall the distinction the course draws between UML and *génie logiciel* (software engineering)."
+          - "Does UML tell you *in what order* to run sprints or phases, or *how to draw and formalize* models?"
+
+      - id: qz-visibility-static-abstract
+        block_type: quiz_question
+        question_type: multi_select
+        title: "UML Class Compartment Notation & Visibility"
+        difficulty: 3
+        related_block_id: th-class-anatomy-visibility
+        bookmarkable: true
+        question: "Which of the following statements about UML class notation are **correct**? (Select all that apply)"
+        options:
+          - "Underlined attributes or methods represent class-level (`static`) properties belonging to the class rather than to an instance."
+          - "The `#` symbol denotes protected (*protégée*) visibility, while `~` (or no symbol) denotes package (*paquetage*) visibility."
+          - "Abstract classes and abstract methods are written in italics (*en italique*)."
+          - "Every class box in a UML class diagram must list all of its attributes and methods; omitting compartments is a syntax error."
+        correct_answer:
+          - "Underlined attributes or methods represent class-level (`static`) properties belonging to the class rather than to an instance."
+          - "The `#` symbol denotes protected (*protégée*) visibility, while `~` (or no symbol) denotes package (*paquetage*) visibility."
+          - "Abstract classes and abstract methods are written in italics (*en italique*)."
+        explanation: |
+          In UML class diagrams:
+          * **Underlining** indicates class-level (`static`) attributes or operations.
+          * **Visibility symbols** are `+` (public), `-` (private), `#` (protected), and `~` or omitted (package).
+          * **Italics** denote abstract classes, abstract methods, and interfaces.
+          * Omitting the attribute and/or method compartments is **completely valid** when those details are not needed at the current level of abstraction.
+        hints:
+          - "Check the `Person` class slide: can a class be drawn with only its name box?"
+          - "Verify the two typographic conventions: underline = static, italics = abstract."
+
+      - id: qz-inheritance-populations-interface
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Inheritance Populations & Interface Realization"
+        difficulty: 3
+        related_block_id: th-inheritance-abstract-interfaces
+        bookmarkable: true
+        question: "Consider a superclass `A` with two subclasses `B` and `C` in standard object-oriented modeling. Which statement is **correct**?"
+        options:
+          - "If `A` is abstract, its runtime population forms a partition ($B \\cap C = \\emptyset$ and $B \\cup C = A$), whereas overlapping populations ($B \\cap C \\neq \\emptyset$) are not allowed in standard OO."
+          - "Overlapping populations ($B \\cap C \\neq \\emptyset$) are the default in OO whenever `A` is an interface implemented with a solid arrow."
+          - "A class declaring an abstract method can still be instantiated directly as long as its other methods are concrete."
+          - "An interface holds shared private instance attributes and is realized using a solid line with a hollow triangle."
+        correct_answer: "If `A` is abstract, its runtime population forms a partition ($B \\cap C = \\emptyset$ and $B \\cup C = A$), whereas overlapping populations ($B \\cap C \\neq \\emptyset$) are not allowed in standard OO."
+        explanation: |
+          In standard single-classification OO, an object cannot simultaneously be an instance of two sibling classes ($B \cap C = \emptyset$). When `A` is **abstract**, it has no direct instances, so every instance of `A` is either a `B` or a `C` ($B \cup C = A$), forming a **partition** (*partition*).
+          * Overlapping populations ($B \cap C \neq \emptyset$) are possible in databases (*BD*), not standard OO.
+          * Any class with even one abstract method is **necessarily abstract** and cannot be instantiated directly.
+          * Interfaces have **no state** (no instance attributes) and are realized with a **dashed** line + hollow triangle (`<|..`), not a solid line.
+        hints:
+          - "Can you execute `new Animal()` if `Animal` has an abstract method `son()`?"
+          - "Recall the three Venn diagrams from the *Héritage : populations* slide: Disjonction, Partition, and $B \\cap C \\neq \\emptyset$."
+
+      - id: qz-multiplicity-placement
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Multiplicity Placement on Binary Associations"
+        difficulty: 3
+        related_block_id: th-associations-roles-multiplicities
+        bookmarkable: true
+        question: "Translate this business rule into a UML binary association: *\"A person can own zero, one, or several cars, while every car has exactly one owner.\"* Where must the multiplicities be placed?"
+        options:
+          - "`Personne \"1\" -- \"*\" Voiture : Possède >`"
+          - "`Personne \"*\" -- \"1\" Voiture : Possède >`"
+          - "`Personne \"1\" -- \"1..*\" Voiture : Possède >`"
+          - "`Personne \"0..1\" -- \"*\" Voiture : Possède >`"
+        correct_answer: "`Personne \"1\" -- \"*\" Voiture : Possède >`"
+        explanation: |
+          Multiplicities are placed at the **target end** of the relationship:
+          * Starting from **1** `Personne`, it can own **`*`** (`0..*`) `Voiture`s $\Rightarrow$ put `*` next to `Voiture`.
+          * Starting from **1** `Voiture`, it has exactly **`1`** `Personne` owner $\Rightarrow$ put `1` next to `Personne`.
+          * Putting `*` on `Personne` and `1` on `Voiture` reverses the rule (saying one car has many owners and each person owns exactly one car!).
+          * `1..*` on `Voiture` would falsely require every person to own *at least one* car.
+          * `0..1` on `Personne` would falsely allow ownerless cars.
+        hints:
+          - "Cover one class with your hand and ask: 'For ONE instance of this class, how many instances of the OTHER class can it be linked to?'"
+          - "Place the answer to that question right next to the OTHER class."
+
+      - id: qz-aggregation-vs-composition
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Diagnosing Aggregation vs. Composition Errors"
+        difficulty: 4
+        related_block_id: th-aggregation-vs-composition
+        bookmarkable: true
+        question: "A student draws `Polygone \"*\" *-- \"3..*\" Point` (with a **filled black diamond** on `Polygone`) to model polygons sharing vertices. Why is this diagram **semantically invalid** in UML?"
+        options:
+          - "Composition (`*--`) enforces exclusive ownership and cascading destruction, so the composite-side multiplicity can be at most `1` (`1` or `0..1`), never `*`; shared vertices require aggregation (`o--`)."
+          - "The diamond must be placed on the `Point` side rather than the `Polygone` side."
+          - "Composition forbids a `3..*` multiplicity on the part side; parts must always have multiplicity `1`."
+          - "Aggregation and composition are purely cosmetic synonyms in UML and cannot carry multiplicities."
+        correct_answer: "Composition (`*--`) enforces exclusive ownership and cascading destruction, so the composite-side multiplicity can be at most `1` (`1` or `0..1`), never `*`; shared vertices require aggregation (`o--`)."
+        explanation: |
+          A **filled diamond (`*--`)** represents **composition** (*contenance structurelle*): a component part belongs to **at most one** composite (multiplicity `1` or `0..1` on the composite side) and is destroyed when its composite is destroyed. Putting `*` on the composite side contradicts exclusive ownership—if one `Polygone` were destroyed, it would have to destroy a `Point` still used by another `Polygone`!
+          * Shared parts must be modeled with **aggregation** (`Polygone "*" o-- "3..*" Point`, hollow diamond on the whole).
+          * The diamond always belongs on the **whole** (`Polygone`), never the part (`Point`).
+          * The part side of a composition can have any multiplicity (e.g., `1..*` in `Ordinateur "1" *-- "1..*" Pièce`).
+        hints:
+          - "What does the filled black diamond promise about the lifecycle of a `Point` when a `Polygone` is deleted?"
+          - "What is the maximum allowed multiplicity on the composite side of a composition?"
+
+      - id: qz-association-class-reification
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Reifying an Association Class into Binary Associations"
+        difficulty: 4
+        related_block_id: th-implementing-associations
+        bookmarkable: true
+        question: "You want to implement the UML association class `Enseignement` (attached to `Professeur \"1..*\" -- \"*\" Classe : Enseigne >`) as a regular class with two binary associations. Which multiplicities are **correct**?"
+        options:
+          - "`Professeur \"1\" -- \"*\" Enseignement` and `Enseignement \"1..*\" -- \"1\" Classe`"
+          - "`Professeur \"1..*\" -- \"1\" Enseignement` and `Enseignement \"1\" -- \"*\" Classe`"
+          - "`Professeur \"*\" -- \"1..*\" Enseignement` and `Enseignement \"*\" -- \"1..*\" Classe`"
+          - "`Professeur \"1\" -- \"1\" Enseignement` and `Enseignement \"1\" -- \"1\" Classe`"
+        correct_answer: "`Professeur \"1\" -- \"*\" Enseignement` and `Enseignement \"1..*\" -- \"1\" Classe`"
+        explanation: |
+          Every occurrence of `Enseigne`—represented by a single `Enseignement` object—links **exactly 1** `Professeur` and **exactly 1** `Classe`. Therefore, both outer ends (`Professeur` and `Classe`) get multiplicity **`1`**.
+          Meanwhile, the original multiplicities shift onto the `Enseignement` ends:
+          * A `Professeur` gives `*` `Enseignement`s (matching `Professeur` $\to$ `*` `Classe`).
+          * A `Classe` attends `1..*` `Enseignement`s (matching `Classe` $\to$ `1..*` `Professeur`).
+          * Leaving `1..*` on `Professeur` and `*` on `Classe` forgets to shift/invert the multiplicities—it would falsely say one `Enseignement` object has many professors and many classes!
+        hints:
+          - "For ONE specific `Enseignement` instance (e.g., POO taught by Prof. X to Class Y), how many `Professeur`s and how many `Classe`s does it reference?"
+          - "Now ask the reverse: how many `Enseignement` instances can one `Professeur` have, and how many must one `Classe` have?"
+
+      - id: qz-navigability-and-no-ref-attributes
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Unidirectional Navigability & UML Attribute Rules"
+        difficulty: 3
+        related_block_id: th-implementing-associations
+        bookmarkable: true
+        question: "Given the UML association `Personne \"1\" --> \"*\" Voiture : Possède >`, how should this appear in the **UML class diagram** versus in the **Java implementation**?"
+        options:
+          - "In the UML diagram, neither class lists reference attributes for the association; in Java, only `Personne` declares a collection of `Voiture` references while `Voiture` holds no reference to `Personne`."
+          - "In the UML diagram, `Personne` must explicitly list `- voitures : List<Voiture>` inside its attribute compartment; in Java, both classes hold references to each other."
+          - "In the UML diagram, the arrow indicates inheritance from `Personne` to `Voiture`; in Java, `Personne extends Voiture`."
+          - "In the UML diagram, neither class lists reference attributes; in Java, only `Voiture` declares `- proprietaire : Personne`."
+        correct_answer: "In the UML diagram, neither class lists reference attributes for the association; in Java, only `Personne` declares a collection of `Voiture` references while `Voiture` holds no reference to `Personne`."
+        explanation: |
+          Two core course rules apply simultaneously:
+          1. **Never duplicate associations as attributes** inside UML class boxes (*Ne jamais indiquer dans un diagramme de classes les références ou les collections de références utilisées pour implémenter les associations*).
+          2. **Unidirectional navigability (`Personne --> Voiture`)** means `Personne` can directly traverse to its `Voiture`s (so `Personne` stores a collection like `List<Voiture>`), while `Voiture` does **not** reference `Personne`—reducing coupling.
+          * Open arrowheads (`-->`) denote navigability, never inheritance (`<|--`).
+          * Storing `- proprietaire : Personne` only in `Voiture` would implement the **reverse** navigability (`Personne <-- Voiture`).
+        hints:
+          - "Which class is the *source* of the navigability arrow, and which is the *target*?"
+          - "Remember the course's explicit prohibition about listing reference fields inside UML class boxes."
+
+      - id: qz-bidirectional-update-and-diagrams
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Bidirectional Association Consistency on Ownership Transfer"
+        difficulty: 4
+        related_block_id: th-implementing-associations
+        bookmarkable: true
+        question: "In a **bidirectional** implementation of `Personne \"1\" -- \"*\" Voiture` (`Personne` has `List<Voiture> voitures`; `Voiture` has `Personne proprietaire`), `Ringo` sells his `BMW` to `Paul`. A developer executes `paul.voitures.add(bmw)` and `bmw.proprietaire = paul`, then stops. What is the consequence?"
+        options:
+          - "Referential integrity is broken: `ringo.voitures` still contains `bmw` even though `bmw.proprietaire` is `paul`."
+          - "No problem occurs because Java automatically removes `bmw` from `ringo.voitures` when `bmw.proprietaire` is reassigned."
+          - "A compilation error occurs because a `Voiture` cannot appear in two `List` objects."
+          - "`paul.voitures` will be overwritten with `null` because `bmw` was previously owned by `Ringo`."
+        correct_answer: "Referential integrity is broken: `ringo.voitures` still contains `bmw` even though `bmw.proprietaire` is `paul`."
+        explanation: |
+          In a bidirectional association, each link is stored as **two independent references** in memory. Java does **not** automatically synchronize inverse references!
+          Transferring `BMW` from `Ringo` to `Paul` requires **all 3 steps**:
+          1. `paul.voitures.add(bmw)`
+          2. `bmw.proprietaire = paul`
+          3. `ringo.voitures.remove(bmw)`
+          Skipping step 3 leaves `bmw` inside `ringo.voitures`, violating the invariant that `Ringo owns BMW` $\iff$ `BMW.proprietaire == Ringo`. Multiple lists can legally hold references to the same Java object at runtime, so the compiler will not catch this bug.
+        hints:
+          - "Does reassigning a field on `bmw` mutate `ringo.voitures` automatically in Java?"
+          - "Check all three objects involved in the sale: `paul`, `bmw`, and `ringo`."
+
+      - id: qz-object-and-sequence-diagrams
+        block_type: quiz_question
+        question_type: multi_select
+        title: "Object Diagrams vs. Sequence Diagrams"
+        difficulty: 3
+        related_block_id: th-complete-ecommerce-and-views
+        bookmarkable: true
+        question: "Which statements accurately describe UML **Object Diagrams** and **Sequence Diagrams**? (Select all that apply)"
+        options:
+          - "In an object diagram, instance headers are underlined (e.g., `Item01 : LineItem` or `:StockItem`) and display concrete attribute values."
+          - "In a sequence diagram, a solid arrow with a filled arrowhead represents a synchronous message, whereas a solid arrow with an open arrowhead represents an asynchronous message."
+          - "In a sequence diagram, an `X` at the bottom of a lifeline denotes the destruction of that object."
+          - "Object diagrams must always show multiplicities (`1`, `0..*`) on every link between concrete instances."
+        correct_answer:
+          - "In an object diagram, instance headers are underlined (e.g., `Item01 : LineItem` or `:StockItem`) and display concrete attribute values."
+          - "In a sequence diagram, a solid arrow with a filled arrowhead represents a synchronous message, whereas a solid arrow with an open arrowhead represents an asynchronous message."
+          - "In a sequence diagram, an `X` at the bottom of a lifeline denotes the destruction of that object."
+        explanation: |
+          * **Object diagrams** represent concrete runtime snapshots: headers are **underlined** (`instance : Class` or `:Class` for anonymous instances) and show concrete attribute values (e.g., `quantity = 2`). Because links connect specific concrete instances, **multiplicities are NOT written on object diagram links** (multiplicities belong to class diagrams).
+          * **Sequence diagrams** order interactions vertically in time: **solid + filled arrowhead** = synchronous call, **solid + open arrowhead** = asynchronous call, **dashed + open arrowhead** = return message, and **`X`** = object destruction.
+        hints:
+          - "Distinguish between a blueprint (class diagram with multiplicities) and a snapshot of actual objects in memory (object diagram)."
+          - "Recall the two arrowhead styles in the `sd submit_comments` sequence diagram: `validate()` vs. `«ajax»`."

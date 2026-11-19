@@ -1,0 +1,1167 @@
+id: poo-ch6-java-final-static-abstract-interfaces-enums
+title: "Chapter 6: final, static, Initialization Blocks, Abstract Classes, Interfaces & Enums"
+description: >-
+  Master Java's modifiers and abstraction mechanisms from HEIG-VD POO (slides 104–142):
+  the final keyword across all five contexts, static class members and method hiding vs.
+  dynamic dispatch, static and instance initialization blocks with exact JVM initialization
+  order, abstract classes, interfaces (constants, sealed hierarchies, default/static/private
+  methods, diamond conflict resolution), and type-safe enums with fields, constructors, and
+  constant-specific abstract methods.
+estimated_minutes: 65
+category: Object-Oriented Programming
+track: "POO - Programmation Orientée Objet (TE1)"
+track_order: 6
+difficulty_level: intermediate
+layout_mode: single-page
+tags:
+  - java
+  - poo
+  - final
+  - static
+  - initialization-order
+  - abstract-classes
+  - interfaces
+  - sealed-classes
+  - default-methods
+  - enums
+prerequisites:
+  - poo-ch5-java-polymorphism-collections-generics
+sources:
+  - title: "HEIG-VD POO — 3 Java 4"
+    url_or_path: "sources/POO_TE1/3 Java 4.pdf"
+    notes: "Slides 104–142: final keyword (variables, references, parameters, methods, classes), static keyword (attributes, methods, imports, hiding vs overriding), initialization blocks & exact initialization order, abstract classes, interfaces (default/static/private methods, multiple implementation, functional/marker), and enum types."
+
+sections:
+  - id: sec-final-keyword
+    title: "1. The final Keyword: Immutability, Late Initialization & Locking Inheritance"
+    description: "Understand what final locks (and what it does NOT lock) across primitives, references, arrays, parameters, methods, and classes."
+    blocks:
+      - id: th-final-overview
+        block_type: markdown
+        title: "final Across All Five Java Contexts"
+        content: |
+          In Java, the `final` keyword (*mot clef final*) carries one overarching meaning: **"cannot be modified"** (*ne peut être modifié*). However, *what* cannot be modified depends critically on where `final` appears.
+
+          ### 1. Primitive Variables & Attributes (*variables de type primitif constantes*)
+          Once assigned, a `final` primitive holds its value permanently (either a compile-time constant or assigned once at runtime):
+          * `final int a = 4;` followed by `a = 5;` triggers a **compile-time error**.
+
+          ### 2. Object References & Arrays (*références constantes*)
+          A `final` reference locks the **arrow** (which object it points to), **not** the internal state of the referenced object:
+          * `final Person p = new Person(...);`
+            * `p.name = "neo";` is **legal** (mutating the object's state).
+            * `p = anotherPerson;` is a **compile-time error** (reassigning the reference).
+          * **Arrays are objects** manipulated through references:
+            * `final int[] a = { 1, 2, 3, 4 };`
+            * `a[2] = 42;` is **legal**; `a = anotherArray;` is a **compile-time error**.
+
+          ### 3. Explicit vs. Late Initialization (*initialisation explicite ou tardive*)
+          A `final` variable or attribute does **not** have to be initialized on its declaration line, but **Java never assigns a default value** (*pas d'initialisation à une valeur par défaut*) to a `final` datum:
+          * **Explicit initialization (*initialisation explicite*):** `final int a = 4;`
+          * **Late / blank `final` initialization (*initialisation tardive*):** `final int a;`
+            * **Local variables:** must be definitely assigned somewhere in the enclosing block **before first use**.
+            * **Instance attributes (*attributs*):** must be initialized **in an instance block or in every constructor** (at the latest).
+            * **Static `final` attributes:** have no default value and no constructor, so they must be initialized **at declaration or in a `static { ... }` block**.
+
+          ### 4. Method Parameters (*paramètres*)
+          Declaring `void m(final Person p, final int i)` forbids reassigning `p` (`p = new Person()`) or modifying `i` (`++i`) inside `m`.
+          * **Exam nuance:** Its practical value is limited (*intérêt limité*) because it **does not prevent** mutating the object referenced by `p` (e.g., `p.name = "Trinity"` remains completely legal).
+
+          ### 5. Methods & Classes (*méthodes et classes*)
+          | Context | Effect | Key Subtlety / Exam Trap |
+          | :--- | :--- | :--- |
+          | **`final` method** | Forbids **overriding** (*redéfinition*) and dynamic dispatch (*liaison dynamique*) in subclasses. | **`private` methods are implicitly `final`** (no dynamic dispatch). A subclass *can* legally declare a method with the exact same signature as a superclass's `private` (or `private final`) method — there is **no link** between them because the superclass method is hidden (*masquée*) from the subclass! |
+          | **`final` class** | Forbids **specialization** / subclassing (`final class Leaf {}`). | All methods of a `final` class are effectively non-overridable. |
+
+          > [!WARNING]
+          > **Design Caution (Slide 106):** Marking classes or methods `final` without strong justification can be a **design mistake** (*erreur de conception*) because it prematurely limits class reusability and extensibility.
+
+      - id: code-final-contexts
+        block_type: code
+        title: "Annotated Walkthrough: Every final Context & the private Trap"
+        language: java
+        filename: "FinalDemo.java"
+        code: |
+          class Base {
+              final int id;
+              final int[] scores = { 10, 20, 30 };
+              Base(int id) {
+                  this.id = id;
+              }
+              private final void secret() {
+                  System.out.println("Base.secret");
+              }
+              final void locked(final int x, final int[] arr) {
+                  arr[0] = x;
+                  // x++;            // Compile error: final parameter
+                  // arr = new int[1]; // Compile error: final reference
+              }
+          }
+          class Sub extends Base {
+              Sub(int id) { super(id); }
+              void secret() {
+                  System.out.println("Sub.secret (NOT an override!)");
+              }
+              // void locked(int x, int[] arr) {} // Compile error: cannot override final
+          }
+          final class Leaf extends Sub {
+              Leaf(int id) { super(id); }
+          }
+        highlight_lines: [2, 5, 7, 11, 18, 23]
+        annotations:
+          - line: 2
+            note: "Late initialization (initialisation tardive): no default 0 is assigned; every constructor must initialize id."
+          - line: 5
+            note: "Legal: initializes the blank final attribute id inside the constructor."
+          - line: 7
+            note: "private methods are implicitly final (no dynamic dispatch). Adding final is redundant."
+          - line: 11
+            note: "Mutating elements of a final array parameter is legal; only reassigning arr or modifying x is forbidden."
+          - line: 18
+            note: "Compiles! Because Base.secret() is private, it is invisible to Sub — Sub.secret() is a brand-new unrelated method, not an override."
+          - line: 23
+            note: "A final class cannot be extended by any subclass."
+
+      - id: fc-final-five-contexts
+        block_type: flashcard
+        title: "The 5 Contexts of final in Java"
+        front: "Summarize what `final` prevents (and what it still allows) in all 5 Java contexts: (1) primitive, (2) reference/array, (3) parameter, (4) method, (5) class."
+        back: |
+          1. **Primitive (`final int a`):** Value cannot be reassigned after single initialization (no default value if late-initialized).
+          2. **Reference / Array (`final Person p`, `final int[] a`):** Reference cannot be rebound (`p = ...` forbidden), **but the target object/array elements CAN still be mutated** (`p.name = ...`, `a[0] = 42`).
+          3. **Parameter (`void m(final Person p)`):** Cannot reassign parameter inside the body; still allows mutating `p`'s fields.
+          4. **Method (`final void f()`):** Cannot be overridden in subclasses. (`private` methods are implicitly `final`, yet subclasses may declare an unrelated method with the same signature.)
+          5. **Class (`final class Leaf`):** Cannot be subclassed (no `extends Leaf`).
+        hint: "Distinguish carefully between locking a reference arrow vs. locking the object's state, and remember the private-method visibility rule."
+        tags: ["final", "immutability", "inheritance"]
+
+  - id: sec-static-members
+    title: "2. The static Keyword: Class Members, Hiding vs. Overriding & Static Imports"
+    description: "Distinguish class-level state and behavior from instance-level polymorphism, and avoid the static method hiding trap."
+    blocks:
+      - id: th-static-attributes-methods
+        block_type: markdown
+        title: "Class Members (Membres de classe) & Dynamic Dispatch Trade-offs"
+        content: |
+          Members marked `static` belong to the **class itself** (*propriétés de classe*), not to individual object instances.
+
+          ### 1. Static Attributes (*attributs statiques / de classe*)
+          * Exist in **exactly one copy** for the entire class, shared by all instances (analogous to scoped global variables).
+          * Classic pattern (Slide 109 `Cat` exercise): tracking total instances created, assigning unique IDs (`++count`), or maintaining a `static` collection of all living instances for class-wide operations (`Cat.info()`, `Cat.mreowAll()`).
+          * **Dot notation (*notation pointée*):**
+            * Preferred: `ClassName.staticAttr` / `ClassName.staticMethod(...)` (works with zero instances created).
+            * Legal but **discouraged** (*déconseillé*): `instanceRef.staticAttr` / `instanceRef.staticMethod(...)` — creates the dangerous illusion of instance-level polymorphism.
+
+          ### 2. Static Methods (*méthodes statiques / de classe*)
+          * Independent of any object instance (e.g., `public static void main(String[] args)`).
+          * **No implicit `this` parameter:** Its type signature is that of a plain function: $\text{Type}_1 \times \dots \times \text{Type}_n \to \text{TypeRésultat}$.
+          * **Rule:** A `static` method **cannot directly access non-static (instance) attributes or methods** of its class because no object (`this`) exists.
+          * **NO overriding & NO dynamic dispatch (*pas de redéfinition / liaison dynamique*):**
+            * If a subclass declares a `static` method with the same signature as a superclass `static` method, this is **method hiding** (*masquage*), **not** overriding.
+            * Which version executes is decided at **compile time** based purely on the **declared type** of the reference (or class name), never the runtime object type!
+
+          ### 3. Design Trade-off: `static` vs. Instance `compare` (Slide 110)
+          Suppose `class B extends A`, and we have:
+          ```java
+          A ref1 = new B(...);
+          A ref2 = new B(...);
+          ```
+          * **Option 1 (static):** `static boolean compare(A obj1, A obj2)` called via `A.compare(ref1, ref2)`.
+            * **No dynamic dispatch:** compares only the `A` slice of state, completely ignoring `B`'s extra fields.
+          * **Option 2 (instance):** `boolean compare(A obj)` called via `ref1.compare(ref2)`.
+            * **Dynamic dispatch works:** overriding `compare` in `B` lets `ref1.compare(ref2)` dispatch to `B::compare` and inspect `B`-level state too.
+
+          ### 4. Static Imports (*importation statique*, Slide 113)
+          Static imports allow using static fields/methods without prefixing the class name:
+          * Single member: `import static java.lang.Math.PI;` → `Math.cos(PI * 2.15)`
+          * Wildcard: `import static java.lang.Math.*;` → `cos(PI * 2.15)`
+          * **Best practice:** Use sparingly; overusing wildcard static imports obscures where symbols originate and harms maintainability.
+
+      - id: code-static-hiding-compare
+        block_type: code
+        title: "Static Method Hiding vs. Instance Overriding & Population Tracking"
+        language: java
+        filename: "StaticVsInstance.java"
+        code: |
+          import static java.lang.Math.PI;
+          class Animal {
+              static int population = 0;
+              final int id;
+              Animal() { this.id = ++population; }
+              static String kind() { return "Animal (static)"; }
+              String speak() { return "Generic sound"; }
+          }
+          class Cat extends Animal {
+              static String kind() { return "Cat (static)"; }
+              @Override
+              String speak() { return "Cat #" + id + " meows!"; }
+          }
+          public class StaticVsInstance {
+              public static void main(String[] args) {
+                  Animal a = new Cat();
+                  System.out.println(a.kind());
+                  System.out.println(a.speak());
+                  System.out.println("Pop: " + Animal.population + ", PI=" + PI);
+              }
+          }
+        highlight_lines: [1, 3, 6, 10, 17, 18]
+        annotations:
+          - line: 1
+            note: "Static import allows referencing PI directly without the Math. prefix."
+          - line: 3
+            note: "Single shared class attribute (attribut de classe) across all Animal and Cat instances."
+          - line: 6
+            note: "Static method: bound at compile time, no implicit this, cannot be overridden."
+          - line: 10
+            note: "Method HIDING (masquage), NOT overriding — adding @Override here would be a compile error!"
+          - line: 17
+            note: "Prints 'Animal (static)'! Resolved by declared type Animal, NOT runtime type Cat (and calling static via instance ref is discouraged)."
+          - line: 18
+            note: "Prints 'Cat #1 meows!' via dynamic dispatch (liaison dynamique) on runtime type Cat."
+
+  - id: sec-initialization-blocks-order
+    title: "3. Initialization Blocks, Local Variables & Exact JVM Initialization Order"
+    description: "Trace static blocks, instance blocks, constructors, and the strict rules separating attributes from local variables."
+    blocks:
+      - id: th-init-blocks-and-locals
+        block_type: markdown
+        title: "Static Blocks, Instance Blocks, Attribute Matrix & Local Variable Rules"
+        content: |
+          Java lets you place executable **initialization blocks** (*blocs d'initialisation*) directly inside a class body. Multiple blocks of the same kind execute in **textual declaration order**.
+
+          ### 1. The Two Kinds of Initialization Blocks (Slides 114–115)
+          * **Instance / dynamic block (*bloc dynamique / d'instance*) `{ ... }`:**
+            * Runs **every time an object is instantiated (`new`)**, **immediately before the constructor body**.
+            * Acts like an anonymous default constructor shared by all constructors. Generally **avoided** (*en général, à éviter*) in favor of explicit constructors.
+          * **Static block (*bloc statique*) `static { ... }`:**
+            * Runs **once only**, the first time the class is loaded/referenced by the JVM (e.g., accessing a static field, calling a static method, or creating the first instance).
+            * Cannot access non-static members of the class.
+
+          **Slide 115 Mental Trace:**
+          Given `class A { int x; static int y = 1, z, w; { x = 2; ++y; } static { ++z; } static void f() {} }`:
+          1. Calling `A.f();` triggers class loading (no object created!): `y = 1`, `z` starts at `0` then `static { ++z; }` sets `z = 1`, `w = 0`.
+          2. Executing `A.w = 2;` updates `A.w` to `2`.
+          3. Executing `A a = new A();` skips the already-run `static` block, runs `{ x = 2; ++y; }`, leaving `a.x = 2`, `A.y = 2`, `A.z = 1`, `A.w = 2`.
+
+          ### 2. Complete Attribute Initialization Matrix (Slides 111–112, 116–117)
+          | Attribute Category | Default Value (`0`/`false`/`null`)? | Explicit at Declaration? | In `{ ... }` Instance Block? | In Constructor? | In `static { ... }` Block? |
+          | :--- | :---: | :---: | :---: | :---: | :---: |
+          | **Instance attribute** (`int x`) | Yes | Yes | Yes | Yes | No |
+          | **`final` instance attribute** (`final int x`) | **No** | Yes | Yes | Yes (at latest) | No |
+          | **`static` attribute** (`static int x`) | Yes | Yes | *(Can mutate, not init)* | *(Can mutate)* | Yes |
+          | **`static final` attribute** (`static final int x`) | **No** | Yes | **No** | **No** | Yes |
+
+          ### 3. Local Variables (*variables locales*) vs. `NullPointerException` (Slide 118)
+          * **Local variables** (both primitives AND object references) are **NEVER default-initialized**. Reading an unassigned local variable is a **compile-time error** (*erreur à la compilation*):
+            ```java
+            Person p;
+            p.print(); // Compile-time error: variable p might not have been initialized
+            ```
+          * Explicitly assigning `null` satisfies the compiler, shifting the bug to **runtime** (*erreur à l'exécution*):
+            ```java
+            Person p = null;
+            p.print(); // Compiles, then throws NullPointerException at runtime!
+            ```
+
+      - id: diag-java-init-order
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Exact Java Class & Instance Initialization Order (With Inheritance)"
+        caption: "Static initialization runs top-down once per class load; instance initialization runs top-down on every new Child() call, with each class's instance fields & blocks executing right before its own constructor body."
+        source: |
+          flowchart TD
+            subgraph Load ["Phase 1: Class Loading (Runs ONCE on first reference)"]
+              S1["1. Superclass static fields & static { } blocks\n(in textual declaration order)"]
+              S2["2. Subclass static fields & static { } blocks\n(in textual declaration order)"]
+              S1 --> S2
+            end
+
+            subgraph Inst ["Phase 2: Object Instantiation (Runs on EVERY new Child())"]
+              I1["3. Superclass instance fields & { } blocks\n(in textual declaration order)"]
+              I2["4. Superclass constructor body"]
+              I3["5. Subclass instance fields & { } blocks\n(in textual declaration order)"]
+              I4["6. Subclass constructor body"]
+              I1 --> I2 --> I3 --> I4
+            end
+
+            S2 --> I1
+
+            classDef stat fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px;
+            classDef superInst fill:#f0f9ff,stroke:#0284c7,stroke-width:2px;
+            classDef subInst fill:#ecfdf5,stroke:#059669,stroke-width:2px;
+
+            class S1,S2 stat;
+            class I1,I2 superInst;
+            class I3,I4 subInst;
+
+      - id: code-init-order-trace
+        block_type: code
+        title: "Annotated Trace: Inheritance Initialization Sequence"
+        language: java
+        filename: "InitOrder.java"
+        code: |
+          class Parent {
+              static final int P_CONST;
+              static { P_CONST = 10; System.out.print("1 "); }
+              { System.out.print("3 "); }
+              Parent() { System.out.print("4 "); }
+          }
+          class Child extends Parent {
+              static { System.out.print("2 "); }
+              { System.out.print("5 "); }
+              Child() { System.out.print("6 "); }
+          }
+          public class InitOrder {
+              public static void main(String[] args) {
+                  new Child();
+                  System.out.print("| ");
+                  new Child();
+              }
+          }
+        highlight_lines: [2, 3, 4, 5, 8, 9, 10, 14, 16]
+        annotations:
+          - line: 2
+            note: "Blank static final attribute: must be assigned in a static block since there is no constructor for static members."
+          - line: 3
+            note: "Step 1 (once): Superclass static block runs first when Child is loaded."
+          - line: 4
+            note: "Step 3 (every new): Superclass instance block runs right before Parent()."
+          - line: 5
+            note: "Step 4 (every new): Superclass constructor body runs before Child's instance blocks."
+          - line: 8
+            note: "Step 2 (once): Subclass static block runs immediately after Parent's static block."
+          - line: 9
+            note: "Step 5 (every new): Subclass instance block runs after Parent() finishes."
+          - line: 10
+            note: "Step 6 (every new): Subclass constructor body runs last."
+          - line: 14
+            note: "First instantiation prints: 1 2 3 4 5 6"
+          - line: 16
+            note: "Second instantiation skips static blocks and prints: 3 4 5 6 (full output: 1 2 3 4 5 6 | 3 4 5 6)."
+
+      - id: fc-init-order
+        block_type: flashcard
+        title: "Exact 6-Step Java Initialization Order"
+        front: "When `new Child()` is called for the first time (where `class Child extends Parent`), what is the exact 6-step execution order of static blocks, instance blocks, and constructors — and what changes on the second `new Child()`?"
+        back: |
+          **First `new Child()`:**
+          1. `Parent` `static` fields & `static {}` blocks (declaration order)
+          2. `Child` `static` fields & `static {}` blocks (declaration order)
+          3. `Parent` instance fields & `{}` blocks (declaration order)
+          4. `Parent` constructor body
+          5. `Child` instance fields & `{}` blocks (declaration order)
+          6. `Child` constructor body
+
+          **Second `new Child()`:** Steps 1–2 are **skipped** (class already loaded); only Steps 3 → 4 → 5 → 6 execute!
+        hint: "Static runs top-down once; then instance+constructor runs Parent-first, then Child."
+        tags: ["initialization-order", "static-block", "inheritance"]
+
+  - id: sec-abstract-classes
+    title: "4. Abstract Classes: Factoring State & Enforcing Polymorphic Contracts"
+    description: "Learn every rule governing abstract methods and abstract classes, and how they power dynamic dispatch via template methods."
+    blocks:
+      - id: th-abstract-classes
+        block_type: markdown
+        title: "Rules of Abstract Methods & Abstract Classes (Slides 119–122)"
+        content: |
+          ### 1. Abstract Methods (*méthodes abstraites*)
+          An abstract method supplies **only its signature** (no `{ ... }` body); concrete subclasses must provide the implementation.
+          * **Cannot be `private`:** It must be visible to subclasses so they can override it.
+          * **Cannot be `static`:** Static methods belong to a class and cannot be overridden via dynamic dispatch.
+          * **Formal parameter names are mandatory:** Even though there is no body, you must write parameter names (e.g., `abstract void draw(int width);`, not `abstract void draw(int);`).
+
+          ### 2. Abstract Classes (*classes abstraites*)
+          * **Cannot be instantiated directly:** `new A()` is a compile-time error.
+          * **Mandatory `abstract` modifier:** Any class containing at least one abstract method **must** be declared `abstract`.
+          * **Zero abstract methods allowed:** A class *can* be declared `abstract` even with **no abstract methods** — a clean idiom to forbid direct instantiation while still acting as a base class.
+          * **Rich members allowed:** An abstract class can declare instance/static attributes, concrete methods, **and constructors** (invoked via `super(...)` from subclass constructors).
+          * **Partial implementation rule:** A subclass of an abstract class that does not implement **all** inherited abstract methods must itself be declared `abstract`.
+          * **Extending concrete classes:** An abstract class *can* inherit from a concrete class (in fact, every abstract class implicitly extends the concrete class `java.lang.Object`).
+
+          ### 3. Why Abstract Classes Matter: Dynamic Dispatch & Factorization
+          * **Polymorphic references:** Even though `new Displayable()` is illegal, `Displayable d = new Box();` is completely valid.
+          * **Template-method pattern (Slide 121):** A concrete method inside an abstract class (e.g., `refresh()`) can safely call an `abstract` method (`display()`). At runtime, **dynamic dispatch** (*liaison dynamique*) automatically invokes the concrete subclass's `Box::display()`.
+          * **State & behavior factorization (Slide 122):** In the `Animal` / `Dog` / `Cat` hierarchy, `Animal` factors out common attributes (`name`, `sound`) and concrete `speak()`, while subclasses supply specialized constructors or behavior.
+
+      - id: code-abstract-template
+        block_type: code
+        title: "Abstract Class with Constructor, Template Method & Polymorphic Array"
+        language: java
+        filename: "AbstractDemo.java"
+        code: |
+          abstract class Animal {
+              private final String name;
+              protected Animal(String name) {
+                  this.name = name;
+              }
+              abstract String sound();
+              public void speak() {
+                  System.out.println(getClass().getSimpleName() + " " + name + " says '" + sound() + "'");
+              }
+          }
+          class Dog extends Animal {
+              private final String bark;
+              Dog(String name, String bark) { super(name); this.bark = bark; }
+              @Override
+              String sound() { return bark; }
+          }
+          class Cat extends Animal {
+              Cat(String name) { super(name); }
+              @Override
+              String sound() { return "Mreow!"; }
+          }
+        highlight_lines: [1, 3, 6, 8, 13]
+        annotations:
+          - line: 1
+            note: "Must be declared abstract because it contains the abstract method sound()."
+          - line: 3
+            note: "Abstract classes CAN have constructors to initialize factored state via super(...)."
+          - line: 6
+            note: "Abstract method: no body, cannot be private or static."
+          - line: 8
+            note: "Concrete method invoking abstract sound() — dynamic dispatch calls Dog::sound or Cat::sound at runtime."
+          - line: 13
+            note: "Subclass constructor delegates shared field initialization to Animal(String)."
+
+  - id: sec-interfaces-sealed-default
+    title: "5. Interfaces, Sealed Types & Default Methods"
+    description: "Master Java interfaces, implicit modifiers, marker interfaces, runtime-evaluated constants, Java 17 sealed hierarchies, and Java 8+ default method conflict resolution."
+    blocks:
+      - id: th-interfaces-sealed-defaults
+        block_type: markdown
+        title: "Interfaces, Sealed Hierarchies & Default Method Rules (Slides 123–136)"
+        content: |
+          ### 1. Core Interface Semantics & Implicit Modifiers (Slides 123–125)
+          An `interface` defines a **behavioral contract** (*contrat à respecter*) independent of the class inheritance tree:
+          * A class can `extends` only **one** superclass, but can `implements` **multiple** interfaces (`class C implements I, J`).
+          * An interface can `extends` **multiple** parent interfaces (`interface I extends I1, I2`).
+          * **Implicit modifiers (always enforced by the compiler):**
+            * Every abstract method in an interface is implicitly **`public abstract`**. Any implementing class must therefore declare the overridden method **`public`** (failing to write `public` reduces visibility to package-private and fails to compile!).
+            * Every field in an interface is implicitly **`public static final`** (a constant).
+          * **Zero ambiguity for abstract methods:** If both `I` and `J` declare `void m()`, `class C implements I, J` provides one `public void m()` satisfying both contracts.
+          * **Inherited satisfaction (Slide 132):** If `class B extends A implements I`, and `A` already defines `public void f()`, then `B` inherits `A`'s implementation and only needs to implement the remaining methods of `I`.
+
+          ### 2. Interface-Typed References, `instanceof` & Marker Interfaces (Slides 127–129)
+          * You cannot instantiate an interface (`new I()` is illegal), but you can declare variables and arrays of interface type (`Displayable[] arr = { new Int(1), new Cat("Tom") };`, `Collection c = new LinkedList();`, `Iterator i = c.iterator();`).
+          * **Type-checking rule:** `Object o = new A(); I i = o;` is a **compile-time error** because `Object` does not implement `I` (an explicit cast `(I) o` is needed).
+          * **Marker interfaces (*interfaces de marquage*):** Empty interfaces like `interface Cloneable {}` carry metadata tested at runtime with `if (this instanceof Cloneable)`.
+          * **Functional interfaces (*interfaces fonctionnelles*):** Interfaces with exactly one abstract method (SAM), eligible as targets for lambda expressions.
+
+          ### 3. Interface Constants & Non-Constant Initializers (Slides 130–131)
+          * Interface constants are accessible unqualified inside implementing classes, or via `I.MAX` / `A.MAX` outside.
+          * **Subtle trap (Slide 131):** Even though interface fields are `public static final`, they can be initialized with **non-constant runtime expressions**:
+            ```java
+            interface I {
+                Random r = new java.util.Random();
+                int i = r.nextInt(10); // Evaluated once when I is loaded by the JVM!
+            }
+            ```
+            Each run of the program can therefore print a different `I.i` value.
+
+          ### 4. Sealed Classes & Interfaces (Java 17, Slide 126)
+          A `sealed` class or interface (*classe/interface scellée*) restricts which types may extend or implement it via `permits`:
+          ```java
+          abstract sealed class Shape permits Square, Circle { }
+          final class Square extends Shape { }
+          ```
+          Every permitted direct subtype **must** choose exactly one of three modifiers:
+          * `final` — cannot be extended further (**classes only**, not interfaces),
+          * `sealed` — continues restricting further subtypes with its own `permits`,
+          * `non-sealed` — reopens the branch for arbitrary extension.
+
+          ### 5. Default, Static & Private Methods in Interfaces (Java 8+, Slides 134–136)
+          * **`default` methods (*méthodes par défaut*):** Provide a concrete body inside an interface (e.g., `default void action() { System.out.println("Action: " + actionNoise()); }`). An implementing class or sub-interface can:
+            1. Inherit the default implementation unchanged,
+            2. Override it with a custom implementation, or
+            3. Redeclare it as `abstract` (forcing concrete subclasses to implement it).
+          * **Conflict Resolution Rules (Diamond Problem):**
+            1. **Class always wins over interface (Slide 135):** In `class B extends A implements I` where `A` has concrete `public void m()` and `I` has `default void m()`, **`A::m` is chosen automatically**.
+            2. **More specific sub-interface wins:** If `J extends I` and both define `default void m()`, `J::m` wins.
+            3. **Unrelated default conflict (Slide 136):** In `class A implements I, J` where both `I` and `J` define `default void m()`, the compiler reports an **ambiguity error** until `A` overrides `m()`. Inside `A.m()`, you can explicitly delegate to one parent default using **`I.super.m();`**.
+          * **`static` methods in interfaces:** Invoked via `InterfaceName.method()`, never inherited by implementing classes.
+          * **`private` methods in interfaces (Java 9+):** Helper methods sharing code between `default` or `static` methods inside the interface without exposing them publicly.
+
+          ### 6. Abstract Class vs. Interface Quick Comparison
+          | Dimension | Abstract Class (`abstract class`) | Interface (`interface`) |
+          | :--- | :--- | :--- |
+          | **Inheritance** | Single inheritance (`extends` 1 class) | Multiple implementation (`implements` N interfaces); interface `extends` N interfaces |
+          | **State (Fields)** | Instance & static fields (any visibility, mutable or `final`) | Only `public static final` constants |
+          | **Constructors** | Yes (called via `super(...)`) | **No** |
+          | **Methods** | Concrete, `abstract`, `static`, `final`, any visibility | Implicitly `public abstract`, plus `default`, `static`, and `private` helpers |
+          | **Design Role** | *"Is-a"* hierarchy sharing common state & base implementation | *"Can-do"* behavioral capability / contract across unrelated classes |
+
+      - id: diag-abstract-vs-interface-uml
+        block_type: kroki
+        diagram_type: plantuml
+        title: "UML Hierarchy: Abstract Class, Sealed Subtypes & Multiple Interfaces"
+        caption: "A class inherits state from at most one abstract/concrete superclass while implementing multiple behavioral interfaces."
+        source: |
+          @startuml
+          skinparam classAttributeIconSize 0
+          skinparam classBackgroundColor #f8fafc
+          skinparam classBorderColor #475569
+
+          interface Displayable {
+            + {abstract} display(): void
+          }
+
+          interface Actionable {
+            + {abstract} actionNoise(): String
+            + default action(): void
+          }
+
+          abstract class "Vehicle <<sealed>>" as Vehicle {
+            - final brand: String
+            # Vehicle(brand: String)
+            + getBrand(): String
+            + {abstract} maxSpeed(): int
+          }
+
+          class "Car <<final>>" as Car {
+            + maxSpeed(): int
+            + display(): void
+            + actionNoise(): String
+          }
+
+          class "Bicycle <<non-sealed>>" as Bicycle {
+            + maxSpeed(): int
+            + display(): void
+          }
+
+          Vehicle <|-- Car : permits
+          Vehicle <|-- Bicycle : permits
+          Displayable <|.. Car
+          Actionable <|.. Car
+          Displayable <|.. Bicycle
+          @enduml
+
+      - id: diag-default-method-resolution
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Java Default Method Conflict Resolution Algorithm"
+        caption: "How the Java compiler resolves a method m() when a class inherits from both a superclass and one or more interfaces with default methods."
+        source: |
+          flowchart TD
+            Start["Class C inherits m() from superclass / interfaces"] --> Q1{"Does a superclass\ndefine concrete m()?"}
+            Q1 -->|Yes| WinClass["Rule 1: Superclass method WINS\n(Class beats Interface)"]
+            Q1 -->|No| Q2{"Do multiple interfaces\nprovide default m()?"}
+            Q2 -->|No - single default| WinSingle["Inherit the single default m()"]
+            Q2 -->|Yes| Q3{"Is one interface a\nsub-interface of the other?"}
+            Q3 -->|Yes| WinSub["Rule 2: More specific\nsub-interface default WINS"]
+            Q3 -->|No - sibling conflict| Err["Rule 3: COMPILE ERROR\nC must override public void m()\nOptionally call I.super.m()"]
+
+            classDef decision fill:#f0f9ff,stroke:#0284c7,stroke-width:2px;
+            classDef success fill:#ecfdf5,stroke:#059669,stroke-width:2px;
+            classDef error fill:#ffe4e6,stroke:#e11d48,stroke-width:2px;
+
+            class Q1,Q2,Q3 decision;
+            class WinClass,WinSingle,WinSub success;
+            class Err error;
+
+      - id: fc-abstract-vs-interface
+        block_type: flashcard
+        title: "Abstract Class vs. Interface: Key Rules"
+        front: "Compare `abstract class` and `interface` in Java on: (1) fields, (2) constructors, (3) multiple inheritance, (4) implicit method modifiers, and (5) `default` conflict precedence."
+        back: |
+          1. **Fields:** Abstract classes can have any instance/static fields; interfaces can only have `public static final` constants.
+          2. **Constructors:** Abstract classes **can** have constructors; interfaces **cannot**.
+          3. **Multiple inheritance:** A class `extends` 1 class, `implements` many interfaces; an interface `extends` many interfaces.
+          4. **Implicit modifiers:** Interface methods without `default`/`static`/`private` are implicitly `public abstract`; abstract class methods default to package-private and concrete unless marked `abstract`.
+          5. **Conflict precedence:** A superclass's concrete method **always beats** an interface's `default` method; conflicting sibling defaults require an explicit override (optionally using `I.super.m()`).
+        hint: "Think state + single hierarchy vs. stateless contract + multiple capabilities."
+        tags: ["abstract-class", "interface", "default-methods"]
+
+      - id: exp-sandbox-abstract-interface
+        block_type: sandbox
+        runtime: java
+        title: "Practice: Abstract Class + Conflicting Interface Default Methods"
+        instructions: |
+          Complete `Main.java` so that:
+          1. `interface Greeter` has `default String tag() { return "GREET"; }`.
+          2. `interface Logger` has `default String tag() { return "LOG"; }`.
+          3. `abstract class Device` stores a `private final String name`, has a constructor `Device(String name)`, a getter `getName()`, and an `abstract String action();`.
+          4. `class SmartBell extends Device implements Greeter, Logger`:
+             * Resolves the `tag()` default-method conflict by returning `Greeter.super.tag() + "+" + Logger.super.tag()`.
+             * Implements `action()` to return `"Ring!"`.
+          5. `Main.main` prints `bell.getName() + " [" + bell.tag() + "]: " + bell.action()`.
+        starter_code: |
+          interface Greeter {
+              default String tag() { return "GREET"; }
+          }
+
+          interface Logger {
+              default String tag() { return "LOG"; }
+          }
+
+          abstract class Device {
+              private final String name;
+              protected Device(String name) {
+                  this.name = name;
+              }
+              public String getName() { return name; }
+              // TODO: declare abstract String action();
+          }
+
+          class SmartBell extends Device implements Greeter, Logger {
+              SmartBell(String name) {
+                  super(name);
+              }
+              // TODO: resolve the conflicting default method tag() using Greeter.super.tag() and Logger.super.tag()
+              // TODO: implement action() returning "Ring!"
+          }
+
+          public class Main {
+              public static void main(String[] args) {
+                  SmartBell bell = new SmartBell("Doorbell");
+                  // TODO: print bell.getName() + " [" + bell.tag() + "]: " + bell.action()
+              }
+          }
+        expected_output: "Doorbell [GREET+LOG]: Ring!"
+        solution: |
+          interface Greeter {
+              default String tag() { return "GREET"; }
+          }
+
+          interface Logger {
+              default String tag() { return "LOG"; }
+          }
+
+          abstract class Device {
+              private final String name;
+              protected Device(String name) {
+                  this.name = name;
+              }
+              public String getName() { return name; }
+              abstract String action();
+          }
+
+          class SmartBell extends Device implements Greeter, Logger {
+              SmartBell(String name) {
+                  super(name);
+              }
+              @Override
+              public String tag() {
+                  return Greeter.super.tag() + "+" + Logger.super.tag();
+              }
+              @Override
+              String action() {
+                  return "Ring!";
+              }
+          }
+
+          public class Main {
+              public static void main(String[] args) {
+                  SmartBell bell = new SmartBell("Doorbell");
+                  System.out.println(bell.getName() + " [" + bell.tag() + "]: " + bell.action());
+              }
+          }
+        hints:
+          - "Interface methods are implicitly public, so your overriding `tag()` method in `SmartBell` MUST be declared `public String tag()`."
+          - "To invoke a specific parent interface's default implementation, use the syntax `InterfaceName.super.methodName()` (i.e., `Greeter.super.tag()` and `Logger.super.tag()`)."
+          - "Remember to add `abstract String action();` to `Device` and override it in `SmartBell`."
+
+      - id: ref-abstract-vs-interface-rubric
+        block_type: reflection_rubric
+        title: "Architecture Decision: Abstract Class vs. Interface vs. Sealed Class"
+        prompt: |
+          You are designing a graphics engine where `Circle`, `Rectangle`, and `TextLabel` must all be `Drawable`, while `Circle` and `Rectangle` (and ONLY those two shapes) share `x`, `y` coordinates and a `color` field. Which Java constructs (`abstract class`, `interface`, `sealed`) would you assign to `Drawable` and `Shape`, and why?
+        self_check_criteria:
+          - "Chose an `interface` for `Drawable` because unrelated types (`TextLabel` and geometric shapes) share only a behavioral contract, not shared state."
+          - "Chose an `abstract sealed class Shape permits Circle, Rectangle` to factor out shared instance fields (`x`, `y`, `color`) and constructor initialization while restricting the closed set of subtypes."
+          - "Noted that each permitted subclass (`Circle`, `Rectangle`) must explicitly be declared `final`, `sealed`, or `non-sealed`."
+          - "Explained that an interface cannot hold mutable instance state (`x`, `y`, `color`) or constructors."
+        model_answer: |
+          Make `Drawable` an **interface** (`interface Drawable { void draw(); }`) because `TextLabel` and geometric shapes do not need to share a common superclass or state — they only share a *"can-be-drawn"* contract. Make `Shape` an **`abstract sealed class Shape implements Drawable permits Circle, Rectangle`** because `Circle` and `Rectangle` share mutable instance state (`x`, `y`, `color`) and constructor logic, cannot be meaningfully instantiated as a generic `Shape`, and form a closed domain of exactly two permitted subtypes (each declared `final`, `sealed`, or `non-sealed`).
+
+  - id: sec-enums
+    title: "6. Type-Safe Enumerations (enum): Internals, Rich Behavior & Constant-Specific Bodies"
+    description: "Discover how Java compiles enums into Enum subclasses, and how to equip enums with fields, constructors, EnumSet ranges, and per-constant abstract methods."
+    blocks:
+      - id: th-enums-deep-dive
+        block_type: markdown
+        title: "Type-Safe Enums Under the Hood (Slides 137–142)"
+        content: |
+          ### 1. Why Java `enum` Replaced Integer Constants (Slide 137)
+          Before Java 5, developers used `static final int` constants (unsafe — any `int` could be passed) or manually coded the Typesafe Enum pattern (a class with a `private` constructor and `public static final` singleton instances).
+          * Java 5 introduced `enum Season { Spring, Summer, Autumn, Winter }`.
+          * Enum constants are **singleton objects**, so they can be compared safely with `==` (`if (season == Season.Spring)`) as well as `.equals()`.
+          * Enums work directly in **`switch`** statements using unqualified constant names (`case Summer:`).
+
+          ### 2. What the Compiler Actually Generates (`javap -private Season`, Slide 138)
+          ```java
+          final class Season extends java.lang.Enum<Season> {
+              public static final Season Spring, Summer, Autumn, Winter;
+              private static final Season[] $VALUES;
+              public static final Season[] values();      // returns a defensive COPY of $VALUES!
+              public static Season valueOf(String name);  // lookup by exact name (throws IllegalArgumentException if invalid)
+              private Season(String name, int ordinal);   // always private!
+              static { /* initializes Spring..Winter and $VALUES */ }
+          }
+          ```
+          **Key methods inherited from `java.lang.Enum`:**
+          | Method | `final`? | Behavior |
+          | :--- | :---: | :--- |
+          | `public final String name()` | **Yes** | Returns the exact constant identifier (e.g., `"Spring"`). Cannot be overridden. |
+          | `public final int ordinal()` | **Yes** | Returns the 0-based declaration index (`0`, `1`, `2`, `3`). Cannot be overridden. |
+          | `public final boolean equals(Object o)` | **Yes** | Reference identity comparison (`this == o`). |
+          | `public final int compareTo(E o)` | **Yes** | Compares by `ordinal()` order (enums are implicitly `Comparable` and `Serializable`). |
+          | `public String toString()` | **No!** | Defaults to `name()`, **can be overridden** for custom formatting! |
+
+          ### 3. Rich Enums: Fields, Constructors, Methods & `EnumSet` (Slides 139–140)
+          Because an `enum` is a full-fledged class:
+          * It can define **attributes**, **constructors** (implicitly `private` — declaring `public` or `protected` is a compile error!), concrete methods (e.g., `next()` via `values()[(ordinal() + 1) % array.length]`), and `implements` interfaces.
+          * It **cannot `extends` another class** because it already implicitly extends `java.lang.Enum`.
+          * **`EnumSet.range(Day.mon, Day.fri)`** (in `java.util.EnumSet`) iterates efficiently over an inclusive range of enum constants.
+
+          ### 4. Constant-Specific Abstract Methods (Slide 141)
+          An `enum` can declare an `abstract` method and provide a **distinct implementation inside each constant**:
+          ```java
+          enum Operation {
+              plus  { int eval(int x, int y) { return x + y; } },
+              minus { int eval(int x, int y) { return x - y; } };
+              abstract int eval(int x, int y);
+          }
+          ```
+          * **Under the hood:** Each enum constant (`plus`, `minus`) is the unique instance of an **anonymous subclass** (*sous-classe anonyme*) of `Operation` that implements `eval(int, int)`. (Consequently, the compiled `Operation` class is `abstract` rather than `final`.)
+
+      - id: code-enum-rich-operation
+        block_type: code
+        title: "Rich Enum with Constructor, Overridden toString() & Constant-Specific Method"
+        language: java
+        filename: "EnumShowcase.java"
+        code: |
+          import java.util.EnumSet;
+          enum Number {
+              One(1), Two(2), Three(3);
+              private final int value;
+              Number(int value) {
+                  this.value = value;
+              }
+              @Override
+              public String toString() {
+                  return super.toString() + " (" + value + ")";
+              }
+          }
+          enum Operation {
+              plus { int eval(int x, int y) { return x + y; } },
+              minus { int eval(int x, int y) { return x - y; } };
+              abstract int eval(int x, int y);
+          }
+          public class EnumShowcase {
+              public static void main(String[] args) {
+                  for (Number n : EnumSet.range(Number.One, Number.Two))
+                      System.out.println(n + " [ord=" + n.ordinal() + "]");
+                  System.out.println("4 plus 3 = " + Operation.plus.eval(4, 3));
+              }
+          }
+        highlight_lines: [3, 5, 9, 14, 16, 20]
+        annotations:
+          - line: 3
+            note: "Parameterized enum constants invoke the private constructor; semicolon is required when members follow."
+          - line: 5
+            note: "Enum constructors are implicitly private (public/protected is forbidden)."
+          - line: 9
+            note: "toString() is NOT final in java.lang.Enum, so it can be overridden (unlike name() and ordinal())."
+          - line: 14
+            note: "Constant-specific class body: compiled as an anonymous subclass of Operation."
+          - line: 16
+            note: "Abstract method forces every enum constant to supply its own implementation."
+          - line: 20
+            note: "EnumSet.range(from, to) creates an efficient inclusive set of enum constants."
+
+      - id: exp-sandbox-rich-enum
+        block_type: sandbox
+        runtime: java
+        title: "Practice: Rich Enum with Fields, Cycling & Constant-Specific Method"
+        instructions: |
+          Complete `enum Season` in `Main.java` (inspired by Slides 140–142) so that:
+          1. Each constant (`Spring`, `Summer`, `Fall`, `Winter`) stores a `private final int avgTemp` (`15`, `26`, `12`, `2`) initialized via a constructor.
+          2. Each constant implements an abstract method `abstract String vibe();` returning `"Blooming"`, `"Sunny"`, `"Crisp"`, `"Snowy"` respectively.
+          3. `Season` overrides `toString()` to return `name() + "(" + ordinal() + "," + avgTemp + "C)"`.
+          4. `Season` defines `public Season next()` returning the next season cyclically (so `Winter.next()` returns `Spring`).
+          5. `Main.main` prints each season's `toString()`, `vibe()`, and `next().name()` as shown in `starter_code`.
+        starter_code: |
+          enum Season {
+              Spring(15) { String vibe() { return "Blooming"; } },
+              Summer(26) { String vibe() { return "Sunny"; } },
+              Fall(12)   { String vibe() { return "Crisp"; } },
+              Winter(2)  { String vibe() { return "Snowy"; } };
+
+              private final int avgTemp;
+
+              Season(int avgTemp) {
+                  this.avgTemp = avgTemp;
+              }
+
+              abstract String vibe();
+
+              // TODO: implement public Season next() using values() and ordinal()
+
+              // TODO: override public String toString() to return name() + "(" + ordinal() + "," + avgTemp + "C)"
+          }
+
+          public class Main {
+              public static void main(String[] args) {
+                  Season s = Season.valueOf("Winter");
+                  System.out.println(s + " -> " + s.vibe() + " -> next=" + s.next().name());
+              }
+          }
+        expected_output: "Winter(3,2C) -> Snowy -> next=Spring"
+        solution: |
+          enum Season {
+              Spring(15) { String vibe() { return "Blooming"; } },
+              Summer(26) { String vibe() { return "Sunny"; } },
+              Fall(12)   { String vibe() { return "Crisp"; } },
+              Winter(2)  { String vibe() { return "Snowy"; } };
+
+              private final int avgTemp;
+
+              Season(int avgTemp) {
+                  this.avgTemp = avgTemp;
+              }
+
+              abstract String vibe();
+
+              public Season next() {
+                  Season[] all = values();
+                  return all[(ordinal() + 1) % all.length];
+              }
+
+              @Override
+              public String toString() {
+                  return name() + "(" + ordinal() + "," + avgTemp + "C)";
+              }
+          }
+
+          public class Main {
+              public static void main(String[] args) {
+                  Season s = Season.valueOf("Winter");
+                  System.out.println(s + " -> " + s.vibe() + " -> next=" + s.next().name());
+              }
+          }
+        hints:
+          - "Inside `next()`, call `values()` to get the array of all constants in declaration order, then index it with `(ordinal() + 1) % all.length`."
+          - "In `toString()`, use `name()` (inherited `final` method from `Enum`) rather than `super.toString()`, plus `ordinal()` and `avgTemp`."
+
+      - id: ref-feynman-enum-internals
+        block_type: feynman_prompt
+        title: "Feynman Check: Why a Java enum Is Not Just an Integer"
+        concept: "Java Type-Safe Enumerations (enum)"
+        target_audience: "a C programmer who thinks enums are just named integers (0, 1, 2)"
+        prompt: "Explain why a Java `enum` is fundamentally a full class extending `java.lang.Enum` rather than an integer alias, and what concrete superpowers (safety, fields, methods, per-constant behavior) this unlocks."
+        key_points_to_cover:
+          - "Each constant is a singleton public static final object instance (safe with == and switch, impossible to pass an arbitrary int)"
+          - "Implicit private constructor prevents creating extra instances outside the enum declaration"
+          - "Built-in values() (defensive copy), valueOf(String), final name()/ordinal(), and overridable toString()"
+          - "Ability to attach per-constant state (fields) and per-constant behavior via abstract methods implemented by anonymous subclasses"
+
+  - id: sec-diagnostic-quiz
+    title: "7. Diagnostic Knowledge Check (TE1 Exam Traps)"
+    description: "Test your mastery against classic HEIG-VD POO exam traps: final references, private-final methods, static method hiding, initialization order traces, default method conflicts, and enum internals."
+    blocks:
+      - id: qz-final-reference-array
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 2
+        related_block_id: th-final-overview
+        title: "final Array & Object Reference Semantics"
+        question: |
+          Consider the following Java snippet:
+
+          ```java
+          final int[] nums = { 1, 2, 3 };
+          nums[1] = 99;
+          nums = new int[] { 4, 5, 6 };
+          ```
+
+          What happens when you compile and run this code?
+        options:
+          - "Line 2 compiles and mutates the array to {1, 99, 3}; Line 3 causes a compile-time error."
+          - "Both Line 2 and Line 3 cause compile-time errors because a final array is deeply immutable."
+          - "Line 2 throws an UnsupportedOperationException at runtime; Line 3 compiles."
+          - "Both Line 2 and Line 3 compile because arrays are reference types."
+        correct_answer: "Line 2 compiles and mutates the array to {1, 99, 3}; Line 3 causes a compile-time error."
+        explanation: |
+          In Java, arrays are objects accessed through references. Marking `nums` as `final` makes the **reference** constant, not the array contents:
+          * `nums[1] = 99;` mutates an element inside the existing array object — completely legal.
+          * `nums = new int[] { 4, 5, 6 };` attempts to reassign the `final` reference to a new array — **compile-time error**.
+          * Distractor "deeply immutable" confuses `final` references with immutable objects (like `String`).
+          * Distractor `UnsupportedOperationException` confuses arrays with unmodifiable collections (e.g., `List.of(...)`).
+        hints:
+          - "Ask yourself what `nums` actually stores in memory: the array's elements directly, or a reference to an array object on the heap?"
+          - "Does `final` on a reference variable freeze the reference itself or the heap object it points to?"
+
+      - id: qz-final-private-method
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 4
+        related_block_id: code-final-contexts
+        title: "The private final Method Subclass Trap"
+        question: |
+          Consider these two classes in the same package:
+
+          ```java
+          class Parent {
+              private final void helper() { System.out.println("Parent"); }
+          }
+          class Child extends Parent {
+              void helper() { System.out.println("Child"); }
+          }
+          ```
+
+          What is the result of compiling this code?
+        options:
+          - "It compiles cleanly: Child.helper() is an unrelated new method because Parent.helper() is private and invisible to Child."
+          - "Compile-time error: Child cannot override the final method Parent.helper()."
+          - "Compile-time error: Child.helper() must be declared public or protected."
+          - "Compiles, but throws IllegalAccessError at runtime when new Child().helper() is called."
+        correct_answer: "It compiles cleanly: Child.helper() is an unrelated new method because Parent.helper() is private and invisible to Child."
+        explanation: |
+          As highlighted on Slide 106, `private` methods do **not** participate in dynamic dispatch and are implicitly `final`. Because `Parent.helper()` is invisible to `Child`, `Child.helper()` has **no link whatsoever** to `Parent.helper()` — it is **not** overriding it, so `final` on `Parent.helper()` does not block `Child` from defining its own `helper()`.
+          * Distractor "cannot override the final method" would only apply if `Parent.helper()` were package-private, `protected`, or `public`.
+          * Distractor "must be public or protected" mistakenly assumes overriding visibility rules apply here.
+        hints:
+          - "Can a subclass see or inherit a `private` method declared in its superclass?"
+          - "If a method is invisible to the subclass, is the subclass *overriding* it or declaring an independent method?"
+
+      - id: qz-static-hiding-dispatch
+        block_type: quiz_question
+        question_type: code_output
+        difficulty: 4
+        related_block_id: code-static-hiding-compare
+        title: "Predict Output: Static Method Hiding vs. Dynamic Dispatch"
+        question: |
+          What does the following program print?
+
+          ```java
+          class A {
+              static String s() { return "A.s"; }
+              String m() { return "A.m"; }
+          }
+          class B extends A {
+              static String s() { return "B.s"; }
+              @Override
+              String m() { return "B.m"; }
+          }
+          public class Test {
+              public static void main(String[] args) {
+                  A ref = new B();
+                  System.out.println(ref.s() + " " + ref.m());
+              }
+          }
+          ```
+        options:
+          - "A.s B.m"
+          - "B.s B.m"
+          - "A.s A.m"
+          - "Compile-time error: cannot call static method s() on an instance reference ref"
+        correct_answer: "A.s B.m"
+        explanation: |
+          * `ref.s()` invokes a **`static` method**. Static methods do **not** use dynamic dispatch (*liaison dynamique*); `B.s()` merely **hides** `A.s()`. The compiler binds `ref.s()` to the **declared type** of `ref` (`A`), returning `"A.s"`.
+          * `ref.m()` invokes an **instance method**, which uses dynamic dispatch based on the **runtime type** (`B`), returning `"B.m"`.
+          * Distractor `"B.s B.m"` mistakenly applies polymorphism to static methods.
+          * Distractor `"Compile-time error"` is wrong because calling a static method via an instance reference is **legal** in Java (though discouraged precisely because of this trap!).
+        hints:
+          - "Is `s()` bound at compile time (declared type) or runtime (actual object type)?"
+          - "Contrast how `ref.s()` (`static`) and `ref.m()` (instance) are dispatched when `A ref = new B();`."
+
+      - id: qz-init-order-trace
+        block_type: quiz_question
+        question_type: code_output
+        difficulty: 5
+        related_block_id: diag-java-init-order
+        title: "Predict Output: Exact Inheritance Initialization Order"
+        question: |
+          What is printed by the following program?
+
+          ```java
+          class Base {
+              static { System.out.print("SB "); }
+              { System.out.print("IB "); }
+              Base() { System.out.print("CB "); }
+          }
+          class Derived extends Base {
+              static { System.out.print("SD "); }
+              { System.out.print("ID "); }
+              Derived() { System.out.print("CD "); }
+          }
+          public class Main {
+              public static void main(String[] args) {
+                  new Derived();
+                  new Derived();
+              }
+          }
+          ```
+        options:
+          - "SB SD IB CB ID CD IB CB ID CD"
+          - "SB IB CB SD ID CD IB CB ID CD"
+          - "SB SD IB ID CB CD IB ID CB CD"
+          - "SB SD IB CB ID CD SB SD IB CB ID CD"
+        correct_answer: "SB SD IB CB ID CD IB CB ID CD"
+        explanation: |
+          Trace the exact 6-step JVM initialization order:
+          1. **Class loading (runs ONCE):** `Base` static block (`SB`), then `Derived` static block (`SD`).
+          2. **First `new Derived()`:** `Base` instance block (`IB`) → `Base` constructor (`CB`) → `Derived` instance block (`ID`) → `Derived` constructor (`CD`).
+          3. **Second `new Derived()`:** Static blocks do NOT run again; only instance initialization repeats: `IB CB ID CD`.
+          * `"SB IB CB SD ID CD ..."` wrongly interleaves static and instance initialization.
+          * `"SB SD IB ID CB CD ..."` wrongly runs `Derived`'s instance block before `Base`'s constructor finishes.
+          * `"SB SD ... SB SD ..."` wrongly re-executes `static` blocks on the second `new`.
+        hints:
+          - "Remember that ALL `static` blocks (Superclass then Subclass) finish before ANY instance block or constructor runs."
+          - "Does a subclass's `{}` instance block run before or after the superclass's constructor body?"
+          - "How many times do `static {}` blocks execute across two `new Derived()` calls?"
+
+      - id: qz-attribute-local-init
+        block_type: quiz_question
+        question_type: multi_select
+        difficulty: 3
+        related_block_id: th-init-blocks-and-locals
+        title: "Attribute vs. Local Variable Initialization Rules"
+        question: "Which of the following statements about Java initialization are TRUE?"
+        options:
+          - "A blank static final attribute can be initialized inside a static { ... } block."
+          - "A blank final instance attribute can be initialized inside an instance { ... } block or in every constructor."
+          - "A local reference variable declared as Person p; is automatically initialized to null."
+          - "Assigning Person p = null; compiles cleanly, and calling p.toString() throws NullPointerException at runtime."
+        correct_answer:
+          - "A blank static final attribute can be initialized inside a static { ... } block."
+          - "A blank final instance attribute can be initialized inside an instance { ... } block or in every constructor."
+          - "Assigning Person p = null; compiles cleanly, and calling p.toString() throws NullPointerException at runtime."
+        explanation: |
+          * `static final` attributes cannot be initialized in a constructor, but **can** be initialized either explicitly at declaration or inside a `static { ... }` block (Slide 117).
+          * `final` instance attributes can be initialized at declaration, in an instance `{ ... }` block, or in every constructor at the latest (Slide 116).
+          * `Person p = null;` explicitly initializes the local variable `p`, so compilation succeeds; dereferencing `p` triggers a runtime `NullPointerException` (Slide 118).
+          * **False option:** Local variables are **never** default-initialized in Java (only non-`final` attributes receive default values like `0`, `false`, or `null`). Reading an unassigned local variable is a compile-time error.
+        hints:
+          - "Check the Attribute Initialization Matrix from Slides 116–117 for `final` and `static final`."
+          - "Does Java give default values (`0`/`null`) to local variables inside methods, or only to non-`final` class/instance attributes?"
+
+      - id: qz-abstract-class-rules
+        block_type: quiz_question
+        question_type: multi_select
+        difficulty: 3
+        related_block_id: th-abstract-classes
+        title: "Valid & Invalid Abstract Class Rules"
+        question: "Which of the following statements about Java abstract classes and methods are TRUE?"
+        options:
+          - "An abstract class may contain zero abstract methods (e.g., purely to forbid direct instantiation)."
+          - "An abstract class can define constructors, which subclasses invoke via super(...)."
+          - "A static method can be declared abstract so subclasses must provide their own class-level implementation."
+          - "A concrete subclass extending an abstract class must implement all inherited abstract methods, otherwise it must also be declared abstract."
+        correct_answer:
+          - "An abstract class may contain zero abstract methods (e.g., purely to forbid direct instantiation)."
+          - "An abstract class can define constructors, which subclasses invoke via super(...)."
+          - "A concrete subclass extending an abstract class must implement all inherited abstract methods, otherwise it must also be declared abstract."
+        explanation: |
+          * An `abstract class` does **not** require any abstract methods (Slide 120) — declaring it `abstract` alone prevents `new MyClass()`.
+          * Abstract classes can have attributes, concrete methods, and constructors (Slide 119).
+          * Any subclass that leaves even one inherited abstract method unimplemented must itself be `abstract` (Slide 120).
+          * **False option:** A `static` method **cannot** be `abstract` (nor can a `private` method), because `static` methods belong to the class and cannot be overridden via dynamic dispatch (Slide 119).
+        hints:
+          - "Recall the two modifiers that are strictly illegal on an `abstract` method because they prevent overriding."
+          - "Can an abstract class initialize its own private fields when a concrete subclass is instantiated?"
+
+      - id: qz-default-method-conflict
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 4
+        related_block_id: diag-default-method-resolution
+        title: "Default Method Diamond Resolution"
+        question: |
+          Consider the following definitions:
+
+          ```java
+          class A { public void m() { System.out.println("A"); } }
+          interface I { default void m() { System.out.println("I"); } }
+          interface J { default void m() { System.out.println("J"); } }
+
+          class B extends A implements I { }
+          class C implements I, J { }
+          ```
+
+          Which statement accurately describes compiling `B` and `C`?
+        options:
+          - "B compiles and uses A::m (class beats interface); C fails to compile until it overrides m() (optionally calling I.super.m() or J.super.m())."
+          - "Both B and C fail to compile due to diamond ambiguity on m()."
+          - "B compiles and uses I::m; C compiles and uses I::m because I is listed first."
+          - "Both B and C compile cleanly; C inherits J::m because J is listed last."
+        correct_answer: "B compiles and uses A::m (class beats interface); C fails to compile until it overrides m() (optionally calling I.super.m() or J.super.m())."
+        explanation: |
+          Java's default method resolution rules (Slides 135–136):
+          * For **`B extends A implements I`**: **Class always wins over interface** — `B` compiles cleanly and inherits `A::m` without needing to override `m()`.
+          * For **`C implements I, J`**: `I` and `J` are unrelated interfaces both providing `default void m()`. Declaration order (`I, J` vs `J, I`) is **never** used as a tiebreaker! `C` fails to compile until it explicitly overrides `public void m()`, where it may delegate via `I.super.m()` or `J.super.m()`.
+        hints:
+          - "In `class B extends A implements I`, does the concrete superclass method or the interface `default` method take precedence?"
+          - "Does Java break ties between two sibling interfaces `implements I, J` by the order they are listed?"
+
+      - id: qz-sealed-interface-constants
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: th-interfaces-sealed-defaults
+        title: "Sealed Types & Interface Constant Evaluation"
+        question: |
+          Consider:
+
+          ```java
+          interface Config {
+              java.util.Random R = new java.util.Random();
+              int SEED = R.nextInt(100);
+          }
+          abstract sealed class Shape permits Circle {}
+          ```
+
+          Which statement is TRUE?
+        options:
+          - "Config compiles cleanly (SEED is public static final and evaluated once when Config is loaded); Circle must be declared final, sealed, or non-sealed."
+          - "Config fails to compile because interface constants must be compile-time literals, not runtime method calls."
+          - "Config compiles, and accessing Config.SEED twice in the same program run returns two different random numbers."
+          - "Circle may omit final/sealed/non-sealed and defaults to non-sealed."
+        correct_answer: "Config compiles cleanly (SEED is public static final and evaluated once when Config is loaded); Circle must be declared final, sealed, or non-sealed."
+        explanation: |
+          * **Interface constants (Slide 131):** Interface fields are implicitly `public static final`, and they **may** be initialized using non-constant runtime expressions like `R.nextInt(100)`. Because they are `static`, `SEED` is initialized **once** when `Config` is loaded by the JVM — so it stays constant throughout a single run, though it can differ across separate program executions.
+          * **Sealed hierarchies (Slide 126):** Every permitted direct subclass of a `sealed` class **must explicitly** declare `final`, `sealed`, or `non-sealed` (there is no implicit default).
+        hints:
+          - "Are interface fields (`public static final`) allowed to be initialized by runtime expressions like `new Random().nextInt(10)`?"
+          - "What modifier requirement does Java 17 enforce on every class listed in a `permits` clause?"
+
+      - id: qz-enum-internals-override
+        block_type: quiz_question
+        question_type: code_output
+        difficulty: 3
+        related_block_id: code-enum-rich-operation
+        title: "Predict Output: Rich Enum with Abstract Method & toString()"
+        question: |
+          What does the following program print?
+
+          ```java
+          enum Op {
+              ADD("+") { int apply(int a, int b) { return a + b; } },
+              MUL("*") { int apply(int a, int b) { return a * b; } };
+              private final String sym;
+              Op(String sym) { this.sym = sym; }
+              abstract int apply(int a, int b);
+              @Override public String toString() { return sym; }
+          }
+          public class Main {
+              public static void main(String[] args) {
+                  Op op = Op.valueOf("MUL");
+                  System.out.println(op.ordinal() + ":" + op.name() + ":" + op + "=" + op.apply(3, 4));
+              }
+          }
+          ```
+        options:
+          - "1:MUL:*=12"
+          - "2:MUL:*=12"
+          - "1:*:*=12"
+          - "Compile-time error: cannot override toString() in an enum because Enum.toString() is final"
+        correct_answer: "1:MUL:*=12"
+        explanation: |
+          * `Op.valueOf("MUL")` looks up the constant by its exact identifier `name()` (`"MUL"`), which is at 0-based `ordinal()` index **`1`** (`ADD` is `0`, `MUL` is `1`).
+          * `op.name()` is `final` in `java.lang.Enum` and always returns `"MUL"`.
+          * `op` in string concatenation calls the overridden `toString()` (which is **NOT** `final` in `Enum`), returning `"*"`.
+          * `op.apply(3, 4)` dispatches to `MUL`'s anonymous-subclass implementation, returning `3 * 4 = 12`.
+          * Putting it together: `1:MUL:*=12`.
+        hints:
+          - "Is `ordinal()` 0-based or 1-based?"
+          - "Which method is `final` in `java.lang.Enum`: `name()` or `toString()`?"
