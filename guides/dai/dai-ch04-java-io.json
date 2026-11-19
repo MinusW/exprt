@@ -2,7 +2,7 @@
   "id": "dai-ch04-java-io",
   "title": "Chapter 04: Java I/O",
   "description": "Master Java's stream-based I/O architecture: binary vs. text streams, buffering & syscalls, endianness, Unicode & UTF-8 encoding, line endings, and try-with-resources.",
-  "estimated_minutes": 65,
+  "estimated_minutes": 45,
   "category": "Internet Applications (DAI)",
   "track": "DAI - Développement d'Applications Internet (TE1)",
   "track_order": 4,
@@ -38,8 +38,8 @@
         {
           "id": "th-why-io-network",
           "block_type": "markdown",
-          "title": "Why File I/O Matters for Network Programming",
-          "content": "Network programming is fundamentally about reading and writing data: a server reads a request from a client and writes a response back.\n\nIn Java, **files and network sockets share the exact same I/O abstraction**. You read from an `InputStream` and write to an `OutputStream`, whether the other end is a file on your SSD or a program on another continent. Files are simply the gentler starting point—no TCP handshake to open, and no remote peer that can suddenly disconnect.\n\n### Sources, Streams, and Sinks\nEvery I/O pipeline consists of three roles:\n* **Source (Producer):** Produces data (e.g., a file, a network socket, the keyboard `System.in`, or an in-memory byte array).\n* **Stream:** An ordered, sequential flow of data read or written piece by piece—from a source into your program, or from your program to a sink.\n* **Sink (Consumer):** Consumes data (e.g., a file, a network socket, the terminal screen `System.out`, or an in-memory buffer).\n\n> [!NOTE]\n> **Three Packages with Similar Names:**\n> * **`java.io` (This guide):** Classic stream-based I/O (`InputStream`, `OutputStream`, `Reader`, `Writer`) used for files and TCP sockets.\n> * **`java.nio` (\"New I/O\"):** Buffer/channel-based API for high-concurrency servers. We do **not** use `java.nio` channels here, **except** `java.nio.charset.StandardCharsets`, which you will use everywhere to specify text encodings.\n> * **`java.util.stream`:** Functional collection pipelines (`IntStream`, `.map()`, `.filter()`). Completely different concept despite the word \"stream\" (though `BufferedReader.lines()` bridges the two).\n\n### Two Families of Data\nAll data is stored as bytes, but how your program interprets those bytes splits `java.io` into two distinct hierarchies:\n\n| Operation | Binary Data (Raw Bytes) | Text Data (Characters + Encoding) |\n| :--- | :--- | :--- |\n| **Read** | `InputStream` (abstract) | `Reader` (abstract) |\n| **Write** | `OutputStream` (abstract) | `Writer` (abstract) |\n| **Examples** | Images (PNG, BMP), audio (WAV), ZIP archives, compiled `.class` files | Source code, CSV, JSON, XML, HTTP headers |",
+          "title": "Streams, Packages, and the Decorator Pattern",
+          "content": "In Java, **files and TCP sockets share the exact same I/O abstraction**: you read from an `InputStream` and write to an `OutputStream` regardless of whether the other end is an SSD or a remote host.\n\n* **Pipeline roles:** **Source** (producer: file, socket, `System.in`) → **Stream** (sequential byte/char flow) → **Sink** (consumer: file, socket, `System.out`).\n\n| Package | Role | Exam Relevance |\n| :--- | :--- | :--- |\n| **`java.io`** | Classic stream-based I/O (`InputStream`, `OutputStream`, `Reader`, `Writer`) | **Primary API** for files & TCP sockets |\n| **`java.nio`** | Non-blocking channels/buffers | Only use **`java.nio.charset.StandardCharsets`** |\n| **`java.util.stream`** | Functional collection pipelines (`.map()`, `.filter()`) | Unrelated concept (bridged via `BufferedReader.lines()`) |\n\n### Two Hierarchies & Decorator Composition\n| Operation | Binary Data (Raw Bytes) | Text Data (Characters + Encoding) |\n| :--- | :--- | :--- |\n| **Read** | `InputStream` (abstract) | `Reader` (abstract) |\n| **Write** | `OutputStream` (abstract) | `Writer` (abstract) |\n| **Examples** | PNG, BMP, WAV, ZIP, `.class` | Source code, CSV, JSON, HTTP headers |\n\n`java.io` uses the **Decorator Pattern**—wrapping an object inside another of the same interface to layer capabilities (buffering, charset decoding, data parsing):\n* **Inside-out construction:** Innermost stream connects to the OS (`FileInputStream`, `socket.getInputStream()`); outer layers add buffering or character decoding.\n* **Cascading `close()`:** Closing the outermost decorator automatically flushes and closes every wrapped inner stream.\n* **Shortcut:** `new FileReader(path, charset)` is shorthand for `new InputStreamReader(new FileInputStream(path), charset)`.",
           "bookmarkable": true
         },
         {
@@ -49,13 +49,6 @@
           "title": "The java.io Decorator Chain",
           "caption": "Text streams wrap binary streams: raw bytes flow from a file or socket, pass through a memory buffer, get decoded into UTF-16 characters by InputStreamReader, and are buffered for line-by-line reading.",
           "source": "flowchart LR\n  Src[\"Source: File or Socket\\n(Raw Bytes)\"] --> FIS[\"FileInputStream / SocketInputStream\\nReads raw bytes from OS\"]\n  FIS --> BIS[\"BufferedInputStream\\n8 KiB memory buffer (fewer syscalls)\"]\n  BIS --> ISR[\"InputStreamReader\\nDecodes bytes via StandardCharsets.UTF_8\"]\n  ISR --> BR[\"BufferedReader\\nProvides readLine()\"]\n  BR --> App[\"Java String\\n(UTF-16 characters in RAM)\"]\n\n  classDef src fill:#e2e8f0,stroke:#475569,stroke-width:1.5px;\n  classDef bin fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;\n  classDef bridge fill:#ede9fe,stroke:#6366f1,stroke-width:2px;\n  classDef txt fill:#ecfdf5,stroke:#059669,stroke-width:2px;\n\n  class Src src;\n  class FIS,BIS bin;\n  class ISR bridge;\n  class BR,App txt;",
-          "bookmarkable": true
-        },
-        {
-          "id": "th-decorator-pattern",
-          "block_type": "markdown",
-          "title": "Composing Capabilities with Decorators",
-          "content": "Notice how `BufferedInputStream` wraps `FileInputStream` while still being an `InputStream` itself. This is the **Decorator Pattern**: wrapping an object inside another object of the same interface to layer on a new capability (buffering, charset decoding, data parsing) without changing how your loop consumes it.\n\n* **Inside-out construction:** The innermost object connects to the physical source/sink (`FileInputStream`, `Socket.getInputStream()`), and outer layers add buffering or character conversion.\n* **Cascading `close()`:** When you close the outermost decorator (`reader.close()`), Java automatically flushes and closes every wrapped inner stream down the chain.\n* **Shortcut class:** Because `new InputStreamReader(new FileInputStream(path), charset)` is so common, Java provides `new FileReader(path, charset)` as a convenient shorthand.",
           "bookmarkable": true
         }
       ]
@@ -100,39 +93,7 @@
           "id": "th-buffering-blocks",
           "block_type": "markdown",
           "title": "Why Buffering Makes I/O 200x Faster (and Block Reads)",
-          "content": "Every unbuffered `read()` or `write()` on a `FileInputStream` or `FileOutputStream` triggers an **operating system call (syscall)** to transfer a single byte. Writing 10 MiB byte by byte triggers ~10.5 million syscalls and takes over **12 seconds** even on a fast NVMe SSD.\n\nWrapping with `BufferedInputStream` / `BufferedOutputStream` places an **8 KiB (8,192-byte) memory buffer** between your program and the OS:\n* **Reading:** The first `read()` pulls 8 KiB from the OS in one syscall; the next 8,191 `read()` calls are served directly from RAM.\n* **Writing:** `write()` copies into RAM until the 8 KiB buffer fills up, then flushes the whole block to the OS in one syscall.\n* **Result:** 10 MiB drops from **~12,800 ms** to **~60 ms** (~200x faster!).\n\n### Block Reading (`read(byte[])`) — Even Faster\nIf you don't need to inspect individual bytes, bypass per-byte method calls altogether using your own `byte[]` buffer:\n```java\nbyte[] buffer = new byte[8192];\nint n;\nwhile ((n = in.read(buffer)) != -1) {\n  out.write(buffer, 0, n);\n}\n```\n> [!WARNING]\n> **Two Critical Network & File Traps:**\n> 1. **Short Reads:** `in.read(buffer)` reads *at least 1* and *at most `buffer.length`* bytes. On a network socket, getting fewer than `buffer.length` bytes in the middle of a transfer is completely normal—only `-1` means EOF.\n> 2. **Never call `out.write(buffer)`:** Always use `out.write(buffer, 0, n)`! Otherwise, on the final short read, you will write stale leftover bytes from the previous iteration (turning a 10,000-byte file into 16,384 bytes).\n> 3. **Always `flush()` open network streams:** Buffered output sits in RAM until full or closed. On a persistent socket connection, if you forget `out.flush()` after sending a message, the remote peer will hang forever waiting for data still sitting in your buffer.",
-          "bookmarkable": true
-        },
-        {
-          "id": "sim-buffering-syscalls",
-          "block_type": "simulation",
-          "title": "Syscall Cost Explorer: File Size vs. Buffer Size",
-          "description": "Explore how buffer size B dramatically reduces the total number of read + write system calls when copying a file of size N MiB. Compare B = 1 KiB vs 8 KiB vs 64 KiB (and imagine B = 1 byte = 0.00098 KiB, which would require over 20 million syscalls for 10 MiB!).",
-          "formula": "\\text{Total Syscalls} = 2 \\times \\left\\lceil \\frac{N_{\\text{MiB}} \\times 1024}{B_{\\text{KiB}}} \\right\\rceil",
-          "variables": [
-            {
-              "id": "file_mb",
-              "name": "File Size (N)",
-              "min": 1,
-              "max": 100,
-              "step": 1,
-              "default": 10,
-              "unit": "MiB"
-            },
-            {
-              "id": "buf_kb",
-              "name": "Buffer Size (B)",
-              "min": 1,
-              "max": 64,
-              "step": 1,
-              "default": 8,
-              "unit": "KiB"
-            }
-          ],
-          "compute_expression": "2 * Math.ceil((file_mb * 1024) / buf_kb)",
-          "chart_type": "line",
-          "output_label": "Total Read + Write Syscalls",
-          "output_unit": "syscalls",
+          "content": "Every unbuffered `read()` / `write()` triggers an **OS syscall** for a single byte—10 MiB byte-by-byte = ~10.5M syscalls (~12,800 ms on NVMe).\n\nWrapping with `BufferedInputStream` / `BufferedOutputStream` adds an **8 KiB (8,192-byte) RAM buffer**:\n* **Read:** 1 syscall fetches 8 KiB; the next 8,191 `read()` calls hit RAM.\n* **Write:** Accumulates in RAM until full (or `flush()`/`close()`), then 1 syscall.\n* **Result:** 10 MiB drops from **~12,800 ms** to **~60 ms** (~200x faster).\n\n### Block Reading (`read(byte[])`) — Even Faster\n```java\nbyte[] buffer = new byte[8192];\nint n;\nwhile ((n = in.read(buffer)) != -1) {\n  out.write(buffer, 0, n);\n}\n```\n> [!WARNING]\n> **Three Critical Exam Traps:**\n> 1. **Short Reads:** `in.read(buffer)` returns *1 to `buffer.length`* bytes. Getting fewer than `buffer.length` mid-transfer on a socket is normal—**only `-1` means EOF**.\n> 2. **Never call `out.write(buffer)`:** Always use `out.write(buffer, 0, n)`! Otherwise the final short read writes stale leftover bytes from the previous iteration (e.g., turning a 10,000-byte file into 16,384 bytes).\n> 3. **Always `flush()` open network streams:** Buffered output stays in RAM until full or closed. On a persistent socket, forgetting `out.flush()` makes the remote peer hang forever.",
           "bookmarkable": true
         },
         {
@@ -184,16 +145,7 @@
           "id": "th-unicode-utf",
           "block_type": "markdown",
           "title": "Unicode vs. UTF-8: Catalogue vs. Byte Encoding",
-          "content": "**Unicode is not an encoding.** Unicode is a universal catalogue assigning every character (over 150,000 assigned, out of `U+0000` to `U+10FFFF`) a numeric **code point**:\n* `A` = `U+0041`, `é` = `U+00E9`, `€` = `U+20AC`, `😂` = `U+1F602`.\n* `U+0000`–`U+FFFF` is the **Basic Multilingual Plane (BMP)** (most living scripts). Emojis and rare scripts live above `U+FFFF` and need up to 21 bits.\n\n**UTFs (Unicode Transformation Formats)** define how code points map to bytes:\n\n| Encoding | Bytes per Code Point | ASCII Compatible? | Primary Use |\n| :--- | :--- | :--- | :--- |\n| **UTF-8** | 1 to 4 bytes | **Yes** | The Web, Linux, macOS, JSON, modern files |\n| **UTF-16** | 2 or 4 bytes | No (`'A'` is `0x00 0x41`) | Java `String`, JavaScript, Windows internals |\n| **UTF-32** | Always 4 bytes | No | Rare (fixed width, 4x memory overhead) |\n\n### UTF-8 Variable-Length Bit Layout\n\n| Code Point Range | Bytes | Bit Pattern (`x` = code point bits) | Example |\n| :--- | :---: | :--- | :--- |\n| `U+0000`–`U+007F` | 1 | `0xxxxxxx` | `'A'` (`U+0041`) → `41` |\n| `U+0080`–`U+07FF` | 2 | `110xxxxx 10xxxxxx` | `'é'` (`U+00E9`) → `C3 A9` |\n| `U+0800`–`U+FFFF` | 3 | `1110xxxx 10xxxxxx 10xxxxxx` | `'€'` (`U+20AC`) → `E2 82 AC` |\n| `U+10000`–`U+10FFFF` | 4 | `11110xxx 10xxxxxx 10xxxxxx 10xxxxxx` | `'😂'` (`U+1F602`) → `F0 9F 98 82` |\n\n**Worked Example (`€` = `U+20AC`):** `0x20AC` in binary is `0010 0000 1010 1100` (16 bits → 3-byte pattern). Filling the `x` slots left-to-right gives `11100010 10000010 10101100` = **`E2 82 AC`**.",
-          "bookmarkable": true
-        },
-        {
-          "id": "diag-utf8-layout",
-          "block_type": "kroki",
-          "diagram_type": "mermaid",
-          "title": "UTF-8 Prefix Bits & Self-Synchronization",
-          "caption": "Leading bits immediately tell a decoder how many bytes belong to a code point (0 = 1 byte, 110 = 2 bytes, 1110 = 3 bytes, 11110 = 4 bytes), while continuation bytes always start with 10.",
-          "source": "flowchart TD\n  Root[\"Unicode Code Point\"] --> B1[\"1 Byte (U+0000..U+007F)\\n0xxxxxxx — ASCII ('A' -> 0x41)\"]\n  Root --> B2[\"2 Bytes (U+0080..U+07FF)\\n110xxxxx 10xxxxxx — Latin/Cyrillic/Arabic ('é' -> C3 A9)\"]\n  Root --> B3[\"3 Bytes (U+0800..U+FFFF)\\n1110xxxx 10xxxxxx 10xxxxxx — CJK/Symbols ('€' -> E2 82 AC)\"]\n  Root --> B4[\"4 Bytes (U+10000..U+10FFFF)\\n11110xxx 10xxxxxx 10xxxxxx 10xxxxxx — Emojis ('😂' -> F0 9F 98 82)\"]\n\n  classDef b1 fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;\n  classDef b2 fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;\n  classDef b3 fill:#ede9fe,stroke:#6366f1,stroke-width:1.5px;\n  classDef b4 fill:#fef3c7,stroke:#d97706,stroke-width:1.5px;\n\n  class B1 b1;\n  class B2 b2;\n  class B3 b3;\n  class B4 b4;",
+          "content": "**Unicode is not an encoding.** Unicode is a universal catalogue assigning every character (over 150,000 assigned, out of `U+0000` to `U+10FFFF`) a numeric **code point**:\n* `A` = `U+0041`, `é` = `U+00E9`, `€` = `U+20AC`, `😂` = `U+1F602`.\n* `U+0000`–`U+FFFF` is the **Basic Multilingual Plane (BMP)** (most living scripts). Emojis and rare scripts live above `U+FFFF` and need up to 21 bits.\n\n**UTFs (Unicode Transformation Formats)** define how code points map to bytes:\n\n| Encoding | Bytes per Code Point | ASCII Compatible? | Primary Use |\n| :--- | :--- | :--- | :--- |\n| **UTF-8** | 1 to 4 bytes | **Yes** | The Web, Linux, macOS, JSON, modern files |\n| **UTF-16** | 2 or 4 bytes | No (`'A'` is `0x00 0x41`) | Java `String`, JavaScript, Windows internals |\n| **UTF-32** | Always 4 bytes | No | Rare (fixed width, 4x memory overhead) |\n\n### UTF-8 Variable-Length Bit Layout\n\n| Code Point Range | Bytes | Bit Pattern (`x` = code point bits) | Example |\n| :--- | :---: | :--- | :--- |\n| `U+0000`–`U+007F` | 1 | `0xxxxxxx` | `'A'` (`U+0041`) → `41` |\n| `U+0080`–`U+07FF` | 2 | `110xxxxx 10xxxxxx` | `'é'` (`U+00E9`) → `C3 A9` |\n| `U+0800`–`U+FFFF` | 3 | `1110xxxx 10xxxxxx 10xxxxxx` | `'€'` (`U+20AC`) → `E2 82 AC` |\n| `U+10000`–`U+10FFFF` | 4 | `11110xxx 10xxxxxx 10xxxxxx 10xxxxxx` | `'😂'` (`U+1F602`) → `F0 9F 98 82` |\n\n**Worked Example (`€` = `U+20AC`):** `0x20AC` in binary is `0010 0000 1010 1100` (16 bits → 3-byte pattern). Filling the `x` slots left-to-right gives `11100010 10000010 10101100` = **`E2 82 AC`**. Notice how leading bits (`0`, `110`, `1110`, `11110`) vs continuation bytes (`10`) make UTF-8 self-synchronizing.",
           "bookmarkable": true
         },
         {
@@ -293,22 +245,9 @@
     },
     {
       "id": "sec-synthesis",
-      "title": "5. Metacognitive Synthesis",
-      "description": "Articulate the mechanics of Java I/O decorators and character encoding boundaries in plain language.",
+      "title": "5. Exam Synthesis",
+      "description": "Connect character encoding boundaries, buffering flushes, and line-ending conventions to real TCP network programming.",
       "blocks": [
-        {
-          "id": "feynman-stream-decorator",
-          "block_type": "feynman_prompt",
-          "concept": "The Java I/O Decorator Chain",
-          "target_audience": "a first-year CS student who knows loops and objects but has never seen java.io",
-          "prompt": "Explain how `new BufferedReader(new InputStreamReader(new FileInputStream(\"in.txt\"), StandardCharsets.UTF_8))` works using a physical analogy (like water pipes or an assembly line). Explain what each of the three layers adds without using the words 'abstraction' or 'polymorphism'.",
-          "key_points_to_cover": [
-            "Inner layer (FileInputStream) fetches raw bytes directly from the OS/file",
-            "Middle layer (InputStreamReader) translates raw bytes into characters using a chosen encoding dictionary (UTF-8)",
-            "Outer layer (BufferedReader) batches reads in RAM to avoid slow trips to the OS and groups characters into lines"
-          ],
-          "bookmarkable": true
-        },
         {
           "id": "ref-encoding-vs-stream",
           "block_type": "reflection_rubric",
@@ -574,85 +513,6 @@
           "bookmarkable": true
         },
         {
-          "id": "qz-line-endings-blank",
-          "block_type": "quiz_question",
-          "question_type": "fill_in_the_blank",
-          "difficulty": 2,
-          "related_block_id": "th-reader-chain-eol",
-          "title": "BufferedReader.readLine() End-of-Stream Return Value",
-          "question": "When `BufferedReader.readLine()` reaches the end of the stream (EOF), it returns ___.",
-          "correct_answer": "null",
-          "explanation": "Unlike `InputStream.read()` and `Reader.read()` which return `-1` at EOF, `BufferedReader.readLine()` returns a `String` for each line and **`null`** when the end of the stream is reached.",
-          "hints": [
-            "What is the return type of `readLine()`?",
-            "It cannot return `-1` because it returns a `String` reference."
-          ],
-          "bookmarkable": true
-        },
-        {
-          "id": "fc-source-stream-sink",
-          "block_type": "flashcard",
-          "title": "Source, Stream, and Sink",
-          "front": "Define **Source**, **Stream**, and **Sink** in Java I/O.",
-          "back": "* **Source (Producer):** Produces data (file, socket, keyboard).\n* **Stream:** Ordered flow of data read or written piece by piece.\n* **Sink (Consumer):** Consumes data (file, socket, screen).",
-          "hint": "Think of producer -> flow -> consumer.",
-          "tags": ["java-io", "architecture"]
-        },
-        {
-          "id": "fc-read-int",
-          "block_type": "flashcard",
-          "title": "InputStream.read() Return Range",
-          "front": "What values can `InputStream.read()` return, and why is its return type `int`?",
-          "back": "Returns **`0` to `255`** for a byte, or **`-1`** at End-of-Stream (EOF). `int` is required because Java's `byte` is signed (`-128..127`) and has no spare sentinel value for EOF.",
-          "hint": "Think about signed `byte` and `0xFF`.",
-          "tags": ["java-io", "binary"]
-        },
-        {
-          "id": "fc-write-truncation",
-          "block_type": "flashcard",
-          "title": "OutputStream.write(int) Bit Masking",
-          "front": "What does `OutputStream.write(int b)` actually write to the stream?",
-          "back": "Only the **lowest 8 bits** (`b & 0xFF`)—a single byte. Upper 24 bits are silently ignored (e.g., `write(300)` writes `44` / `0x2C`).",
-          "hint": "300 in hex is 0x12C.",
-          "tags": ["java-io", "binary"]
-        },
-        {
-          "id": "fc-buffering-flush",
-          "block_type": "flashcard",
-          "title": "Buffering & flush()",
-          "front": "How big is Java's default `Buffered*` buffer, and when is `flush()` mandatory?",
-          "back": "Default buffer size is **8 KiB (8,192 bytes)**.\n\n`flush()` is mandatory on **open network connections** after sending a message so data doesn't sit in RAM while the peer waits.",
-          "hint": "Closing flushes automatically, but sockets stay open.",
-          "tags": ["java-io", "buffering", "networking"]
-        },
-        {
-          "id": "fc-block-write",
-          "block_type": "flashcard",
-          "title": "Block Read/Write Rule",
-          "front": "After `int n = in.read(buffer);`, why must you call `out.write(buffer, 0, n)` instead of `out.write(buffer)`?",
-          "back": "`read(buffer)` may perform a **short read** (especially on the final block or on a network socket). `write(buffer)` would write stale bytes left over at the end of the array.",
-          "hint": "Only `n` bytes in `buffer` are fresh.",
-          "tags": ["java-io", "binary"]
-        },
-        {
-          "id": "fc-endianness",
-          "block_type": "flashcard",
-          "title": "Big-Endian vs. Little-Endian",
-          "front": "Compare **Big-Endian** (network byte order) and **Little-Endian** for `0x12345678`.",
-          "back": "* **Big-Endian (MSB first):** `0x12 0x34 0x56 0x78` — IP, TCP, UDP, Java `DataOutputStream`.\n* **Little-Endian (LSB first):** `0x78 0x56 0x34 0x12` — x86/ARM, BMP, WAV, Protobuf numbers.",
-          "hint": "Network byte order puts the Most Significant Byte first.",
-          "tags": ["binary", "endianness", "networking"]
-        },
-        {
-          "id": "fc-mojibake",
-          "block_type": "flashcard",
-          "title": "Mojibake vs. US-ASCII Loss",
-          "front": "What happens to `\"élève\"` if:\n1. Written as UTF-8, read as ISO-8859-1?\n2. Written as US-ASCII?",
-          "back": "1. **Mojibake (`Ã©lÃ¨ve`):** Each 2-byte UTF-8 accented char is decoded as two Latin-1 chars.\n2. **Permanent loss (`?l?ve`):** Characters outside 0–127 are replaced with `?` (`0x3F`).",
-          "hint": "One is reversible if you know the original bytes; the other is irreversible.",
-          "tags": ["encoding", "utf-8"]
-        },
-        {
           "id": "fc-utf8-ranges",
           "block_type": "flashcard",
           "title": "UTF-8 Byte Count by Script",
@@ -660,15 +520,6 @@
           "back": "* **1 byte (`0xxxxxxx`):** ASCII (`U+0000`–`U+007F`)\n* **2 bytes (`110xxxxx 10xxxxxx`):** Accented Latin, Greek, Cyrillic, Arabic\n* **3 bytes (`1110xxxx ...`):** CJK, `€` (`U+20AC`)\n* **4 bytes (`11110xxx ...`):** Emojis (`U+10000`–`U+10FFFF`)",
           "hint": "1, 2, 3, or 4 bytes depending on code point range.",
           "tags": ["unicode", "utf-8"]
-        },
-        {
-          "id": "fc-char-vs-codepoint",
-          "block_type": "flashcard",
-          "title": "Java char vs. Unicode Code Point",
-          "front": "Why does `\"I😂DAI\".length()` return `6` instead of `5` in Java?",
-          "back": "Java `String` uses **UTF-16** (`char` = 16-bit code unit). `😂` (`U+1F602`) is above the BMP, so it is stored as a **surrogate pair** (two `char`s). Use `codePointCount()` to count code points.",
-          "hint": "BMP ends at U+FFFF.",
-          "tags": ["java", "unicode", "utf-16"]
         },
         {
           "id": "fc-utf8-bom",
@@ -687,15 +538,6 @@
           "back": "* **Linux/macOS:** LF (`\\n`, `0x0A`)\n* **Windows & HTTP/SMTP:** CRLF (`\\r\\n`, `0x0D 0x0A`)\n\nAvoid `System.lineSeparator()` because it changes output across OSes; use an explicit `EOL` constant.",
           "hint": "Network protocols require predictable bytes regardless of server OS.",
           "tags": ["java-io", "networking"]
-        },
-        {
-          "id": "fc-try-with-resources",
-          "block_type": "flashcard",
-          "title": "try-with-resources & AutoCloseable",
-          "front": "What does `try`-with-resources guarantee, and what interface must resources implement?",
-          "back": "Works with any **`AutoCloseable`** resource. Guarantees automatic `close()` (even on exceptions) in **reverse declaration order**, and skips opening later resources if an earlier one fails.",
-          "hint": "Last opened, first closed.",
-          "tags": ["java-io", "exceptions"]
         }
       ]
     }

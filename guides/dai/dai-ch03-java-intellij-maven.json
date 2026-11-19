@@ -2,7 +2,7 @@
   "id": "dai-ch03-java-intellij-maven",
   "title": "Chapter 03: Java, IntelliJ IDEA & Maven",
   "description": "Master Java's JVM and bytecode portability, SDKMAN! version management, IntelliJ IDEA Git hygiene, Maven project structure and lifecycles, fat JAR packaging with Shade, picocli CLIs with subcommands, and JUnit 5 unit testing.",
-  "estimated_minutes": 65,
+  "estimated_minutes": 35,
   "category": "Internet Applications (DAI)",
   "track": "DAI - Développement d'Applications Internet (TE1)",
   "track_order": 3,
@@ -39,7 +39,7 @@
           "block_type": "markdown",
           "title": "Write Once, Run Anywhere: Bytecode, JVM, JRE & JDK",
           "bookmarkable": true,
-          "content": "If you compile a C program on Linux, the compiler emits **native machine instructions** (x86-64 or ARM64 ELF binaries) that will crash or refuse to run on Windows or macOS. You must recompile separately for every target OS and CPU architecture.\n\nJava solves this with a two-step indirection—**Write Once, Run Anywhere (WORA)**:\n1. The Java compiler (`javac`) translates your `.java` source code into **bytecode** (`.class` files)—an intermediate instruction set not tied to any physical CPU.\n2. The **Java Virtual Machine (JVM)** on the target machine reads that bytecode and executes it.\n\nAs long as the target machine has a JVM at least as recent as the Java version you compiled for, the **exact same compiled `.class` or `.jar` file** runs unchanged on Linux, macOS, and Windows.\n\n### Nested Components: JVM ⊂ JRE ⊂ JDK\nThese three acronyms are **nested layers**, not competing alternatives:\n\n| Layer | Contains | Who needs it? |\n| :--- | :--- | :--- |\n| **JVM** (Java Virtual Machine) | Bytecode execution engine + Garbage Collector | Core runtime engine |\n| **JRE** (Java Runtime Environment) | JVM + Java Standard Library | End-users who only **run** Java apps |\n| **JDK** (Java Development Kit) | JRE + `javac` compiler + `jar`, debugger & dev tools | **Developers** who compile & build apps |\n\nDistributions such as **Eclipse Temurin** provide a complete, open-source JDK.\n\n> [!WARNING]\n> **Common Misconception (Non-Example):** Bytecode (`.class`) is *not* human-readable source code, nor is it native CPU machine code. And having only a JRE lets you run `java`, but `javac` will not exist—you need a **JDK** to compile."
+          "content": "Unlike C (which compiles to OS/CPU-specific native binaries), Java achieves **Write Once, Run Anywhere (WORA)** via two steps:\n1. `javac` compiles `.java` source into platform-independent **bytecode** (`.class`).\n2. The target OS's **JVM** executes that bytecode—the exact same `.class`/`.jar` runs unchanged on Linux, macOS, and Windows (as long as the JVM version is $\\ge$ the compiled target).\n\n### Nested Layers: JVM $\\subset$ JRE $\\subset$ JDK\n| Layer | Contains | Who needs it? |\n| :--- | :--- | :--- |\n| **JVM** (Java Virtual Machine) | Bytecode execution engine + Garbage Collector | Core runtime engine |\n| **JRE** (Java Runtime Environment) | JVM + Java Standard Library | End-users who only **run** apps |\n| **JDK** (Java Development Kit) | JRE + `javac` compiler, `jar`, debugger & dev tools | **Developers** who compile & build apps |\n\nOpen-source distributions like **Eclipse Temurin** ship a full JDK.\n\n> [!WARNING]\n> **Exam Traps:** Bytecode (`.class`) is *neither* human-readable source *nor* native CPU machine code. A JRE can run `java`, but has **no `javac`**—you need a **JDK** to compile."
         },
         {
           "id": "diag-jvm-pipeline",
@@ -55,63 +55,7 @@
           "block_type": "markdown",
           "title": "LTS Versions, SDKMAN!, JARs & Garbage Collection",
           "bookmarkable": true,
-          "content": "### Java LTS Releases & SDKMAN!\nJava releases a new version every 6 months, with a **Long Term Support (LTS)** release every **2 years** (e.g., Java 17, Java 21, **Java 25**).\n\nBecause different projects require different Java versions, developers use **SDKMAN!** to install and switch JDKs cleanly:\n- `sdk list java` — list available and locally installed JDK distributions (e.g., `-tem` for Eclipse Temurin).\n- `sdk install java 21.0.6-tem` — install Java 21 alongside Java 25.\n- `sdk use java 21.0.6-tem` — switch to Java 21 in the **current terminal session only**.\n- `sdk default java 25-tem` — set Java 25 as the **global default** for all new terminals.\n\n### Compiling, Running & JARs\nFor a single file `HelloWorld.java`:\n```bash\njavac HelloWorld.java   # produces HelloWorld.class\njava HelloWorld         # runs the main() method on the JVM\n```\nReal applications are packaged into a **JAR (Java ARchive)**—a standard ZIP file containing compiled `.class` bytecode, resources, and a `META-INF/MANIFEST.MF` file declaring the entry point (`Main-Class`). You run an executable JAR with:\n```bash\njava -Xmx1024M -Xms1024M -jar minecraft_server.1.21.jar nogui\n```\nHere `-Xmx` sets the **maximum** heap memory and `-Xms` sets the **initial** heap memory.\n\n### Automatic Garbage Collection (GC)\nUnlike C/C++, Java does not require `malloc()` and `free()`. The JVM's **Garbage Collector (GC)** automatically reclaims heap objects that your program can no longer reach. An object becomes *eligible* for collection when its last reference leaves scope or is set to `null`—though the exact moment it is freed is decided by the JVM."
-        },
-        {
-          "id": "exp-sandbox-java-basics",
-          "block_type": "sandbox",
-          "runtime": "java",
-          "title": "Java Sandbox: Compile, Run & Format CLI Arguments",
-          "bookmarkable": true,
-          "instructions": "Complete `Main.java` so that it formats a greeting using an array of simulated CLI arguments (`String[] cliArgs = {\"Bonjour\", \"DAI\"};`).\n\nImplement `formatGreeting(String[] args)` so that:\n1. If `args.length >= 2`, it returns `args[0] + \", \" + args[1] + \"!\"`.\n2. If `args.length == 1`, it returns `\"Hello, \" + args[0] + \"!\"`.\n3. Otherwise, it returns `\"Hello, World!\"`.\n\nRun the code and verify the three test cases print the expected lines.",
-          "starter_code": "public class Main {\n  public static String formatGreeting(String[] args) {\n    // TODO: handle 2+ args, 1 arg, and 0 args\n    return \"\";\n  }\n\n  public static void main(String[] args) {\n    System.out.println(formatGreeting(new String[]{\"Bonjour\", \"DAI\"}));\n    System.out.println(formatGreeting(new String[]{\"Alice\"}));\n    System.out.println(formatGreeting(new String[]{}));\n  }\n}",
-          "expected_output": "Bonjour, DAI!\nHello, Alice!\nHello, World!",
-          "solution": "public class Main {\n  public static String formatGreeting(String[] args) {\n    if (args.length >= 2) {\n      return args[0] + \", \" + args[1] + \"!\";\n    } else if (args.length == 1) {\n      return \"Hello, \" + args[0] + \"!\";\n    }\n    return \"Hello, World!\";\n  }\n\n  public static void main(String[] args) {\n    System.out.println(formatGreeting(new String[]{\"Bonjour\", \"DAI\"}));\n    System.out.println(formatGreeting(new String[]{\"Alice\"}));\n    System.out.println(formatGreeting(new String[]{}));\n  }\n}",
-          "hints": [
-            "Check `args.length >= 2` first, then `args.length == 1`, and fall back to the default.",
-            "Make sure there is a comma and a single space after the greeting word, and an exclamation mark at the end."
-          ]
-        },
-        {
-          "id": "sim-jvm-heap",
-          "block_type": "simulation",
-          "title": "JVM Heap Sizing (-Xmx) & Garbage Collection Pressure",
-          "description": "Explore how the JVM maximum heap size (-Xmx) relative to your application's live working set affects how frequently the Garbage Collector must run.",
-          "bookmarkable": true,
-          "formula": "\\text{GC Cycles/min} = \\frac{\\text{Allocation Rate} \\times 60}{\\max(16,\\; \\text{Xmx} - \\text{Live Set})}",
-          "variables": [
-            {
-              "id": "xmx",
-              "name": "Max Heap (-Xmx)",
-              "min": 256,
-              "max": 4096,
-              "step": 128,
-              "default": 1024,
-              "unit": "MB"
-            },
-            {
-              "id": "live_set",
-              "name": "Live Object Set",
-              "min": 128,
-              "max": 2048,
-              "step": 64,
-              "default": 512,
-              "unit": "MB"
-            },
-            {
-              "id": "alloc_rate",
-              "name": "Allocation Rate",
-              "min": 10,
-              "max": 200,
-              "step": 10,
-              "default": 50,
-              "unit": "MB/s"
-            }
-          ],
-          "compute_expression": "Math.round(((alloc_rate * 60) / Math.max(16, xmx - live_set)) * 10) / 10",
-          "chart_type": "line",
-          "output_label": "Estimated GC Cycles",
-          "output_unit": "cycles/min"
+          "content": "### LTS Releases & SDKMAN!\nJava releases every 6 months, with a **Long Term Support (LTS)** release every **2 years** (e.g., Java 17, 21, **25**). **SDKMAN!** manages multiple JDKs side-by-side:\n- `sdk list java` — list available/installed JDKs (e.g., `-tem` for Eclipse Temurin).\n- `sdk install java 21.0.6-tem` — install a JDK alongside existing ones.\n- `sdk use java 21.0.6-tem` — switch version for the **current terminal session only**.\n- `sdk default java 25-tem` — set the **global default** for all new terminals.\n\n### Compiling, Running & Executable JARs\n```bash\njavac HelloWorld.java   # compiles to HelloWorld.class\njava HelloWorld         # runs main() on the JVM\njava -Xmx1024M -Xms1024M -jar app.jar nogui\n```\n- A **JAR (Java ARchive)** is a ZIP containing `.class` bytecode, resources, and `META-INF/MANIFEST.MF` (which declares `Main-Class`).\n- `-Xmx` = **maximum** heap size; `-Xms` = **initial** heap size.\n\n### Automatic Garbage Collection (GC)\nNo manual `malloc()`/`free()`. An object becomes **eligible** for GC once it is unreachable (last reference leaves scope or is set to `null`); the **JVM** decides *when* to reclaim it."
         }
       ]
     },
@@ -125,7 +69,7 @@
           "block_type": "markdown",
           "title": "What Belongs in Git vs .gitignore?",
           "bookmarkable": true,
-          "content": "When you open a Java project in **IntelliJ IDEA**, it creates a `.idea/` directory. Not all files inside `.idea/` are created equal:\n- **Shared project configuration** (e.g., code style, Run/Debug configurations stored as project files, VCS mappings) helps every team member get the exact same setup. **Commit these.**\n- **Local machine configuration** (e.g., `.idea/workspace.xml` tracking which tabs you have open, `.idea/shelf/`, `.idea/libraries/`, `*.iml`, `*.iws`, `*.ipr`) is specific to your computer and causes constant merge conflicts if committed. **Ignore these in `.gitignore`.**\n\n> [!TIP]\n> **Clean Up IntelliJ's Default `.gitignore`:** IntelliJ often generates a `.idea/.gitignore` file or a bloated root `.gitignore` full of rules for tools you don't use. Delete `.idea/.gitignore` and maintain a clean, intentional root `.gitignore` covering local `.idea/` files, Maven's `target/` build directory, and OS clutter (`.DS_Store`, `Thumbs.db`, `*~`)."
+          "content": "IntelliJ IDEA creates a `.idea/` directory per project. Split files into two rules:\n- **Commit (shared project config):** code style, shared Run/Debug configs, VCS mappings.\n- **Ignore in `.gitignore` (machine-local / generated):** `.idea/workspace.xml` (open tabs/layout), `.idea/shelf/`, `.idea/libraries/`, `*.iml`, `*.iws`, `*.ipr`, Maven's `target/`, and OS clutter (`.DS_Store`, `Thumbs.db`, `*~`).\n\n> [!TIP]\n> Delete IntelliJ's auto-generated `.idea/.gitignore` and keep one clean root `.gitignore`."
         },
         {
           "id": "code-gitignore-maven",
@@ -209,21 +153,6 @@
               "note": "ManifestResourceTransformer writes Main-Class into MANIFEST.MF so `java -jar ...` knows where to start."
             }
           ]
-        },
-        {
-          "id": "exp-sandbox-gav-js",
-          "block_type": "sandbox",
-          "runtime": "javascript",
-          "title": "JavaScript Sandbox: Resolve Maven GAV Paths",
-          "bookmarkable": true,
-          "instructions": "Implement `resolveMavenPaths(groupId, artifactId, version)` to return an object with:\n- `m2Path`: the relative path inside `~/.m2/repository/` where Maven caches the JAR (note: dots in `groupId` become `/`!).\n- `targetJar`: the output path inside `target/`.\n\nExample: `groupId = 'info.picocli'`, `artifactId = 'picocli'`, `version = '4.7.7'` produces:\n`~/.m2/repository/info/picocli/picocli/4.7.7/picocli-4.7.7.jar` and `target/picocli-4.7.7.jar`.",
-          "starter_code": "function resolveMavenPaths(groupId, artifactId, version) {\n  // TODO: replace dots in groupId with '/' and construct m2Path and targetJar\n  return { m2Path: '', targetJar: '' };\n}\n\nconst res = resolveMavenPaths('info.picocli', 'picocli', '4.7.7');\nconsole.log(res.m2Path);\nconsole.log(res.targetJar);",
-          "expected_output": "~/.m2/repository/info/picocli/picocli/4.7.7/picocli-4.7.7.jar\ntarget/picocli-4.7.7.jar",
-          "solution": "function resolveMavenPaths(groupId, artifactId, version) {\n  const groupPath = groupId.replace(/\\./g, '/');\n  const jarName = `${artifactId}-${version}.jar`;\n  return {\n    m2Path: `~/.m2/repository/${groupPath}/${artifactId}/${version}/${jarName}`,\n    targetJar: `target/${jarName}`\n  };\n}\n\nconst res = resolveMavenPaths('info.picocli', 'picocli', '4.7.7');\nconsole.log(res.m2Path);\nconsole.log(res.targetJar);",
-          "hints": [
-            "Use `groupId.replace(/\\./g, '/')` to convert `info.picocli` into `info/picocli`.",
-            "The JAR filename is always `${artifactId}-${version}.jar`."
-          ]
         }
       ]
     },
@@ -253,22 +182,7 @@
           "block_type": "markdown",
           "title": "Why maven-jar-plugin Fails with Dependencies (and How Shade Fixes It)",
           "bookmarkable": true,
-          "content": "When your project has zero external dependencies, `maven-jar-plugin` with `<mainClass>ch.heigvd.Main</mainClass>` works fine. The moment you add `picocli` and run `java -jar target/app.jar`, it crashes:\n\n```text\nException in thread \"main\" java.lang.NoClassDefFoundError: picocli/CommandLine\n```\n\n**Why?** Maven builds many artifact types (libraries, web apps, CLIs), so by default `maven-jar-plugin` packages **only your own compiled classes**—not your dependencies. Even enabling `<addClasspath>true</addClasspath>` only writes `Class-Path: picocli-4.7.7.jar` into `MANIFEST.MF`, forcing you to ship extra JAR files alongside yours.\n\n**The Fix:** For a standalone CLI, replace `maven-jar-plugin` with **`maven-shade-plugin`**. During the `package` phase, its `shade` goal unpacks your dependencies and bundles them into a single self-contained **fat JAR (uber JAR)**. In `target/`, you will also see `original-*.jar` (without dependencies) and `dependency-reduced-pom.xml` as by-products.\n\n> [!TIP]\n> **Go Further — Spotless:** Adding `spotless-maven-plugin` (Google Java Format) lets you run `./mvnw spotless:check` and `./mvnw spotless:apply` to keep Java and `pom.xml` formatting consistent."
-        },
-        {
-          "id": "exp-sandbox-lifecycle-py",
-          "block_type": "sandbox",
-          "runtime": "python",
-          "title": "Python Sandbox: Simulate Maven Lifecycle Resolution",
-          "bookmarkable": true,
-          "instructions": "Write `resolve_maven_command(args)` in Python that takes a list of Maven lifecycle phases (e.g. `[\"clean\", \"package\"]`) and returns the ordered list of phases executed.\n\n- `\"clean\"` belongs to `[\"clean\"]`.\n- `DEFAULT_PHASES = [\"validate\", \"compile\", \"test\", \"package\", \"verify\", \"install\", \"deploy\"]`.\n- Any phase in `DEFAULT_PHASES` executes itself and all preceding phases in `DEFAULT_PHASES`.",
-          "starter_code": "DEFAULT_PHASES = [\"validate\", \"compile\", \"test\", \"package\", \"verify\", \"install\", \"deploy\"]\n\ndef resolve_maven_command(args):\n    executed = []\n    # TODO: expand 'clean' or any phase in DEFAULT_PHASES\n    return executed\n\nprint(resolve_maven_command([\"clean\", \"package\"]))\nprint(resolve_maven_command([\"test\"]))",
-          "expected_output": "['clean', 'validate', 'compile', 'test', 'package']\n['validate', 'compile', 'test']",
-          "solution": "DEFAULT_PHASES = [\"validate\", \"compile\", \"test\", \"package\", \"verify\", \"install\", \"deploy\"]\n\ndef resolve_maven_command(args):\n    executed = []\n    for arg in args:\n        if arg == \"clean\":\n            executed.append(\"clean\")\n        elif arg in DEFAULT_PHASES:\n            idx = DEFAULT_PHASES.index(arg)\n            executed.extend(DEFAULT_PHASES[:idx + 1])\n    return executed\n\nprint(resolve_maven_command([\"clean\", \"package\"]))\nprint(resolve_maven_command([\"test\"]))",
-          "hints": [
-            "Use `DEFAULT_PHASES.index(arg)` to find the target phase index.",
-            "Slice `DEFAULT_PHASES[:idx + 1]` and extend `executed`."
-          ]
+          "content": "With external dependencies (e.g., `picocli`), a plain `maven-jar-plugin` JAR crashes at runtime:\n```text\nException in thread \"main\" java.lang.NoClassDefFoundError: picocli/CommandLine\n```\n- **Why:** `maven-jar-plugin` packages **only your own `.class` files**, omitting dependencies (even `<addClasspath>true</addClasspath>` only writes `Class-Path:` in `MANIFEST.MF`, requiring separate JARs alongside yours).\n- **Fix (`maven-shade-plugin`):** During `package`, `shade:shade` unpacks and bundles all runtime dependencies into one self-contained **fat JAR (uber JAR)** with `Main-Class` in `MANIFEST.MF` (also emitting `original-*.jar` and `dependency-reduced-pom.xml` in `target/`).\n- **Formatting:** `spotless-maven-plugin` enables `./mvnw spotless:check` and `./mvnw spotless:apply`."
         }
       ]
     },
@@ -346,43 +260,14 @@
               "note": "Note argument order: expected value FIRST, actual result SECOND."
             }
           ]
-        },
-        {
-          "id": "exp-sandbox-java-cli-test",
-          "block_type": "sandbox",
-          "runtime": "java",
-          "title": "Java Sandbox: Extract & Unit-Test Greeting Logic",
-          "bookmarkable": true,
-          "instructions": "Implement `Greeting.greet(String greetings, String name)` so that:\n1. It returns `greetings + \", \" + name + \"!\"`.\n2. If `name` is `null` or blank (`name.isBlank()`), default `name` to `\"World\"`.\n\nThe `main` method acts like a lightweight JUnit runner using `assertEquals`. Fix `greet()` so all 3 assertions pass.",
-          "starter_code": "class Greeting {\n  public static String greet(String greetings, String name) {\n    // TODO: handle null/blank name and format greeting\n    return \"\";\n  }\n}\n\npublic class Main {\n  static void assertEquals(String expected, String actual) {\n    if (!expected.equals(actual)) {\n      throw new AssertionError(\"Expected '\" + expected + \"' but got '\" + actual + \"'\");\n    }\n  }\n\n  public static void main(String[] args) {\n    assertEquals(\"Hello, DAI!\", Greeting.greet(\"Hello\", \"DAI\"));\n    assertEquals(\"Bonjour, World!\", Greeting.greet(\"Bonjour\", \"  \"));\n    assertEquals(\"Goodbye, Alice!\", Greeting.greet(\"Goodbye\", \"Alice\"));\n    System.out.println(\"All 3 tests passed!\");\n  }\n}",
-          "expected_output": "All 3 tests passed!",
-          "solution": "class Greeting {\n  public static String greet(String greetings, String name) {\n    String target = (name == null || name.isBlank()) ? \"World\" : name;\n    return greetings + \", \" + target + \"!\";\n  }\n}\n\npublic class Main {\n  static void assertEquals(String expected, String actual) {\n    if (!expected.equals(actual)) {\n      throw new AssertionError(\"Expected '\" + expected + \"' but got '\" + actual + \"'\");\n    }\n  }\n\n  public static void main(String[] args) {\n    assertEquals(\"Hello, DAI!\", Greeting.greet(\"Hello\", \"DAI\"));\n    assertEquals(\"Bonjour, World!\", Greeting.greet(\"Bonjour\", \"  \"));\n    assertEquals(\"Goodbye, Alice!\", Greeting.greet(\"Goodbye\", \"Alice\"));\n    System.out.println(\"All 3 tests passed!\");\n  }\n}",
-          "hints": [
-            "Check `name == null || name.isBlank()` before building the string.",
-            "Do not forget the comma and space `\", \"` between `greetings` and `target`."
-          ]
         }
       ]
     },
     {
       "id": "sec-synthesis-reflection",
       "title": "6. Synthesis & Metacognitive Calibration",
-      "description": "Articulate core mechanisms in plain language and diagnose real-world Maven packaging failures.",
+      "description": "Diagnose real-world Maven packaging failures and dependency scoping.",
       "blocks": [
-        {
-          "id": "ref-feynman-jvm-maven",
-          "block_type": "feynman_prompt",
-          "concept": "JVM Portability & Fat JAR Packaging",
-          "target_audience": "a first-year CS student who has only ever compiled C programs with gcc",
-          "prompt": "Explain why a compiled Java JAR can run on Linux, macOS, and Windows without recompiling (unlike a C binary), and why you still need the Maven Shade plugin when your CLI uses an external library like picocli.",
-          "bookmarkable": true,
-          "key_points_to_cover": [
-            "C compiles to CPU-specific native instructions; javac compiles to platform-independent bytecode",
-            "The JVM acts as a translator/virtual machine on each OS",
-            "A plain JAR only contains your own .class files, not external dependencies",
-            "maven-shade-plugin bundles dependencies into a single self-contained fat JAR"
-          ]
-        },
         {
           "id": "ref-rubric-build-failure",
           "block_type": "reflection_rubric",
@@ -560,26 +445,8 @@
     {
       "id": "sec-flashcards",
       "title": "8. Flashcards for Spaced Repetition",
-      "description": "High-frequency mental models and commands to lock into long-term memory.",
+      "description": "High-yield exam facts not duplicated by the diagnostic quiz.",
       "blocks": [
-        {
-          "id": "fc-jvm-jre-jdk",
-          "block_type": "flashcard",
-          "title": "JVM vs JRE vs JDK",
-          "front": "How do **JVM**, **JRE**, and **JDK** relate to one another?",
-          "back": "They are nested layers:\n- **JVM**: executes `.class` bytecode.\n- **JRE**: JVM + standard library (run apps).\n- **JDK**: JRE + `javac` compiler & dev tools (develop apps).",
-          "hint": "Think nested dolls: what does a developer need vs an end-user?",
-          "tags": ["java", "jvm"]
-        },
-        {
-          "id": "fc-sdkman-commands",
-          "block_type": "flashcard",
-          "title": "SDKMAN! Version Switching",
-          "front": "What is the difference between `sdk use java <ver>` and `sdk default java <ver>`?",
-          "back": "- `sdk use java <ver>`: switches Java for the **current terminal session only**.\n- `sdk default java <ver>`: sets the **global default** for all future terminals.",
-          "hint": "One is temporary per shell; the other persists.",
-          "tags": ["sdkman", "java"]
-        },
         {
           "id": "fc-garbage-collection",
           "block_type": "flashcard",
@@ -590,15 +457,6 @@
           "tags": ["java", "gc"]
         },
         {
-          "id": "fc-intellij-gitignore",
-          "block_type": "flashcard",
-          "title": "IntelliJ IDEA & .gitignore",
-          "front": "Why should `.idea/workspace.xml`, `*.iml`, and `target/` be in `.gitignore`, while `pom.xml` and `mvnw` are committed?",
-          "back": "`workspace.xml` is personal IDE state, `*.iml` is regenerated from `pom.xml`, and `target/` holds generated build outputs. `pom.xml` and `mvnw` are shared project definitions needed by everyone to build identically.",
-          "hint": "Shared build truth vs machine-local/generated files.",
-          "tags": ["intellij", "git"]
-        },
-        {
           "id": "fc-maven-gav",
           "block_type": "flashcard",
           "title": "Maven GAV Coordinates",
@@ -606,33 +464,6 @@
           "back": "- `groupId` (organization/namespace)\n- `artifactId` (project name)\n- `version` (e.g., `1.0-SNAPSHOT`)\n\n`artifactId` + `version` determine the JAR name: `<artifactId>-<version>.jar`.",
           "hint": "G = group, A = artifact, V = version.",
           "tags": ["maven", "pom"]
-        },
-        {
-          "id": "fc-plugin-vs-dependency",
-          "block_type": "flashcard",
-          "title": "Maven Plugin vs Dependency",
-          "front": "What is the difference between a Maven **dependency** and a Maven **plugin**?",
-          "back": "A **dependency** is a library your Java code calls (ships with your app unless `test`-scoped). A **plugin** performs a build task (compile, test, shade) and does **not** end up in your JAR.",
-          "hint": "Runtime code vs build-time tool.",
-          "tags": ["maven"]
-        },
-        {
-          "id": "fc-maven-lifecycle-rule",
-          "block_type": "flashcard",
-          "title": "Maven Lifecycle Golden Rule",
-          "front": "What happens when you run `./mvnw clean package`?",
-          "back": "Maven runs the `clean` lifecycle (`clean`, deleting `target/`), then runs the `default` lifecycle from the start up to `package`: `validate` $\\rightarrow$ `compile` $\\rightarrow$ `test` $\\rightarrow$ `package`.",
-          "hint": "Running a phase runs all preceding phases in its lifecycle.",
-          "tags": ["maven", "lifecycle"]
-        },
-        {
-          "id": "fc-maven-shade",
-          "block_type": "flashcard",
-          "title": "maven-jar-plugin vs maven-shade-plugin",
-          "front": "Why use `maven-shade-plugin` instead of `maven-jar-plugin` for a standalone CLI?",
-          "back": "`maven-jar-plugin` omits external dependencies (causing `NoClassDefFoundError` at runtime). `maven-shade-plugin` bundles all runtime dependencies into a single self-contained **fat/uber JAR** with `Main-Class` in `MANIFEST.MF`.",
-          "hint": "Thin JAR vs Fat JAR.",
-          "tags": ["maven", "jar"]
         },
         {
           "id": "fc-maven-wrapper",

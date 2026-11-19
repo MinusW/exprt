@@ -1,8 +1,8 @@
 {
   "id": "dai-ch01-introduction-setup",
-  "title": "Chapter 00–01: Unix Environment & Java Toolchain Setup",
-  "description": "Build a rock-solid Unix development environment—understanding WSL2 filesystem boundaries, essential terminal navigation, Git identity, SDKMAN!, Java 25 LTS, and Maven.",
-  "estimated_minutes": 30,
+  "title": "Chapter 00–01: Unix Environment & Java Toolchain Reference",
+  "description": "Ultra-crisp 7-minute reference for the transferable Unix, WSL2 filesystem, Git identity, and Java 25 LTS / Maven toolchain concepts.",
+  "estimated_minutes": 7,
   "category": "Internet Applications (DAI)",
   "track": "DAI - Développement d'Applications Internet (TE1)",
   "track_order": 1,
@@ -29,144 +29,44 @@
   ],
   "sections": [
     {
-      "id": "sec-os-environment",
-      "title": "1. Unix Shell & WSL2 Filesystem Architecture",
-      "description": "Understand why network programming relies on a real Unix shell and how WSL2 separates native Linux storage from the Windows filesystem.",
+      "id": "sec-unix-toolchain-ref",
+      "title": "1. Unix, WSL2 & Toolchain Quick Reference",
+      "description": "Core Unix shell rules, WSL2 filesystem boundaries, Git identity semantics, and Java 25 LTS / Maven verification.",
       "blocks": [
-        {
-          "id": "th-unix-rationale",
-          "block_type": "markdown",
-          "title": "Why a Real Unix Shell Matters",
-          "content": "Networked applications and containers run overwhelmingly on Unix-like systems. Working inside a real Unix shell ensures your file permissions, line endings (`LF` vs `CRLF`), symlinks, and tooling behave identically to production Linux servers and Docker containers.\n\n- **Linux:** Native Unix shell and system package manager (`apt`, `dnf`, etc.).\n- **macOS:** Native BSD/Unix shell (`zsh`/`bash`) paired with a package manager such as Homebrew.\n- **Windows:** **WSL2 (Windows Subsystem for Linux)** running a real Linux kernel in a lightweight VM (e.g., Ubuntu LTS).\n\n> **Non-Example:** Compatibility shims like Git Bash, Cygwin, or MSYS2 translate POSIX calls onto Windows and diverge from real Linux behavior on permissions, sockets, and container tooling. Always use a genuine Unix environment.",
-          "bookmarkable": true
-        },
         {
           "id": "th-wsl2-filesystem",
           "block_type": "markdown",
-          "title": "WSL2 Filesystem Boundaries: /home vs /mnt/c",
-          "content": "In WSL2, Windows and Linux each own a separate filesystem, connected by a cross-OS bridge:\n\n1. **Native Linux Home (`~` / `/home/<user>`):** Lives on WSL2's virtual `ext4` disk. File I/O is fast and POSIX permissions (`chmod`, symlinks, executable bits) work natively. **All development projects must live here.**\n2. **Windows Drives from Linux (`/mnt/c/`, `/mnt/d/`, …):** Windows NTFS drives mounted into Linux via the **9P protocol**. Crossing this bridge for builds (`mvn`, `git`, `docker`) causes severe I/O slowdowns, permission mismatches, and `CRLF` line-ending bugs.\n3. **Linux Files from Windows (`\\\\wsl.localhost\\<Distro>\\home\\<user>`):** Exposes the WSL2 filesystem to Windows tools (such as your IDE).\n\n> **Caution:** Never manipulate files inside `/home/<user>` using Windows File Explorer or store projects on `C:\\`. Run file operations (`mkdir`, `cp`, `mv`, `rm`, `git`) inside the Unix terminal.",
+          "title": "Unix Shell & WSL2 Filesystem Boundaries (/home vs /mnt/c)",
+          "content": "Networked apps and Docker containers target real Unix semantics (POSIX permissions, symlinks, `LF` line endings). Use native Linux, macOS (`zsh`/`bash`), or **WSL2** (real Linux kernel VM on Windows)—never compatibility shims like Git Bash, Cygwin, or MSYS2.\n\n| Location | Underlying FS | Use Case & Trap |\n| :--- | :--- | :--- |\n| `/home/<user>` (`~`) | Native Linux `ext4` | **Store all projects here.** Fast I/O, native `chmod`/symlinks. |\n| `/mnt/c/`, `/mnt/d/` | Windows NTFS via **9P bridge** | **Avoid for builds (`mvn`, `git`, `docker`).** Severe I/O slowdown, broken POSIX permissions, `CRLF` issues. |\n| `\\\\wsl.localhost\\<Distro>\\home\\<user>` | WSL2 exposed to Windows | Open in your Windows IDE; **never** edit Linux files via Windows File Explorer. |",
           "bookmarkable": true
         },
-        {
-          "id": "diag-wsl-filesystem",
-          "block_type": "kroki",
-          "diagram_type": "mermaid",
-          "title": "WSL2 vs Windows Filesystem Architecture",
-          "caption": "Keep all projects inside the native Linux filesystem (/home/<user>) to avoid 9P bridge bottlenecks and POSIX permission corruption.",
-          "source": "flowchart TD\n  subgraph WinSide [\"Windows Host (NTFS)\"]\n    WT[\"Windows Terminal (Ubuntu Shell)\"]\n    IDE[\"IDE on Windows\"]\n    CDrive[\"Windows Drive (C:\\Users\\...)\"]\n    Explorer[\"Windows File Explorer\"]\n  end\n\n  subgraph WSLSide [\"WSL2 Linux VM (ext4)\"]\n    Home[\"Linux Home (/home/user or ~)\\nALL PROJECTS HERE\"]\n    MntC[\"Cross-OS Mount (/mnt/c/...)\"]\n  end\n\n  WT --> Home\n  IDE -->|\"\\\\wsl.localhost\\...\"| Home\n  CDrive <-->|\"Slow 9P bridge (avoid for builds)\"| MntC\n  Explorer -.->|\"Do not edit Linux files here\"| Home\n\n  classDef win fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;\n  classDef linux fill:#ecfdf5,stroke:#059669,stroke-width:2px;\n  classDef warn fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px;\n  class WT,IDE,CDrive win;\n  class Home linux;\n  class Explorer,MntC warn;",
-          "bookmarkable": true
-        }
-      ]
-    },
-    {
-      "id": "sec-terminal-git",
-      "title": "2. Unix Terminal Fundamentals & Git Identity",
-      "description": "Build fluency with Unix paths and core shell commands, and configure Git cleanly.",
-      "blocks": [
         {
           "id": "th-terminal-basics",
           "block_type": "markdown",
-          "title": "Paths & Essential Unix Terminal Commands",
-          "content": "Unix paths are case-sensitive and separated by forward slashes (`/`). Key path anchors:\n- `/` — filesystem root\n- `~` — your home directory (`/home/<user>` on Linux, `/Users/<user>` on macOS)\n- `.` — current directory\n- `..` — parent directory\n\nUse `man <command>` to inspect any command's manual.\n\n| Command | Purpose |\n| :--- | :--- |\n| `pwd` | Print the current working directory |\n| `ls` / `ls -la` | List files (`-l` long format, `-a` include hidden `.` files) |\n| `cd <dir>` / `cd ..` | Change directory / move to parent directory |\n| `touch <file>` | Create an empty file (or update its timestamp) |\n| `mkdir -p <dir/sub>` | Create a directory (and missing parents with `-p`) |\n| `rm <file>` / `rm -r <dir>` | Remove a file / recursively remove a directory |\n| `cp <src> <dst>` | Copy a file (add `-r` for directories) |\n| `mv <src> <dst>` | Move or rename a file/directory |\n| `cat <file>` | Print the entire contents of a file |\n| `less <file>` | Page through a file (`q` to quit) |\n| `tail -f <file>` | Print the last lines and follow live log output |",
-          "bookmarkable": true
-        },
-        {
-          "id": "exp-sandbox-terminal-sim",
-          "block_type": "sandbox",
-          "runtime": "python",
-          "title": "Practice: WSL2 Path Safety Validator",
-          "instructions": "Write a Python function `is_safe_wsl_path(path)` that returns `True` if a project path is safely inside the Linux `/home/` directory (or uses `~`), and `False` if it is on a Windows mount (`/mnt/...`) or a Windows-style path (`C:\\...` or `\\\\wsl.localhost\\...`). Run the code to verify all test cases pass.",
-          "starter_code": "def is_safe_wsl_path(path: str) -> bool:\n    # TODO: Return True only if path starts with '/home/' or '~'\n    pass\n\ntests = [\n    (\"/home/alice/dai-lab01\", True),\n    (\"~/projects/smtp-client\", True),\n    (\"/mnt/c/Users/alice/dai-lab01\", False),\n    (\"C:\\\\Users\\\\alice\\\\dai-lab01\", False),\n]\n\nfor p, expected in tests:\n    result = is_safe_wsl_path(p)\n    assert result == expected, f\"Failed for {p}: got {result}, expected {expected}\"\nprint(\"All WSL2 path checks passed!\")",
-          "expected_output": "All WSL2 path checks passed!",
-          "solution": "def is_safe_wsl_path(path: str) -> bool:\n    return path.startswith(\"/home/\") or path == \"~\" or path.startswith(\"~/\")\n\ntests = [\n    (\"/home/alice/dai-lab01\", True),\n    (\"~/projects/smtp-client\", True),\n    (\"/mnt/c/Users/alice/dai-lab01\", False),\n    (\"C:\\\\Users\\\\alice\\\\dai-lab01\", False),\n]\n\nfor p, expected in tests:\n    result = is_safe_wsl_path(p)\n    assert result == expected, f\"Failed for {p}: got {result}, expected {expected}\"\nprint(\"All WSL2 path checks passed!\")",
-          "hints": [
-            "Check `path.startswith('/home/')` for absolute Linux home paths.",
-            "Also allow `path == '~'` or `path.startswith('~/')` for home shorthand."
-          ],
+          "title": "Unix Paths & Essential Shell Commands",
+          "content": "Unix paths are **case-sensitive** and use `/`. Anchors: `/` (root), `~` (home), `.` (current dir), `..` (parent dir). Paths without a leading `/` are relative to `pwd`.\n\n| Command | Purpose |\n| :--- | :--- |\n| `pwd` / `cd <dir>` / `cd ..` | Print working directory / change directory / move to parent |\n| `ls -la` | List all files (long format + hidden `.` files) |\n| `touch <file>` / `mkdir -p <a/b>` | Create empty file / create nested directories |\n| `cp -r <src> <dst>` / `mv <src> <dst>` | Recursively copy / move or rename |\n| `rm <file>` / `rm -r <dir>` | Delete file / recursively delete directory |\n| `cat` / `less` / `tail -f <file>` | Dump file / page file (`q` quits) / follow live logs |",
           "bookmarkable": true
         },
         {
           "id": "th-git-github-setup",
           "block_type": "markdown",
-          "title": "Git Identity Configuration",
-          "content": "Verify Git is available in your Unix shell with `git --version`, then configure your global author identity. Git stamps this name and email onto every commit you create:\n\n```bash\ngit config --global user.name \"First-name Last-name\"\ngit config --global user.email \"your.email@example.com\"\n```\n\n> **Note:** `user.name` and `user.email` are only a plain-text metadata label, **not** cryptographic proof of authorship. Anyone can set any name/email in Git config; cryptographic verification requires SSH or GPG commit signing.",
+          "title": "Git Identity: Metadata vs. Cryptographic Proof",
+          "content": "```bash\ngit config --global user.name \"First-name Last-name\"\ngit config --global user.email \"your.email@example.com\"\n```\n\n> **Exam Trap:** `user.name` and `user.email` (stored in `~/.gitconfig`) are **unverified plain-text metadata labels**, NOT proof of authorship. Anyone can forge them; cryptographic verification requires **SSH or GPG commit signing**.",
           "bookmarkable": true
-        }
-      ]
-    },
-    {
-      "id": "sec-java-maven-toolchain",
-      "title": "3. Java 25 LTS & Maven via SDKMAN!",
-      "description": "Manage JDK and Maven versions cleanly with SDKMAN! and verify your toolchain from the terminal.",
-      "blocks": [
+        },
         {
           "id": "th-sdkman-java-maven",
           "block_type": "markdown",
-          "title": "Installing Java 25 LTS & Maven with SDKMAN!",
-          "content": "**SDKMAN!** manages Java toolchain versions cleanly, letting you install and switch between JDKs and build tools without manual `PATH` or `JAVA_HOME` edits.\n\n1. Install SDKMAN! and open a new shell so its initialization script is loaded.\n2. List available JDK distributions, install the latest **Temurin** LTS Java (Java 25 LTS), and install **Maven**:\n\n```bash\nsdk list java\nsdk install java <version>-tem\nsdk install maven\n```\n\n3. Verify all three tools in your Unix terminal:\n   - `sdk version`\n   - `java --version` (should show Temurin 25 or newer LTS)\n   - `mvn --version` (should show Maven bound to that same Java runtime)",
-          "bookmarkable": true
-        },
-        {
-          "id": "code-verify-toolchain",
-          "block_type": "code",
-          "language": "bash",
-          "filename": "verify-env.sh",
-          "title": "Toolchain Verification Script",
-          "code": "#!/usr/bin/env bash\npwd\ngit --version\ngit config user.name\nsdk version\njava --version\nmvn --version",
-          "highlight_lines": [2, 4, 6, 7],
-          "annotations": [
-            {
-              "line": 2,
-              "note": "Confirms your current directory is inside your native Unix home (/home/<user> on Linux/WSL), not /mnt/c/."
-            },
-            {
-              "line": 4,
-              "note": "Confirms your global Git commit author label is configured."
-            },
-            {
-              "line": 6,
-              "note": "Must report Temurin 25 (or newer LTS) managed by SDKMAN!."
-            },
-            {
-              "line": 7,
-              "note": "Verifies Maven is installed and bound to the same Java 25 runtime."
-            }
-          ],
-          "bookmarkable": true
-        },
-        {
-          "id": "ref-setup-rubric",
-          "block_type": "reflection_rubric",
-          "title": "Synthesis: Diagnosing a Broken WSL2 Java Environment",
-          "prompt": "A developer on Windows reports two issues: (1) their Maven builds are painfully slow and `chmod +x` has no effect because their repository is in `C:\\Users\\Alex\\projects`, and (2) running `java --version` in Ubuntu prints 'command not found' even though they installed Java on Windows. Diagnose both issues and give the exact fixes.",
-          "self_check_criteria": [
-            "Identified that storing projects on C:\\ (/mnt/c/) crosses the 9P Windows-Linux filesystem boundary, causing slow I/O and broken POSIX permissions.",
-            "Specified moving the repository into the native Linux home directory (/home/<user> or ~) and running git/mvn commands from the Unix shell.",
-            "Explained that WSL2 is a separate Linux environment and does not automatically share Windows-installed JDKs.",
-            "Specified installing Java 25 LTS and Maven inside Ubuntu using SDKMAN! (`sdk install java <version>-tem`, `sdk install maven`) and verifying with `java --version` and `mvn --version`."
-          ],
-          "model_answer": "1) Storing projects in `C:\\Users\\Alex\\projects` (`/mnt/c/...`) forces WSL2 to access files across the 9P Windows-Linux bridge, which causes severe I/O slowdowns for Maven/Git and prevents native POSIX permissions (`chmod`) from working properly. Move the repository into `/home/<user>/projects` inside WSL2 and manipulate files from the Ubuntu terminal.\n\n2) WSL2 runs an isolated Linux userland, so a JDK installed on Windows is not your Linux `java` binary. Install SDKMAN! inside Ubuntu, then run `sdk install java <version>-tem` and `sdk install maven`. Open a new shell and verify with `java --version` and `mvn --version`.",
-          "bookmarkable": true
-        },
-        {
-          "id": "feynman-wsl-boundary",
-          "block_type": "feynman_prompt",
-          "concept": "Why WSL2 Separates /home/<user> from /mnt/c/",
-          "target_audience": "a first-year student who has only ever used Windows File Explorer",
-          "prompt": "Explain in plain language why WSL2 has two separate file worlds (/home/<user> vs /mnt/c/), and why putting Java projects in C:\\ or dragging files with Windows File Explorer causes trouble.",
-          "key_points_to_cover": [
-            "WSL2 runs a real Linux computer inside Windows with its own native Linux disk (/home/<user>).",
-            "Accessing C:\\ (/mnt/c/) or poking into Linux files from Windows Explorer forces two different operating systems to translate permissions and file formats across a slow bridge.",
-            "Keeping projects in /home/<user> and using only the Unix terminal (and opening the WSL path in an IDE) avoids permission corruption and slow builds."
-          ],
+          "title": "Java 25 LTS & Maven via SDKMAN!",
+          "content": "**SDKMAN!** manages `JAVA_HOME` and `PATH` automatically (open a new shell after installing it). On WSL2, install the JDK **inside Linux**—WSL2 does not share Windows-installed JDKs.\n\n```bash\nsdk list java\nsdk install java <version>-tem   # Temurin Java 25 LTS\nsdk install maven\njava --version && mvn --version  # Verify Maven uses the same JDK\n```",
           "bookmarkable": true
         }
       ]
     },
     {
-      "id": "sec-retrieval-and-srs",
-      "title": "4. Knowledge Retrieval & Spaced Repetition",
-      "description": "Test your mastery of WSL2 filesystem boundaries, Unix terminal navigation, Git identity, and SDKMAN! toolchain verification.",
+      "id": "sec-quick-check",
+      "title": "2. Quick Concept Check",
+      "description": "Three high-signal checks on WSL2 boundaries, relative Unix paths, and Git author metadata.",
       "blocks": [
         {
           "id": "qz-wsl-paths",
@@ -187,22 +87,6 @@
           "hints": [
             "Think about which filesystem is native to the Ubuntu kernel where your builds and containers run.",
             "Crossing the 9P bridge (`/mnt/c/`) or editing Linux files from Windows Explorer causes performance and permission bugs."
-          ],
-          "bookmarkable": true
-        },
-        {
-          "id": "qz-terminal-commands",
-          "block_type": "quiz_question",
-          "question_type": "fill_in_the_blank",
-          "title": "Print Working Directory Command",
-          "difficulty": 1,
-          "related_block_id": "th-terminal-basics",
-          "question": "In a Unix terminal, the ___ command prints the full path of your current working directory.",
-          "correct_answer": "pwd",
-          "explanation": "`pwd` stands for 'print working directory' and outputs the absolute path of the folder your shell is currently in. `ls` lists directory contents, `cd` changes directories, and `cat` prints file contents.",
-          "hints": [
-            "It is a 3-letter acronym for 'Print Working Directory'.",
-            "In Unix shells, it tells you where `cd` has currently placed you."
           ],
           "bookmarkable": true
         },
@@ -248,72 +132,6 @@
             "Think about whether `git config` involves any private key or password.",
             "Distinguish between commit metadata labels and cryptographic commit signing."
           ],
-          "bookmarkable": true
-        },
-        {
-          "id": "qz-sdkman-verification",
-          "block_type": "quiz_question",
-          "question_type": "multi_select",
-          "title": "SDKMAN! & Java Toolchain Verification",
-          "difficulty": 2,
-          "related_block_id": "th-sdkman-java-maven",
-          "question": "Which statements about managing Java 25 LTS and Maven with SDKMAN! are **true**? (Select all that apply)",
-          "options": [
-            "SDKMAN! manages `JAVA_HOME` and `PATH` for you so you can switch JDKs cleanly.",
-            "Running `mvn --version` confirms both Maven's version and the Java runtime it is using.",
-            "After installing SDKMAN!, you must open a new shell (or source its init script) before `sdk` commands work.",
-            "You must manually edit `/etc/environment` for every new JDK version installed via `sdk install java`."
-          ],
-          "correct_answer": [
-            "SDKMAN! manages `JAVA_HOME` and `PATH` for you so you can switch JDKs cleanly.",
-            "Running `mvn --version` confirms both Maven's version and the Java runtime it is using.",
-            "After installing SDKMAN!, you must open a new shell (or source its init script) before `sdk` commands work."
-          ],
-          "explanation": "SDKMAN! automatically manages `JAVA_HOME` and `PATH` via shell initialization scripts, which is why you open a new terminal after installing it. `mvn --version` outputs both the Maven version and the underlying Java version/vendor. Manual `/etc/environment` edits are unnecessary.",
-          "hints": [
-            "Why do developers use SDKMAN! instead of manually configuring `JAVA_HOME`?",
-            "What information does `mvn --version` print besides Maven's own version?"
-          ],
-          "bookmarkable": true
-        },
-        {
-          "id": "fc-wsl-home-vs-mnt",
-          "block_type": "flashcard",
-          "title": "WSL2 Home (~) vs Windows Mount (/mnt/c/)",
-          "front": "In WSL2, what is the difference between `/home/<user>` (`~`) and `/mnt/c/`, and where must projects live?",
-          "back": "- **`/home/<user>` (`~`):** Native Linux `ext4` home directory inside WSL2. **All projects must live here.**\n- **`/mnt/c/`:** Cross-OS 9P mount of your Windows `C:\\` drive (slow I/O, broken POSIX permissions).\n- Never edit WSL project files from Windows File Explorer (`\\\\wsl.localhost\\...`).",
-          "hint": "One is native Linux storage; the other crosses the 9P OS bridge.",
-          "tags": ["wsl2", "filesystem"],
-          "bookmarkable": true
-        },
-        {
-          "id": "fc-sdkman-commands",
-          "block_type": "flashcard",
-          "title": "SDKMAN! Java 25 LTS & Maven Commands",
-          "front": "How do you list, install, and verify **Temurin Java 25 LTS** and **Maven** using **SDKMAN!**?",
-          "back": "1. `sdk list java` (find latest `<version>-tem` LTS)\n2. `sdk install java <version>-tem`\n3. `sdk install maven`\n4. Verify with `sdk version`, `java --version`, and `mvn --version`.",
-          "hint": "Three `sdk` subcommands: `list`, `install java`, `install maven`.",
-          "tags": ["sdkman", "java-25", "maven"],
-          "bookmarkable": true
-        },
-        {
-          "id": "fc-terminal-essentials",
-          "block_type": "flashcard",
-          "title": "Core Unix Terminal Commands",
-          "front": "What do `pwd`, `touch`, `rm -r`, `cp -r`, `less`, and `tail -f` do in a Unix shell?",
-          "back": "- `pwd`: Print working directory\n- `touch <file>`: Create empty file\n- `rm -r <dir>`: Recursively delete directory\n- `cp -r <src> <dst>`: Recursively copy directory\n- `less <file>`: Page through file (`q` to quit)\n- `tail -f <file>`: Follow live lines (e.g., logs)",
-          "hint": "Basic file navigation, creation, deletion, and log inspection.",
-          "tags": ["terminal", "unix"],
-          "bookmarkable": true
-        },
-        {
-          "id": "fc-git-identity",
-          "block_type": "flashcard",
-          "title": "Git Global Identity Configuration",
-          "front": "How do you set your Git author name and email globally, and is this a cryptographic proof of identity?",
-          "back": "```bash\ngit config --global user.name \"First-name Last-name\"\ngit config --global user.email \"your.email@example.com\"\n```\nNo—it is only an unverified **metadata label** stamped on commits. Cryptographic proof requires SSH or GPG commit signing.",
-          "hint": "Uses `git config --global`.",
-          "tags": ["git"],
           "bookmarkable": true
         }
       ]

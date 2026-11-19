@@ -2,7 +2,7 @@
   "id": "dai-ch05-docker-compose",
   "title": "Chapter 05: Docker & Docker Compose",
   "description": "Master containerization from first principles: bare metal vs VMs vs containers, OCI images and registries, Dockerfile layer caching and multi-stage builds, volumes, bridge DNS networking, and multi-service orchestration with Docker Compose.",
-  "estimated_minutes": 65,
+  "estimated_minutes": 35,
   "category": "Internet Applications (DAI)",
   "track": "DAI - Développement d'Applications Internet (TE1)",
   "track_order": 5,
@@ -34,18 +34,11 @@
       "description": "Understand the dependency-collision problem and compare the three execution models: bare metal, virtual machines, and containers.",
       "blocks": [
         {
-          "id": "th-works-on-my-machine",
-          "block_type": "markdown",
-          "title": "The Problem Containers Solve",
-          "bookmarkable": true,
-          "content": "Suppose a Java CLI runs on your laptop because you installed **Java 25** and **Maven** in the exact versions it expects. Now imagine deploying three applications on the same server:\n\n* App A requires **Java 25**.\n* App B requires **Java 17**.\n* App C requires **PostgreSQL 14**, while App D requires **PostgreSQL 16**.\n\nInstalling everything directly on one machine causes **version collisions**. Worse, every project has its own ritual to build and launch (`./mvnw package && java -jar app.jar`, `pip install && python app.py`, or a custom shell script). **\"It works on my machine\" is not a deployment plan.**\n\nContainers solve this by packaging an application together with its exact runtime, libraries, and startup command, giving you three guarantees:\n\n| Guarantee | What It Means in Practice |\n| :--- | :--- |\n| **One recipe** | A single `Dockerfile` describes how to build the environment and what the container runs by default. |\n| **One artefact** | Each version of your app becomes one immutable **image**, built once and identical on every machine. |\n| **One interface** | The same `docker build`, `docker run`, `docker stop`, and `docker logs` commands work for Java, Python, Go, or Nginx. |"
-        },
-        {
           "id": "th-three-ways-to-run",
           "block_type": "markdown",
-          "title": "Three Ways to Run Software",
+          "title": "Bare Metal vs Virtual Machines vs Containers",
           "bookmarkable": true,
-          "content": "Every server—including \"the cloud\", which is just someone else's computer—runs software using one of three isolation models:\n\n1. **Bare Metal:** Software is installed directly on the host OS. Zero virtualization overhead (fastest), but **zero isolation**—shared libraries and runtimes collide.\n2. **Virtual Machines (VMs):** A **hypervisor** simulates complete hardware, and each VM boots its own **full guest operating system** (kernel, init system, drivers). Isolation is strong, but each VM consumes gigabytes of disk, hundreds of megabytes to gigabytes of RAM, and tens of seconds to boot.\n3. **Containers:** Processes run isolated from the rest of the machine (using Linux **namespaces** for isolation and **cgroups** for resource limits), **sharing the host Linux kernel** instead of booting a second OS.\n\n> [!IMPORTANT]\n> **Explicit Non-Example:** A container is **not** a miniature virtual machine. It does **not** boot its own kernel. On Linux, containers share your machine's Linux kernel directly. On macOS and Windows, Docker Desktop runs **one** small Linux VM under the hood, and all of your containers share that single VM's kernel.\n\n| Property | Bare Metal | Virtual Machine | Container |\n| :--- | :--- | :--- | :--- |\n| **Isolation** | None (shared OS & libs) | Strong (separate kernel & virtual HW) | Process-level (namespaces + cgroups) |\n| **Kernel** | Host OS kernel | Own guest OS kernel per VM | Shared host Linux kernel |\n| **Disk / RAM Footprint** | App only | Gigabytes (full OS per VM) | Tens to hundreds of MB (app + runtime) |\n| **Startup Time** | Instant | 10s – minutes (OS boot) | Sub-second (~0.2 s for `nginx`) |"
+          "content": "Running multiple apps on one server (e.g., Java 25 + Java 17, PostgreSQL 14 + 16) causes **dependency collisions**. Containers eliminate *\"it works on my machine\"* via **one recipe** (`Dockerfile`), **one immutable artefact** (image), and **one CLI interface** (`docker build/run/stop/logs`).\n\n### The Three Execution Models\n1. **Bare Metal:** Installed directly on host OS. Fastest (zero overhead), **zero isolation**.\n2. **Virtual Machines (VMs):** A **hypervisor** virtualizes hardware; each VM boots its own **full guest OS + kernel**. Strong isolation, but GBs of RAM/disk and 10s–minutes boot.\n3. **Containers:** Isolated processes using Linux **namespaces** (isolation) and **cgroups** (resource limits) that **share the host Linux kernel**.\n\n> [!IMPORTANT]\n> **Exam Trap:** A container is **not** a mini-VM—it does **not** boot its own kernel. On Linux it shares the host kernel directly; on macOS/Windows, Docker Desktop runs **one** Linux VM whose kernel all containers share.\n\n| Property | Bare Metal | Virtual Machine | Container |\n| :--- | :--- | :--- | :--- |\n| **Isolation** | None | Strong (separate kernel & virtual HW) | Process-level (namespaces + cgroups) |\n| **Kernel** | Host OS kernel | Own guest OS kernel per VM | Shared host Linux kernel |\n| **Disk / RAM** | App only | Gigabytes (full OS per VM) | Tens–hundreds of MB (app + runtime) |\n| **Startup** | Instant | 10s – minutes (OS boot) | Sub-second (~0.2 s for `nginx`) |"
         },
         {
           "id": "diag-vm-vs-container",
@@ -55,54 +48,6 @@
           "caption": "VMs duplicate a full Guest OS and kernel per application; containers share a single host Linux kernel through the container engine.",
           "bookmarkable": true,
           "source": "flowchart TD\n  subgraph VM [\"Virtual Machines (Separate Guest OS per App)\"]\n    VM1App[\"App A + Libs\"] --> VM1OS[\"Guest OS 1 (Full Kernel)\"]\n    VM2App[\"App B + Libs\"] --> VM2OS[\"Guest OS 2 (Full Kernel)\"]\n    VM1OS --> Hyp[\"Hypervisor\"]\n    VM2OS --> Hyp\n    Hyp --> Host1[\"Host OS + Hardware\"]\n  end\n  subgraph CT [\"Containers (Shared Host Kernel)\"]\n    C1App[\"App A + JRE 25\"] --> Eng[\"Docker Engine (namespaces + cgroups)\"]\n    C2App[\"App B + JRE 17\"] --> Eng\n    Eng --> Host2[\"Host Linux Kernel + Hardware\"]\n  end"
-        },
-        {
-          "id": "sim-footprint-startup",
-          "block_type": "simulation",
-          "title": "Memory Footprint: VMs vs Containers at Scale",
-          "description": "Compare total RAM required for N microservice instances. Set `is_vm` to 1 to model Virtual Machines (each booting its own Guest OS), or 0 to model Containers (sharing one host OS kernel).",
-          "formula": "\\text{RAM}_{\\text{total}} = N \\cdot M_{\\text{app}} + \\text{is\\_vm} \\cdot N \\cdot M_{\\text{OS}} + (1 - \\text{is\\_vm}) \\cdot M_{\\text{OS}}",
-          "variables": [
-            {
-              "id": "instances",
-              "name": "Number of Services (N)",
-              "min": 1,
-              "max": 20,
-              "step": 1,
-              "default": 6
-            },
-            {
-              "id": "app_mb",
-              "name": "App + Runtime RAM (MB)",
-              "min": 50,
-              "max": 500,
-              "step": 50,
-              "default": 150,
-              "unit": "MB"
-            },
-            {
-              "id": "os_mb",
-              "name": "OS Kernel + Base RAM (MB)",
-              "min": 512,
-              "max": 4096,
-              "step": 256,
-              "default": 2048,
-              "unit": "MB"
-            },
-            {
-              "id": "is_vm",
-              "name": "Mode (0 = Containers, 1 = VMs)",
-              "min": 0,
-              "max": 1,
-              "step": 1,
-              "default": 1
-            }
-          ],
-          "compute_expression": "instances * app_mb + is_vm * instances * os_mb + (1 - is_vm) * os_mb",
-          "chart_type": "bar",
-          "output_label": "Total RAM Consumed",
-          "output_unit": "MB",
-          "bookmarkable": true
         }
       ]
     },
@@ -133,21 +78,6 @@
           "caption": "Code and Dockerfile are frozen into an image by docker build, shared via a registry, and instantiated as containers with docker run.",
           "bookmarkable": true,
           "source": "flowchart LR\n  Src[\"Dockerfile + Source Code\"] -->|\"docker build\"| Img[\"Local Image (Read-Only)\"]\n  Img -->|\"docker push\"| Reg[\"Registry (ghcr.io / Docker Hub)\"]\n  Reg -->|\"docker pull\"| Host[\"Target Machine Image Cache\"]\n  Host -->|\"docker run\"| Cont[\"Container (Isolated + Writable Layer)\"]"
-        },
-        {
-          "id": "exp-sandbox-tag-arch",
-          "block_type": "sandbox",
-          "runtime": "python",
-          "title": "Simulate a Registry Pull Resolver (Tags, Visibility & Architecture)",
-          "instructions": "Complete `resolve_pull(image_ref, host_arch, registry)` to simulate how `docker pull` validates a repository name, tag, package visibility, and CPU architecture.\n\nRules:\n1. Split `image_ref` on `:` (default tag to `'latest'` if omitted). Split repo into `repo_path` and `tag`.\n2. If `repo_path != repo_path.lower()`, return `'ERROR: repository name must be lowercase'`.\n3. Look up `repo_path` in `registry`; if missing or `pkg['visibility'] == 'private'`, return `'ERROR: denied or not found'`.\n4. Check if `tag` is in `pkg['tags']`; if not, return `'ERROR: manifest unknown'`.\n5. Check if `host_arch` is in `pkg['tags'][tag]`; if not, return `f'ERROR: no matching manifest for {host_arch}'`.\n6. Otherwise return `f'PULLED {repo_path}:{tag} ({host_arch})'`.",
-          "starter_code": "registry = {\n    'ghcr.io/alice/where-am-i': {\n        'visibility': 'public',\n        'tags': {'1.0': ['linux/amd64', 'linux/arm64'], 'latest': ['linux/arm64']}\n    },\n    'ghcr.io/bob/secret-app': {\n        'visibility': 'private',\n        'tags': {'1.0': ['linux/amd64']}\n    }\n}\n\ndef resolve_pull(image_ref, host_arch, reg):\n    # TODO: parse repo_path and tag (default 'latest')\n    # TODO: validate lowercase, visibility, tag, and host_arch\n    pass\n\nprint(resolve_pull('ghcr.io/alice/where-am-i:1.0', 'linux/amd64', registry))\nprint(resolve_pull('ghcr.io/Alice/where-am-i:1.0', 'linux/amd64', registry))\nprint(resolve_pull('ghcr.io/bob/secret-app:1.0', 'linux/amd64', registry))\nprint(resolve_pull('ghcr.io/alice/where-am-i', 'linux/amd64', registry))\n",
-          "expected_output": "PULLED ghcr.io/alice/where-am-i:1.0 (linux/amd64)\nERROR: repository name must be lowercase\nERROR: denied or not found\nERROR: no matching manifest for linux/amd64",
-          "solution": "registry = {\n    'ghcr.io/alice/where-am-i': {\n        'visibility': 'public',\n        'tags': {'1.0': ['linux/amd64', 'linux/arm64'], 'latest': ['linux/arm64']}\n    },\n    'ghcr.io/bob/secret-app': {\n        'visibility': 'private',\n        'tags': {'1.0': ['linux/amd64']}\n    }\n}\n\ndef resolve_pull(image_ref, host_arch, reg):\n    if ':' in image_ref:\n        repo_path, tag = image_ref.rsplit(':', 1)\n    else:\n        repo_path, tag = image_ref, 'latest'\n    if repo_path != repo_path.lower():\n        return 'ERROR: repository name must be lowercase'\n    pkg = reg.get(repo_path)\n    if not pkg or pkg['visibility'] == 'private':\n        return 'ERROR: denied or not found'\n    arches = pkg['tags'].get(tag)\n    if arches is None:\n        return 'ERROR: manifest unknown'\n    if host_arch not in arches:\n        return f'ERROR: no matching manifest for {host_arch}'\n    return f'PULLED {repo_path}:{tag} ({host_arch})'\n\nprint(resolve_pull('ghcr.io/alice/where-am-i:1.0', 'linux/amd64', registry))\nprint(resolve_pull('ghcr.io/Alice/where-am-i:1.0', 'linux/amd64', registry))\nprint(resolve_pull('ghcr.io/bob/secret-app:1.0', 'linux/amd64', registry))\nprint(resolve_pull('ghcr.io/alice/where-am-i', 'linux/amd64', registry))\n",
-          "hints": [
-            "Use `image_ref.rsplit(':', 1)` when `':' in image_ref` so a registry port like `localhost:5000/app` wouldn't break.",
-            "Check `repo_path != repo_path.lower()` before looking up the repository in `reg`."
-          ],
-          "bookmarkable": true
         }
       ]
     },
@@ -193,21 +123,6 @@
               "note": "Attaches a new shell process inside the already-running 'web' container for live inspection."
             }
           ]
-        },
-        {
-          "id": "exp-sandbox-cli-builder",
-          "block_type": "sandbox",
-          "runtime": "javascript",
-          "title": "Build a Valid `docker run` Command",
-          "instructions": "Complete `buildDockerRun(cfg)` so it returns a valid `docker run` CLI string. Remember that all Docker flags come **before** `cfg.image`, and `cfg.args` (if non-empty) come **after** `cfg.image`.\n\nInclude flags in this exact order when truthy:\n1. `-d` (if `cfg.detach`)\n2. `-it` (if `cfg.interactive`)\n3. `--rm` (if `cfg.autoRemove`)\n4. `-p ${cfg.hostPort}:${cfg.containerPort}` (if both ports exist)\n5. `-v ${cfg.volume}` (if `cfg.volume`)\n6. `--network ${cfg.network}` (if `cfg.network`)\n7. `--name ${cfg.name}` (if `cfg.name`)\n8. `cfg.image`\n9. `...cfg.args` (if `cfg.args && cfg.args.length > 0`)",
-          "starter_code": "function buildDockerRun(cfg) {\n  const parts = ['docker', 'run'];\n  // TODO: append flags before cfg.image, then cfg.image, then cfg.args\n  return parts.join(' ');\n}\n\nconsole.log(buildDockerRun({\n  detach: true,\n  hostPort: 8080,\n  containerPort: 80,\n  name: 'web',\n  image: 'nginx:1.30'\n}));\n\nconsole.log(buildDockerRun({\n  interactive: true,\n  autoRemove: true,\n  volume: './data:/data',\n  network: 'dai-net',\n  image: 'ghcr.io/alice/cli:1.0',\n  args: ['--loop']\n}));\n",
-          "expected_output": "docker run -d -p 8080:80 --name web nginx:1.30\ndocker run -it --rm -v ./data:/data --network dai-net ghcr.io/alice/cli:1.0 --loop",
-          "solution": "function buildDockerRun(cfg) {\n  const parts = ['docker', 'run'];\n  if (cfg.detach) parts.push('-d');\n  if (cfg.interactive) parts.push('-it');\n  if (cfg.autoRemove) parts.push('--rm');\n  if (cfg.hostPort && cfg.containerPort) parts.push(`-p ${cfg.hostPort}:${cfg.containerPort}`);\n  if (cfg.volume) parts.push(`-v ${cfg.volume}`);\n  if (cfg.network) parts.push(`--network ${cfg.network}`);\n  if (cfg.name) parts.push(`--name ${cfg.name}`);\n  parts.push(cfg.image);\n  if (cfg.args && cfg.args.length > 0) parts.push(...cfg.args);\n  return parts.join(' ');\n}\n\nconsole.log(buildDockerRun({\n  detach: true,\n  hostPort: 8080,\n  containerPort: 80,\n  name: 'web',\n  image: 'nginx:1.30'\n}));\n\nconsole.log(buildDockerRun({\n  interactive: true,\n  autoRemove: true,\n  volume: './data:/data',\n  network: 'dai-net',\n  image: 'ghcr.io/alice/cli:1.0',\n  args: ['--loop']\n}));\n",
-          "hints": [
-            "Push each flag into `parts` before pushing `cfg.image`.",
-            "Use `parts.push(...cfg.args)` only after `parts.push(cfg.image)` so container arguments aren't interpreted as Docker flags."
-          ],
-          "bookmarkable": true
         }
       ]
     },
@@ -316,21 +231,6 @@
               "note": "Never bake local .env secrets into an image layer; pass secrets at runtime."
             }
           ]
-        },
-        {
-          "id": "exp-sandbox-layer-cache",
-          "block_type": "sandbox",
-          "runtime": "python",
-          "title": "Dockerfile Layer-Cache Invalidation Analyzer",
-          "instructions": "Complete `count_rebuilt_layers(instructions, changed_files)` to calculate how many layers must be rebuilt when files change.\n\nEach item in `instructions` is a tuple `(op, arg)`. For `'COPY'`, `arg` is the source path prefix (e.g. `'pom.xml'`, `'src'`, or `'.'`).\nRule:\n- Walk `instructions` from index `0` to `n - 1`.\n- If `op == 'COPY'` and any file in `changed_files` equals `arg`, starts with `arg + '/'`, or `arg == '.'`, then index `i` is invalidated!\n- Once any layer `i` is invalidated, **all** layers from `i` through `n - 1` (`n - i` layers total) must be rebuilt.\n- If no `COPY` matches `changed_files`, return `0`.",
-          "starter_code": "good_dockerfile = [\n    ('FROM', 'maven:3.9'),\n    ('WORKDIR', '/build'),\n    ('COPY', 'pom.xml'),\n    ('RUN', 'mvn dependency:go-offline'),\n    ('COPY', 'src'),\n    ('RUN', 'mvn package'),\n]\n\nbad_dockerfile = [\n    ('FROM', 'maven:3.9'),\n    ('WORKDIR', '/build'),\n    ('COPY', '.'),\n    ('RUN', 'mvn package'),\n]\n\ndef count_rebuilt_layers(instructions, changed_files):\n    # TODO: find first invalidated COPY layer and return count of layers rebuilt\n    pass\n\nprint('Good (src edit):', count_rebuilt_layers(good_dockerfile, ['src/Main.java']))\nprint('Good (pom edit):', count_rebuilt_layers(good_dockerfile, ['pom.xml']))\nprint('Bad  (src edit):', count_rebuilt_layers(bad_dockerfile, ['src/Main.java']))\n",
-          "expected_output": "Good (src edit): 2\nGood (pom edit): 4\nBad  (src edit): 2",
-          "solution": "good_dockerfile = [\n    ('FROM', 'maven:3.9'),\n    ('WORKDIR', '/build'),\n    ('COPY', 'pom.xml'),\n    ('RUN', 'mvn dependency:go-offline'),\n    ('COPY', 'src'),\n    ('RUN', 'mvn package'),\n]\n\nbad_dockerfile = [\n    ('FROM', 'maven:3.9'),\n    ('WORKDIR', '/build'),\n    ('COPY', '.'),\n    ('RUN', 'mvn package'),\n]\n\ndef count_rebuilt_layers(instructions, changed_files):\n    n = len(instructions)\n    for i, (op, arg) in enumerate(instructions):\n        if op == 'COPY':\n            for f in changed_files:\n                if arg == '.' or f == arg or f.startswith(arg + '/'):\n                    return n - i\n    return 0\n\nprint('Good (src edit):', count_rebuilt_layers(good_dockerfile, ['src/Main.java']))\nprint('Good (pom edit):', count_rebuilt_layers(good_dockerfile, ['pom.xml']))\nprint('Bad  (src edit):', count_rebuilt_layers(bad_dockerfile, ['src/Main.java']))\n",
-          "hints": [
-            "Iterate with `enumerate(instructions)` and return `len(instructions) - i` on the first matching `COPY`.",
-            "Note that in `good_dockerfile`, editing `src/Main.java` leaves `RUN mvn dependency:go-offline` cached (only 2 layers rebuild), whereas `bad_dockerfile` has to re-run `mvn package` without a separate cached dependency layer."
-          ],
-          "bookmarkable": true
         }
       ]
     },
@@ -411,28 +311,13 @@
               "note": "Top-level declaration required for every named volume used by services."
             }
           ]
-        },
-        {
-          "id": "exp-sandbox-compose-validator",
-          "block_type": "sandbox",
-          "runtime": "python",
-          "title": "Compose Configuration Linter (Ports, Volumes & Dependencies)",
-          "instructions": "Complete `lint_compose(services, top_volumes)` to catch three common `compose.yaml` errors and return a sorted list of error strings:\n\n1. **Host port collision:** Parse `ports` entries formatted `'HOST:CONT'`. If two services claim the same `HOST` port, add `'PORT_COLLISION: <HOST>'`.\n2. **Undeclared named volume:** For each entry `'SRC:DEST'` in `volumes`, if `SRC` does **not** start with `'./'` or `'/'` (meaning it is a named volume, not a bind mount) and `SRC` is not in `top_volumes`, add `'UNDECLARED_VOLUME: <SRC>'`.\n3. **Missing dependency:** For each `dep` in `depends_on`, if `dep` is not a key in `services`, add `'UNKNOWN_DEP: <dep>'`.",
-          "starter_code": "services_cfg = {\n    'web': {'ports': ['8080:80'], 'volumes': ['./html:/usr/share/nginx/html'], 'depends_on': ['api']},\n    'api': {'ports': ['8080:7000'], 'volumes': ['app-cache:/cache'], 'depends_on': ['cache']},\n    'db':  {'ports': [], 'volumes': ['db-data:/var/lib/postgresql/data'], 'depends_on': []}\n}\ntop_volumes = {'db-data'}\n\ndef lint_compose(services, top_vols):\n    errors = set()\n    # TODO: check host port collisions, undeclared named volumes, and unknown depends_on\n    return sorted(errors)\n\nfor err in lint_compose(services_cfg, top_volumes):\n    print(err)\n",
-          "expected_output": "PORT_COLLISION: 8080\nUNDECLARED_VOLUME: app-cache\nUNKNOWN_DEP: cache",
-          "solution": "services_cfg = {\n    'web': {'ports': ['8080:80'], 'volumes': ['./html:/usr/share/nginx/html'], 'depends_on': ['api']},\n    'api': {'ports': ['8080:7000'], 'volumes': ['app-cache:/cache'], 'depends_on': ['cache']},\n    'db':  {'ports': [], 'volumes': ['db-data:/var/lib/postgresql/data'], 'depends_on': []}\n}\ntop_volumes = {'db-data'}\n\ndef lint_compose(services, top_vols):\n    errors = set()\n    used_host_ports = set()\n    for svc in services.values():\n        for p in svc.get('ports', []):\n            host_port = p.split(':')[0]\n            if host_port in used_host_ports:\n                errors.add(f'PORT_COLLISION: {host_port}')\n            used_host_ports.add(host_port)\n        for v in svc.get('volumes', []):\n            src = v.split(':')[0]\n            if not (src.startswith('./') or src.startswith('/')) and src not in top_vols:\n                errors.add(f'UNDECLARED_VOLUME: {src}')\n        for dep in svc.get('depends_on', []):\n            if dep not in services:\n                errors.add(f'UNKNOWN_DEP: {dep}')\n    return sorted(errors)\n\nfor err in lint_compose(services_cfg, top_volumes):\n    print(err)\n",
-          "hints": [
-            "A volume source is a bind mount if `src.startswith('./') or src.startswith('/')`; otherwise treat it as a named volume.",
-            "Use a `set()` for `used_host_ports` to detect duplicates across services."
-          ],
-          "bookmarkable": true
         }
       ]
     },
     {
       "id": "sec-synthesis-reflection",
-      "title": "7. Metacognitive Synthesis & Feynman Articulation",
-      "description": "Consolidate your mental model by diagnosing a real-world debugging scenario and explaining layers/volumes without jargon.",
+      "title": "7. Debugging Synthesis",
+      "description": "Diagnose a realistic TE1 debugging scenario combining frozen builds, EXPOSE vs -p, and 0.0.0.0 binding.",
       "blocks": [
         {
           "id": "ref-rubric-frozen-image",
@@ -445,19 +330,6 @@
             "Mentioned that in a multi-stage build, `mvn package` runs inside Stage 1 during `docker build`, so rebuilding the image updates the JAR."
           ],
           "model_answer": "1) Old startup banner: A Docker image is a frozen build, and a stopped container still points to that old image. Editing source code on the host does nothing until you rebuild (`docker build -t my-app:1.1 .`) and start a fresh container from the new image. 2) Empty reply on `localhost:8080`: `EXPOSE 8080` only documents the port. Even with `-p 8080:8080`, if the Java server binds to `127.0.0.1` (container loopback) instead of `0.0.0.0` (all interfaces), traffic forwarded from the host cannot reach it. Binding the server to `0.0.0.0:8080` fixes the connection.",
-          "bookmarkable": true
-        },
-        {
-          "id": "ref-feynman-layers-volumes",
-          "block_type": "feynman_prompt",
-          "concept": "Images, Layers, Containers, and Volumes",
-          "target_audience": "a first-year CS student who thinks a container is just a mini virtual machine",
-          "prompt": "Explain why a container is NOT a mini virtual machine, how an image's read-only layers differ from a container's writable layer, and why a database container needs a volume.",
-          "key_points_to_cover": [
-            "Shared host Linux kernel vs separate Guest OS kernel in a VM",
-            "Read-only stacked image layers shared across containers vs thin ephemeral writable layer",
-            "Why deleting a container destroys the writable layer, requiring a volume or bind mount for persistence"
-          ],
           "bookmarkable": true
         }
       ]
@@ -742,116 +614,44 @@
     },
     {
       "id": "sec-flashcards",
-      "title": "9. Spaced Repetition Flashcards",
-      "description": "High-frequency recall cards for core Docker, Dockerfile, networking, and Compose concepts.",
+      "title": "9. High-Yield Exam-Trap Flashcards",
+      "description": "Targeted recall cards for high-yield Docker traps not already covered by the diagnostic quizzes.",
       "blocks": [
-        {
-          "id": "fc-vm-vs-container",
-          "block_type": "flashcard",
-          "title": "VM vs Container",
-          "front": "What is the fundamental architectural difference between a **Virtual Machine** and a **Container**?",
-          "back": "A **VM** boots its own **full guest OS and kernel** on top of a hypervisor (GBs of RAM/disk, slow boot). A **Container** shares the **host Linux kernel** using namespaces and cgroups, packaging only the app and its runtime/libraries (MBs, sub-second startup).",
-          "hint": "Think about what is shared vs duplicated.",
-          "tags": ["architecture", "containers", "vms"]
-        },
-        {
-          "id": "fc-image-vs-container",
-          "block_type": "flashcard",
-          "title": "Image vs Container",
-          "front": "How do an **Image** and a **Container** relate in the OCI model?",
-          "back": "An **Image** is a read-only, immutable layered blueprint (like a **class**). A **Container** is a running or stopped instance of an image with its own thin writable layer on top (like an **object** created with `new`).",
-          "hint": "Use the OOP class vs object analogy.",
-          "tags": ["oci", "images", "containers"]
-        },
-        {
-          "id": "fc-frozen-build",
-          "block_type": "flashcard",
-          "title": "Frozen Build Rule",
-          "front": "Why doesn't editing source code on your host update a running container?",
-          "back": "An image is a **frozen build** created at `docker build` time. You must rebuild the image (`docker build`) and start a new container from it (and `docker push` if others pull it).",
-          "hint": "When are files copied into the image?",
-          "tags": ["lifecycle", "pitfalls"]
-        },
-        {
-          "id": "fc-entrypoint-cmd",
-          "block_type": "flashcard",
-          "title": "ENTRYPOINT vs CMD",
-          "front": "In a `Dockerfile`, how do `ENTRYPOINT` and `CMD` interact when you pass arguments to `docker run <image> <args>`?",
-          "back": "`ENTRYPOINT` defines the **fixed executable**; `CMD` provides **default arguments**. Trailing `<args>` on `docker run` **replace `CMD`** and are passed to `ENTRYPOINT`. Without `ENTRYPOINT`, trailing `<args>` replace the entire `CMD`.",
-          "hint": "Which one gets replaced by trailing `docker run` arguments?",
-          "tags": ["dockerfile", "entrypoint", "cmd"]
-        },
-        {
-          "id": "fc-expose-vs-p",
-          "block_type": "flashcard",
-          "title": "EXPOSE vs -p",
-          "front": "Does `EXPOSE 8080` in a `Dockerfile` make port 8080 reachable from the host?",
-          "back": "**No.** `EXPOSE` is documentation metadata only. To publish a port to the host, you must pass `-p <host>:<container>` to `docker run` or configure `ports:` in `compose.yaml`.",
-          "hint": "Metadata vs actual port forwarding.",
-          "tags": ["networking", "ports", "dockerfile"]
-        },
-        {
-          "id": "fc-bind-0000",
-          "block_type": "flashcard",
-          "title": "0.0.0.0 vs 127.0.0.1",
-          "front": "Why must a server inside a container bind to **`0.0.0.0`** instead of **`127.0.0.1`**?",
-          "back": "`127.0.0.1` only accepts connections from inside the container itself. Host traffic forwarded by `-p` arrives on the container's network interface, so the server must listen on **`0.0.0.0`** (all interfaces).",
-          "hint": "Where does `-p` traffic enter the container?",
-          "tags": ["networking", "pitfalls"]
-        },
-        {
-          "id": "fc-layer-caching",
-          "block_type": "flashcard",
-          "title": "Dockerfile Layer Caching",
-          "front": "Why should `COPY pom.xml .` and `RUN mvn dependency:go-offline` appear **before** `COPY src ./src`?",
-          "back": "Docker reuses cached layers up to the first changed instruction and rebuilds everything after it. Separating `pom.xml` from `src/` keeps the slow dependency-download layer cached whenever only Java code changes.",
-          "hint": "How does Docker invalidate build cache layers?",
-          "tags": ["dockerfile", "caching", "maven"]
-        },
-        {
-          "id": "fc-multistage-build",
-          "block_type": "flashcard",
-          "title": "Multi-Stage Builds",
-          "front": "What does `COPY --from=build` achieve in a multi-stage `Dockerfile`?",
-          "back": "It copies only the compiled artifact (e.g., `app.jar`) from a heavy builder stage (Maven + JDK) into a slim runtime stage (JRE), leaving behind build tools and source code for a smaller, more secure final image.",
-          "hint": "Think about image size and attack surface.",
-          "tags": ["dockerfile", "multistage"]
-        },
         {
           "id": "fc-dockerignore",
           "block_type": "flashcard",
           "title": ".dockerignore",
           "front": "What is the purpose of a `.dockerignore` file?",
-          "back": "It excludes heavy or sensitive files (`target/`, `.git/`, `.env`, `.idea/`) from the **build context** sent to the Docker daemon, making `docker build` faster and preventing unintended files from entering the image.",
+          "back": "It excludes heavy or sensitive files (`target/`, `.git/`, `.env`, `.idea/`) from the **build context** sent to the Docker daemon, making `docker build` faster and preventing secrets or host artifacts from leaking into image layers.",
           "hint": "What gets sent to the daemon when you run `docker build .`?",
           "tags": ["dockerfile", "build-context"]
         },
         {
-          "id": "fc-volume-vs-bind",
+          "id": "fc-arg-vs-env",
           "block_type": "flashcard",
-          "title": "Named Volume vs Bind Mount",
-          "front": "When should you use a **Named Volume** vs a **Bind Mount**?",
-          "back": "Use a **Named Volume** (`db-data:/var/...`) for Docker-managed service/database persistence. Use a **Bind Mount** (`./host:/container`) when you want to view or edit files directly on your host machine.",
-          "hint": "Who manages the storage location?",
-          "tags": ["volumes", "persistence"]
+          "title": "ARG vs ENV",
+          "front": "In a `Dockerfile`, what is the difference between `ARG` and `ENV`?",
+          "back": "`ARG` is available **only at build time** (`docker build --build-arg`) and disappears in the running container. `ENV` is available during the build **and persists** as an environment variable inside running containers.",
+          "hint": "Build-time only vs build + runtime.",
+          "tags": ["dockerfile", "config"]
         },
         {
-          "id": "fc-bridge-dns",
+          "id": "fc-buildx-arch",
           "block_type": "flashcard",
-          "title": "Default Bridge vs User-Defined Network",
-          "front": "Why can't containers resolve each other by name on Docker's default `bridge` network?",
-          "back": "Docker's default `bridge` network has **no embedded DNS** (only IP addressing). Creating a **user-defined network** (`docker network create`) or using **Docker Compose** enables automatic DNS resolution by container/service name.",
-          "hint": "What does a user-defined network add?",
-          "tags": ["networking", "dns"]
+          "title": "Multi-Architecture Builds (`amd64` vs `arm64`)",
+          "front": "Why does an image built on an Apple Silicon Mac fail on a Linux x86_64 server with `exec format error` or `no matching manifest`, and how do you fix it?",
+          "back": "Apple Silicon builds `linux/arm64` images by default, while x86_64 servers expect `linux/amd64`. Cross-build multi-arch images with:\n`docker buildx build --platform linux/amd64,linux/arm64 -t <ref> --push .`",
+          "hint": "CPU architecture mismatch + `buildx`.",
+          "tags": ["architecture", "buildx", "registries"]
         },
         {
-          "id": "fc-compose-commands",
+          "id": "fc-latest-tag",
           "block_type": "flashcard",
-          "title": "Docker Compose Lifecycle",
-          "front": "What is the difference between `docker compose down` and `docker compose down -v`?",
-          "back": "`docker compose down` stops and removes the containers and network while **keeping named volumes**. Adding `-v` (`down -v`) **also deletes the named volumes**.",
-          "hint": "Think about database persistence.",
-          "tags": ["compose", "volumes"]
+          "title": "The `:latest` Tag Pitfall",
+          "front": "Why is relying on the implicit `:latest` image tag dangerous in deployment?",
+          "back": "`:latest` is a **mutable moving label** overwritten on every untagged build/push, making builds non-reproducible and hiding which version is running. Always pin explicit version tags (e.g., `nginx:1.30`, `ghcr.io/alice/app:1.0`).",
+          "hint": "Does `:latest` guarantee immutability?",
+          "tags": ["images", "tags", "pitfalls"]
         }
       ]
     }

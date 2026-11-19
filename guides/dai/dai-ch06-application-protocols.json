@@ -2,7 +2,7 @@
   "id": "dai-ch06-application-protocols",
   "title": "Chapter 06: Application Protocols",
   "description": "Master what application protocols add on top of TCP and UDP, navigate IETF RFCs and RFC 2119 keywords, evaluate the 8 core protocol design decisions, and write unambiguous specifications with sequence diagrams.",
-  "estimated_minutes": 55,
+  "estimated_minutes": 35,
   "category": "Internet Applications (DAI)",
   "track": "DAI - Développement d'Applications Internet (TE1)",
   "track_order": 6,
@@ -38,7 +38,7 @@
           "id": "th-protocol-intuition",
           "block_type": "markdown",
           "title": "Shared Rules Across Independent Programs",
-          "content": "Your email client and Google's mail servers were written by different engineers, in different programming languages, years apart. Yet they interoperate seamlessly because both obey the exact same **application protocol** (SMTP).\n\nAn application protocol is a shared contract that defines four things:\n1. **Vocabulary & Semantics:** Which messages the two programs can exchange, and what each message means.\n2. **Syntax (Wire Format):** The exact byte-level layout of every message.\n3. **Timing & Ordering:** Who speaks first, in what order messages may be sent, and who closes the connection.\n4. **Error Handling:** What happens on an unknown command, a missing parameter, or a valid command sent in the wrong state.\n\n### Where the Application Layer Sits\n\n| Layer | Examples | Responsibility |\n| :--- | :--- | :--- |\n| **Application** | SMTP, HTTP, SSH, your custom protocol | **What the bytes mean** (syntax, order, errors) |\n| **Transport** | TCP, UDP | Carrying bytes between programs (ports) |\n| **Network** | IP | Carrying packets between two machines |\n\n> [!IMPORTANT]\n> **What TCP and UDP do NOT give you:**\n> - **TCP** provides a reliable, ordered **stream of bytes**. It has *zero* concept of messages: if a client sends two messages back-to-back, the server might read both in a single `read()` call, or read half of the first message in one `read()` and the rest later.\n> - **UDP** carries independent **datagrams** (each arrives whole or not at all), but packets can be lost, duplicated, or reordered.\n\n### Explicit Non-Example: A Data Format Is NOT a Protocol\nJSON, XML, or CSV only describe how **one** value or object is serialized. Saying *\"our protocol is JSON\"* leaves every critical question unanswered: Who connects? Who speaks first? Where does one JSON object end and the next begin on a TCP stream? What happens if a field is missing? A protocol that carries JSON over TCP must still specify framing (e.g., one JSON object per `\\n`-terminated line), message order, and error responses."
+          "content": "Independent programs (written in different languages by different teams) interoperate only when they obey the exact same **application protocol**—a shared contract defining four things:\n1. **Vocabulary & Semantics:** Which messages exist and what each means.\n2. **Syntax (Wire Format):** The exact byte-level layout of every message.\n3. **Timing & Ordering:** Who speaks first, valid message sequences, and who closes.\n4. **Error Handling:** Behavior on unknown commands, bad arguments, or wrong-state requests.\n\n### Where the Application Layer Sits\n\n| Layer | Examples | Responsibility |\n| :--- | :--- | :--- |\n| **Application** | SMTP, HTTP, SSH, custom protocol | **What the bytes mean** (framing, syntax, order, errors) |\n| **Transport** | TCP, UDP | Carrying bytes/datagrams between programs (ports) |\n| **Network** | IP | Carrying packets between machines |\n\n> [!IMPORTANT]\n> **Exam Trap — What TCP and UDP do NOT give you:**\n> - **TCP** is a reliable, ordered **byte stream** with *zero* message boundaries: two `write()` calls can merge into one `read()`, or one `write()` can split across multiple `read()` calls.\n> - **UDP** preserves **datagram boundaries** (arrives whole or not at all), but packets can be lost, duplicated, or reordered.\n\n> [!WARNING]\n> **A Data Format Is NOT a Protocol:** JSON, XML, or CSV only serialize *one* object. Saying *\"our protocol is JSON\"* leaves framing (where one object ends on a TCP stream), turn-taking, ordering, and errors unspecified."
         },
         {
           "id": "th-protocol-families",
@@ -51,14 +51,6 @@
           "block_type": "markdown",
           "title": "Where Specifications Live: IETF RFCs & Standards",
           "content": "Internet protocols are specified by the **IETF** (Internet Engineering Task Force) in documents called **RFCs** (*Requests for Comments*). A proposal starts as an **Internet-Draft**, is revised through community review, and is eventually published with a permanent RFC number.\n\n- **Immutability:** A published RFC *never* changes. When a protocol evolves, a new RFC is published that **obsoletes** or **updates** the old one (for example, IMAP4rev1 in **RFC 3501** was obsoleted by IMAP4rev2 in **RFC 9051**).\n- **Status:** Not every RFC is a standard—statuses include *Internet Standard*, *Proposed Standard*, and *Informational*. Check `datatracker.ietf.org/doc/rfcXXXX` for current status.\n- **Port Registry:** Official port numbers are managed by **IANA** (e.g., SMTP = 25, HTTP = 80, SSH = 22).\n\n| Protocol | RFC | Purpose |\n| :--- | :--- | :--- |\n| **SMTP** | RFC 5321 | Sending email |\n| **POP3** | RFC 1939 | Retrieving email (simple download) |\n| **IMAP** | RFC 9051 | Managing email on server |\n| **SSH (Transport)** | RFC 4253 | Encrypted remote shell & tunneling |\n| **HTTP Semantics** | RFC 9110 | Methods, status codes, headers across all versions |\n| **HTTP/1.1, /2, /3** | RFC 9112, 9113, 9114 | Wire encodings for each HTTP version |\n\n### Normative Keywords (RFC 2119 & RFC 8174)\nIn specifications, capitalized keywords carry precise legal/engineering meanings:\n- **`MUST`** (or `REQUIRED`): An absolute requirement of the specification.\n- **`SHOULD`** (or `RECOMMENDED`): Valid reasons may exist to ignore it, but the full implications must be understood and weighed.\n- **`MAY`** (or `OPTIONAL`): Truly optional; implementations must still interoperate whether a peer includes it or not.\n\n### Formal Syntax: ABNF & Binary Schemas\nText RFCs specify exact grammar using **ABNF** (Augmented Backus-Naur Form, RFC 5234), such as SMTP's `EHLO`:\n```abnf\nehlo = \"EHLO\" SP ( Domain / address-literal ) CRLF\n```\nModern binary protocols often avoid hand-coding byte offsets by using **schema-based serialization formats** like **Protocol Buffers** (gRPC), **Avro**, or **ASN.1**, which generate reader/writer code across languages."
-        },
-        {
-          "id": "diag-protocol-layers-and-families",
-          "block_type": "kroki",
-          "diagram_type": "mermaid",
-          "title": "Transport Foundations and the Three Protocol Families",
-          "caption": "Transport moves raw bytes or datagrams; the application protocol supplies framing, meaning, ordering, and errors across one of three design families.",
-          "source": "flowchart LR\n  subgraph Transport [\"Transport Layer (No Message Semantics)\"]\n    TCP[\"TCP: Reliable Ordered Byte Stream\"]\n    UDP[\"UDP: Unreliable Independent Datagrams\"]\n  end\n  subgraph App [\"Application Protocol Layer\"]\n    Rules[\"Adds: Framing + Syntax + Order + Errors\"]\n  end\n  subgraph Families [\"Three Protocol Families\"]\n    Text[\"Text Protocols\\n(SMTP, IMAP, HTTP/1.1)\"]\n    OverHTTP[\"Protocols on HTTP\\n(REST Web APIs)\"]\n    Binary[\"Binary Protocols\\n(SSH, DNS, HTTP/2, HTTP/3)\"]\n  end\n  TCP --> Rules\n  UDP --> Rules\n  Rules --> Text\n  Rules --> OverHTTP\n  Rules --> Binary\n  classDef trans fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;\n  classDef app fill:#ede9fe,stroke:#6366f1,stroke-width:2px;\n  classDef fam fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;\n  class TCP,UDP trans;\n  class Rules app;\n  class Text,OverHTTP,Binary fam;"
         }
       ]
     },
@@ -113,14 +105,6 @@
       "description": "Every unwritten decision becomes a guess in someone else's implementation. Master the 8 choices every protocol specification must settle.",
       "blocks": [
         {
-          "id": "diag-design-decision-tree",
-          "block_type": "kroki",
-          "diagram_type": "mermaid",
-          "title": "The 8 Protocol Design Decisions",
-          "caption": "A complete protocol specification explicitly answers all 8 questions so two independent implementations interoperate without guessing.",
-          "source": "flowchart TD\n  Start[\"New Application Protocol\"] --> D1[\"1. Transport: TCP vs UDP\"]\n  D1 --> D2[\"2. Port: 1024-32767 Unassigned\"]\n  D2 --> D3[\"3. Turn-Taking: Who Speaks & Closes\"]\n  D3 --> D4[\"4. Encoding: UTF-8 vs Binary\"]\n  D4 --> D5[\"5. Framing: Delimiter / Length / Close\"]\n  D5 --> D6[\"6. Message Format: KEYWORD args\"]\n  D6 --> D7[\"7. Errors: Codes & Wrong-State Rules\"]\n  D7 --> D8[\"8. Extensibility: Versioning & Unknown Cmds\"]\n  classDef step fill:#f8fafc,stroke:#475569,stroke-width:1.5px;\n  classDef root fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px;\n  class Start root;\n  class D1,D2,D3,D4,D5,D6,D7,D8 step;"
-        },
-        {
           "id": "th-decisions-transport-port-turn",
           "block_type": "markdown",
           "title": "Decisions 1–3: Transport, Port, and Turn-Taking",
@@ -139,37 +123,6 @@
           "title": "TCP Stream Framing: Delimiter vs. Length-Prefix",
           "caption": "TCP may merge or split writes across arbitrary read() boundaries; framing lets the receiver reconstruct exact messages.",
           "source": "flowchart LR\n  subgraph Stream [\"TCP Byte Stream (Arbitrary Chunks)\"]\n    C1[\"Chunk 1: 'JOIN ali'\"]\n    C2[\"Chunk 2: 'ce\\nLIST\\n'\"]\n  end\n  subgraph Delim [\"Delimiter Framing (\\n)\"]\n    D1[\"Buffer until '\\n'\"] --> D2[\"Msg 1: 'JOIN alice'\\nMsg 2: 'LIST'\"]\n  end\n  subgraph Len [\"Length-Prefix Framing (4B Header)\"]\n    L1[\"Read 4B length N = 10\"] --> L2[\"Read exactly 10 bytes\"]\n  end\n  C1 --> D1\n  C2 --> D1\n  C1 --> L1\n  classDef chunk fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px;\n  classDef delim fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px;\n  classDef len fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;\n  class C1,C2 chunk;\n  class D1,D2 delim;\n  class L1,L2 len;"
-        },
-        {
-          "id": "sim-framing-overhead",
-          "block_type": "simulation",
-          "title": "Framing Overhead vs. Payload Size",
-          "description": "Compare the percentage of bandwidth spent on framing metadata for a 1-byte delimiter ('\\n'), a 2-byte delimiter ('\\r\\n'), or a 4-byte binary length prefix as payload size varies.",
-          "formula": "\\text{Overhead}(\\%) = \\frac{H}{P + H} \\times 100",
-          "variables": [
-            {
-              "id": "P",
-              "name": "Payload Size (bytes)",
-              "min": 4,
-              "max": 512,
-              "step": 4,
-              "default": 20,
-              "unit": "bytes"
-            },
-            {
-              "id": "H",
-              "name": "Framing Header / Delimiter Size",
-              "min": 1,
-              "max": 8,
-              "step": 1,
-              "default": 4,
-              "unit": "bytes"
-            }
-          ],
-          "compute_expression": "(H / (P + H)) * 100",
-          "chart_type": "line",
-          "output_label": "Framing Overhead",
-          "output_unit": "%"
         },
         {
           "id": "th-decisions-format-errors-extensibility",
@@ -225,8 +178,8 @@
     },
     {
       "id": "sec-hands-on-sandboxes",
-      "title": "5. Interactive Protocol & Framing Lab",
-      "description": "Implement TCP stream delimiter framing in Java, binary length-prefix framing in Python, and an SMS protocol state machine in JavaScript.",
+      "title": "5. Interactive Framing Lab (Java)",
+      "description": "Implement TCP stream delimiter framing in Java to handle split and coalesced reads.",
       "blocks": [
         {
           "id": "exp-sandbox-delimiter-framing",
@@ -241,41 +194,13 @@
             "Never assume one `read()` equals one message: always accumulate incoming bytes/text in a buffer.",
             "Use a `while` loop (not `if`) because a single chunk like `'ob Hello!\\nLIST\\n'` can contain multiple delimiters."
           ]
-        },
-        {
-          "id": "exp-sandbox-length-prefix",
-          "block_type": "sandbox",
-          "runtime": "python",
-          "title": "Python Lab: Binary 4-Byte Length-Prefix Framing",
-          "instructions": "Parse a sequence of raw TCP byte chunks where each message is encoded as `[4-byte big-endian unsigned length][UTF-8 payload]`. Complete the `while len(buf) >= 4:` loop so it unpacks `msg_len`, waits if `len(buf) < 4 + msg_len`, decodes the UTF-8 payload, removes the consumed frame from `buf`, and prints `DECODED (<len>B): <payload>`.",
-          "starter_code": "import struct\n\ndef encode_frame(text: str) -> bytes:\n    payload = text.encode(\"utf-8\")\n    return struct.pack(\">I\", len(payload)) + payload\n\nstream = encode_frame(\"JOIN alice\") + encode_frame(\"SEND bob Hi 🚀\")\n# Split stream into awkward 5-byte TCP chunks\nchunks = [stream[i:i+5] for i in range(0, len(stream), 5)]\n\nbuf = bytearray()\nfor chunk in chunks:\n    buf.extend(chunk)\n    while len(buf) >= 4:\n        msg_len = struct.unpack(\">I\", buf[:4])[0]\n        # TODO: If len(buf) < 4 + msg_len, break and wait for more bytes.\n        # Otherwise decode buf[4:4 + msg_len] as UTF-8, delete consumed bytes, and print:\n        # print(f\"DECODED ({msg_len}B): {payload}\")\n        break",
-          "expected_output": "DECODED (10B): JOIN alice\nDECODED (16B): SEND bob Hi 🚀",
-          "solution": "import struct\n\ndef encode_frame(text: str) -> bytes:\n    payload = text.encode(\"utf-8\")\n    return struct.pack(\">I\", len(payload)) + payload\n\nstream = encode_frame(\"JOIN alice\") + encode_frame(\"SEND bob Hi 🚀\")\n# Split stream into awkward 5-byte TCP chunks\nchunks = [stream[i:i+5] for i in range(0, len(stream), 5)]\n\nbuf = bytearray()\nfor chunk in chunks:\n    buf.extend(chunk)\n    while len(buf) >= 4:\n        msg_len = struct.unpack(\">I\", buf[:4])[0]\n        if len(buf) < 4 + msg_len:\n            break  # Wait for more bytes\n        payload = bytes(buf[4:4 + msg_len]).decode(\"utf-8\")\n        del buf[:4 + msg_len]\n        print(f\"DECODED ({msg_len}B): {payload}\")",
-          "hints": [
-            "In `struct.pack('>I', ...)`, `>` means big-endian (network byte order) and `I` means 4-byte unsigned integer.",
-            "`'SEND bob Hi 🚀'` has 13 characters, but `🚀` is 4 bytes in UTF-8, making the payload 16 bytes."
-          ]
-        },
-        {
-          "id": "exp-sandbox-sms-validator",
-          "block_type": "sandbox",
-          "runtime": "javascript",
-          "title": "JavaScript Lab: SMS Protocol State Machine & Error Codes",
-          "instructions": "Implement `handleLine(line)` for an SMS server so it enforces: `JOIN <username>` (`ERROR 1` if taken, `ERROR 3` on bad syntax, else `OK`), `SEND <recipient> <message>` (`ERROR 2` if not joined yet, `ERROR 3` if missing message or >100 chars, else `OK (to <recipient>: <msg>)`), and `ERROR 4 Unknown command` for anything else.",
-          "starter_code": "const takenNames = new Set([\"alice\"]);\nlet username = null;\n\nfunction handleLine(line) {\n  const parts = line.split(\" \");\n  const cmd = parts[0];\n\n  if (cmd === \"JOIN\") {\n    // TODO: Validate parts.length === 2 && parts[1], check takenNames, set username, return \"OK\"\n  }\n  if (cmd === \"SEND\") {\n    // TODO: Check username is set (else ERROR 2), extract recipient & msg, validate length 1..100\n  }\n  return \"ERROR 4 Unknown command\";\n}\n\nconst trace = [\n  \"SEND alice Hi!\",\n  \"JOIN alice\",\n  \"JOIN bob\",\n  \"PING\",\n  \"SEND alice Hello Alice!\"\n];\nfor (const line of trace) {\n  console.log(`${line} => ${handleLine(line)}`);\n}",
-          "expected_output": "SEND alice Hi! => ERROR 2 Must JOIN first\nJOIN alice => ERROR 1 Username already taken\nJOIN bob => OK\nPING => ERROR 4 Unknown command\nSEND alice Hello Alice! => OK (to alice: Hello Alice!)",
-          "solution": "const takenNames = new Set([\"alice\"]);\nlet username = null;\n\nfunction handleLine(line) {\n  const parts = line.split(\" \");\n  const cmd = parts[0];\n\n  if (cmd === \"JOIN\") {\n    if (parts.length !== 2 || !parts[1]) return \"ERROR 3 Invalid syntax\";\n    if (takenNames.has(parts[1])) return \"ERROR 1 Username already taken\";\n    username = parts[1];\n    takenNames.add(username);\n    return \"OK\";\n  }\n  if (cmd === \"SEND\") {\n    if (!username) return \"ERROR 2 Must JOIN first\";\n    const firstSpace = line.indexOf(\" \");\n    const secondSpace = line.indexOf(\" \", firstSpace + 1);\n    if (secondSpace === -1) return \"ERROR 3 Invalid syntax\";\n    const recipient = line.slice(firstSpace + 1, secondSpace);\n    const msg = line.slice(secondSpace + 1);\n    if (msg.length === 0 || msg.length > 100) return \"ERROR 3 Invalid message length\";\n    return `OK (to ${recipient}: ${msg})`;\n  }\n  return \"ERROR 4 Unknown command\";\n}\n\nconst trace = [\n  \"SEND alice Hi!\",\n  \"JOIN alice\",\n  \"JOIN bob\",\n  \"PING\",\n  \"SEND alice Hello Alice!\"\n];\nfor (const line of trace) {\n  console.log(`${line} => ${handleLine(line)}`);\n}",
-          "hints": [
-            "Notice how `SEND` splits on only the first two spaces so spaces inside `'Hello Alice!'` are preserved.",
-            "After `PING` returns `ERROR 4 Unknown command`, the connection remains open so `SEND` still succeeds."
-          ]
         }
       ]
     },
     {
       "id": "sec-metacognition",
-      "title": "6. Synthesis & Metacognitive Reflection",
-      "description": "Audit an underspecified protocol for hidden ambiguities and explain TCP framing in plain language.",
+      "title": "6. Protocol Audit Exercise",
+      "description": "Audit an underspecified protocol for hidden ambiguities—a classic DAI TE1 exam task.",
       "blocks": [
         {
           "id": "ref-rubric-dice-gaps",
@@ -290,19 +215,6 @@
             "Identified connection lifecycle details (who speaks first, whether QUIT gets a reply, who closes the connection)."
           ],
           "model_answer": "Before implementing, you must clarify: (1) Transport & port: TCP or UDP, and which port in 1024–32767? (2) Encoding & framing: UTF-8 with '\\n' or '\\r\\n'? (3) Turn-taking: Does the server send a greeting first, or does the client speak first? (4) Syntax: Exact command casing and separator ('ROLL 3' vs 'ROLL:3') and how many faces each die has (6 by default?). (5) Response format: Space-separated ('4 2 6'), comma-separated, or one line per die, and is the sum included? (6) Errors & limits: What happens on 'ROLL 0', 'ROLL -5', 'ROLL abc', or an unknown command? (7) Closing: Does the server reply to 'QUIT' before closing, and which side closes the TCP socket?"
-        },
-        {
-          "id": "ref-feynman-framing",
-          "block_type": "feynman_prompt",
-          "concept": "Why TCP Requires Application-Level Framing",
-          "target_audience": "a junior developer who thinks calling socket.write('Hello') guarantees the receiver's socket.read() returns 'Hello'",
-          "prompt": "Explain why TCP does not preserve message boundaries and how delimiter framing or length-prefix framing solves the problem, using an everyday physical analogy (like pouring water vs mailing envelopes).",
-          "key_points_to_cover": [
-            "TCP is a continuous byte stream (like water flowing through a pipe), not discrete envelopes",
-            "Two writes can merge into one read, or one write can split across multiple reads",
-            "Delimiters mark boundaries with a special character (which must be forbidden or escaped in payloads)",
-            "Length prefixes announce the exact byte count upfront so any payload bytes are safe"
-          ]
         }
       ]
     },
@@ -330,27 +242,6 @@
           "hints": [
             "Does TCP know anything about your application's '\\n' delimiter?",
             "Remember: TCP delivers a reliable, ordered stream of bytes—not discrete messages."
-          ]
-        },
-        {
-          "id": "qz-json-not-protocol",
-          "block_type": "quiz_question",
-          "question_type": "multiple_choice",
-          "difficulty": 2,
-          "related_block_id": "th-protocol-intuition",
-          "title": "Data Format vs. Application Protocol",
-          "question": "A teammate says: \"We don't need to design a protocol, we'll just send JSON over TCP.\" Why is this statement incomplete?",
-          "options": [
-            "JSON cannot be encoded in UTF-8.",
-            "JSON only defines the format of a single message, not framing, message ordering, turn-taking, or error handling.",
-            "TCP cannot carry curly braces `{` and `}` without escaping.",
-            "JSON can only be used over HTTP, never directly over TCP."
-          ],
-          "correct_answer": "JSON only defines the format of a single message, not framing, message ordering, turn-taking, or error handling.",
-          "explanation": "A serialization format like JSON specifies how one object is written, not which messages exist, who speaks first, how to separate consecutive JSON objects on a TCP byte stream (e.g., newline-delimited JSON), or what errors to return.\n\n* JSON natively uses UTF-8.\n* TCP carries arbitrary bytes, including `{` and `}`.\n* JSON can be carried directly over TCP if you add framing and protocol rules.",
-          "hints": [
-            "If two JSON objects `{...}{...}` arrive back-to-back on a TCP stream, how does the receiver know where the first ends?",
-            "Think about the 4 things an application protocol defines beyond single-message syntax."
           ]
         },
         {
@@ -544,24 +435,6 @@
           "tags": ["application-protocols", "families"]
         },
         {
-          "id": "fc-rfc-2119",
-          "block_type": "flashcard",
-          "title": "RFC 2119 Normative Keywords",
-          "front": "In IETF RFCs (RFC 2119), what do **`MUST`**, **`SHOULD`**, and **`MAY`** mean?",
-          "back": "- **`MUST`**: Absolute requirement of the specification.\n- **`SHOULD`**: Recommended requirement; may be ignored only for a valid, well-understood reason.\n- **`MAY`**: Truly optional feature.",
-          "hint": "Absolute vs. Recommended vs. Optional.",
-          "tags": ["rfc", "standards"]
-        },
-        {
-          "id": "fc-port-ranges",
-          "block_type": "flashcard",
-          "title": "IANA Port Ranges & Linux Rule",
-          "front": "What are the three IANA port ranges (RFC 6335), and which sub-range should you pick for a custom protocol on Linux?",
-          "back": "- `0–1023`: System (well-known; needs root on Linux)\n- `1024–49151`: User (registered)\n- `49152–65535`: Dynamic/Ephemeral\n\n**Pick `1024–32767` (unassigned)** because Linux uses `32768–60999` for ephemeral client ports.",
-          "hint": "Avoid root-only ports (<1024) and Linux ephemeral ports (>=32768).",
-          "tags": ["ports", "iana", "networking"]
-        },
-        {
           "id": "fc-tcp-framing-3-ways",
           "block_type": "flashcard",
           "title": "Three Ways to Frame TCP Messages",
@@ -571,24 +444,6 @@
           "tags": ["tcp", "framing"]
         },
         {
-          "id": "fc-smtp-multiline",
-          "block_type": "flashcard",
-          "title": "SMTP Multiline & DATA Framing",
-          "front": "In SMTP (RFC 5321), how does a client detect the end of (1) a multi-line server reply and (2) the `DATA` email body?",
-          "back": "1. **Multi-line reply:** Intermediate lines use a hyphen (`250-`), and the final line uses a space (`250 `).\n2. **`DATA` body:** Ends with a line containing a single dot (`<CRLF>.<CRLF>`), with leading dots in text doubled (dot-stuffing).",
-          "hint": "Hyphen vs. space for replies; lone dot for body.",
-          "tags": ["smtp", "framing", "rfc5321"]
-        },
-        {
-          "id": "fc-extensibility-habits",
-          "block_type": "flashcard",
-          "title": "Three Habits for Extensible Protocols",
-          "front": "What **three design habits** let a protocol evolve to v2 without breaking v1 implementations?",
-          "back": "1. **Additive changes:** Add new commands while keeping existing v1 syntax/semantics intact.\n2. **Non-fatal unknown commands:** Return an error and **keep the connection open**.\n3. **Capability negotiation:** Exchange supported version/extensions on connect (e.g., SMTP `EHLO`).",
-          "hint": "Keep old commands, don't hang up on unknown ones, and negotiate capabilities.",
-          "tags": ["extensibility", "protocol-design"]
-        },
-        {
           "id": "fc-spec-four-sections",
           "block_type": "flashcard",
           "title": "Four Sections of a Protocol Specification",
@@ -596,15 +451,6 @@
           "back": "1. **Overview:** Purpose and problem solved.\n2. **Transport protocol:** TCP/UDP, port, encoding, framing, turn-taking, global error rules.\n3. **Messages:** Grouped **by action** (request + all success/error responses together).\n4. **Examples:** Sequence diagrams of typical flows **and** error cases.",
           "hint": "Overview, Transport, Action-grouped Messages, Sequence Diagrams.",
           "tags": ["specification", "documentation"]
-        },
-        {
-          "id": "fc-sms-async-receive",
-          "block_type": "flashcard",
-          "title": "SMS Protocol Asynchronous RECEIVE",
-          "front": "Why can't an SMS client assume the next line read after sending `SEND bob Hi` will be `OK` or `ERROR`?",
-          "back": "Because the server can push **`RECEIVE <sender> <message>`** at any moment (e.g., if another user sends a message concurrently). The client must read every line and dispatch based on its leading keyword.",
-          "hint": "Server-pushed messages can interleave with command replies.",
-          "tags": ["sms-protocol", "concurrency"]
         }
       ]
     }

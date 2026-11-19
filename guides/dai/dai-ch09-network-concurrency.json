@@ -2,7 +2,7 @@
   "id": "dai-ch09-network-concurrency",
   "title": "Chapter 09: Network Concurrency",
   "description": "Master concurrency fundamentals, diagnosing race conditions, iterative vs. concurrent TCP servers, Java's ExecutorService, Platform vs. Virtual Threads (Java 21+), and thread-safe data structures for building scalable network applications.",
-  "estimated_minutes": 75,
+  "estimated_minutes": 50,
   "category": "Internet Applications (DAI)",
   "track": "DAI - Développement d'Applications Internet (TE1)",
   "track_order": 9,
@@ -38,7 +38,7 @@
           "id": "th-proc-core-process-thread",
           "block_type": "markdown",
           "title": "Hardware & OS Building Blocks: CPU, Core, Process, and Thread",
-          "content": "Before writing concurrent network servers, you need an accurate mental model of what executes your code:\n\n* **Processor (CPU):** The physical chip that executes billions of instructions per second. Modern CPUs contain multiple **cores**.\n* **Core:** An independent physical execution unit inside a processor. For our mental model, one core executes one instruction from one thread at any given instant.\n* **Process:** A program in execution, identified by a Process ID (PID). Each process has its own **isolated memory space**—by default, other processes cannot read or write it. Processes are resource-heavy to create and destroy, and communicate via **Inter-Process Communication (IPC)** (e.g., TCP sockets on `localhost`, pipes, files, or explicit shared memory).\n* **Thread:** A sequence of instructions running *inside* a process. Every application starts with a **main thread**, which can spawn additional threads.\n  * **Private to each thread:** Its own **call stack** (local variables, method frames) and **program counter** (next instruction).\n  * **Shared across threads in the same process:** The **heap memory** (objects, static fields, shared collections).\n\n> [!IMPORTANT]\n> **Memory Trade-off:** Because threads share the process's memory space, creating a thread and sharing data between threads is far cheaper than spawning a whole new process. However, shared memory is also why threads can corrupt each other's data if not synchronized!\n\n| Dimension | Process | Thread |\n| :--- | :--- | :--- |\n| **Memory Space** | Isolated per process | Shared heap; private stack & program counter |\n| **Creation / Destruction Cost** | High (OS allocates new address space) | Lower than a process, but still limited by the OS |\n| **Communication** | Explicit IPC (sockets, pipes, files) | Direct via shared heap variables |\n| **Crash Isolation** | A crash in one process does not crash others | An unhandled error or memory corruption affects the whole process |",
+          "content": "* **Processor (CPU):** Physical chip containing multiple **cores**.\n* **Core:** Independent physical execution unit—executes one instruction from one thread at any given instant.\n* **Process:** Program in execution (identified by PID) with its own **isolated memory space**. Expensive to create/destroy; communicates via **IPC** (TCP sockets on `localhost`, pipes, files, shared memory).\n* **Thread:** Execution sequence running *inside* a process (starts with the **main thread**).\n  * **Private per thread:** **Call stack** (local variables, method frames) and **program counter** (next instruction).\n  * **Shared across sibling threads:** **Heap memory** (objects, static fields, shared collections).\n\n> [!IMPORTANT]\n> **Exam Trade-off:** Shared heap makes threads far cheaper to spawn and communicate than processes—but unsynchronized writes to shared heap objects cause data corruption.\n\n| Dimension | Process | Thread |\n| :--- | :--- | :--- |\n| **Memory Space** | Isolated per process | Shared heap; private stack & program counter |\n| **Creation Cost** | High (new OS address space) | Lower than a process, but still OS-bounded |\n| **Communication** | Explicit IPC (sockets, pipes, files) | Direct via shared heap variables |\n| **Crash Isolation** | Isolated (one crash doesn't kill others) | Shared fate (unhandled error/corruption hits whole process) |",
           "bookmarkable": true
         },
         {
@@ -54,7 +54,7 @@
           "id": "th-concurrency-vs-parallelism",
           "block_type": "markdown",
           "title": "Concurrency vs. Parallelism",
-          "content": "Although people often use these words interchangeably, they describe two distinct concepts:\n\n1. **Concurrency (Overlapping in Time):** Several tasks make progress during the same time period without waiting for one another to finish completely. A server accepting Client B while still serving Client A is *concurrent*—even on a single-core CPU where the OS scheduler rapidly switches between threads.\n2. **Parallelism (Simultaneous Execution):** Several tasks execute at the **exact same instant** on different physical cores.\n\n> [!NOTE]\n> **Key Relationship:** Parallelism is one way to run concurrent tasks, but **concurrent does not always mean parallel**. On 1 core, you have concurrency without parallelism. On 8 cores, up to 8 threads can run in parallel *and* hundreds of threads can run concurrently.\n\n**Explicit Non-Example:** Splitting a single heavy mathematical matrix multiplication across 8 cores solely to finish one calculation faster is **parallel computing**, which is distinct from network concurrency (handling many independent client I/O sessions overlapping in time).",
+          "content": "1. **Concurrency (Overlapping in Time):** Multiple tasks make progress during the same period without waiting for one another to finish. A server handling Client B while still serving Client A is *concurrent*—even on **1 core** via OS time-slicing.\n2. **Parallelism (Simultaneous Execution):** Multiple tasks execute at the **exact same instant** on different physical cores.\n\n> [!NOTE]\n> **Exam Distinction:** Parallelism is one way to run concurrent tasks, but **concurrent ≠ parallel**. On 1 core: concurrency without parallelism. On 8 cores: up to 8 threads in parallel *and* hundreds concurrently.\n\n**Non-Example:** Splitting one matrix multiplication across 8 cores to finish faster is **parallel computing**, not network concurrency (managing many independent overlapping I/O sessions).",
           "bookmarkable": true
         },
         {
@@ -347,7 +347,7 @@
           "id": "th-platform-vs-virtual",
           "block_type": "markdown",
           "title": "Platform Threads (1:1) vs. Virtual Threads (M:N, JEP 444)",
-          "content": "Since **Java 21**, `java.lang.Thread` comes in two flavors (checkable with `thread.isVirtual()`):\n\n1. **Platform Threads (1:1 OS Thread):**\n   * Backed by **one operating-system thread** for their entire lifetime (`new Thread(...)`, `newFixedThreadPool`, `newCachedThreadPool`).\n   * Heavyweight (~1 MB stack) and expensive to context-switch.\n   * Even when a platform thread is blocked waiting on `socket.readLine()` or `Thread.sleep()`, it **holds its OS thread hostage**, doing nothing.\n\n2. **Virtual Threads (M:N JVM-Managed):**\n   * Managed by the JVM, which schedules **many virtual threads** onto a **few platform carrier threads**.\n   * Extremely lightweight and fast to create—a server can easily spawn **thousands or millions**, one per client.\n   * **The Magic of Unmounting:** When a virtual thread blocks on network I/O (`readLine()`, `accept()`) or `Thread.sleep()`, the JVM **unmounts** it from its carrier thread and runs another virtual thread on that carrier in the meantime. When data arrives, the JVM remounts the virtual thread onto a free carrier.\n\n> [!TIP]\n> **I/O-Bound vs. CPU-Bound Benchmark (`SLEEP` vs. `COMPUTE`):**\n> * **I/O-Bound (`SLEEP` 100 ms per request):** `fixed-14` achieved ~134 req/s (each thread blocked for 100 ms), whereas **`virtual` achieved 4,500–5,800 req/s**!\n> * **CPU-Bound (`COMPUTE` 6 ms of math):** `fixed-14` achieved 1,310–1,530 req/s, and **`virtual` achieved 1,330–1,500 req/s**.\n>\n> **Rule of Thumb:** Virtual threads are **not faster** than platform threads—they are **lighter**. Use virtual threads (`Executors.newVirtualThreadPerTaskExecutor()`) for **I/O-bound** network servers, and a fixed pool (~1 thread per core) for pure **CPU-bound** computation.",
+          "content": "Since **Java 21**, `java.lang.Thread` comes in two flavors (checkable with `thread.isVirtual()`):\n\n1. **Platform Threads (1:1 OS Thread):**\n   * Backed by **one OS thread** for their entire lifetime (`new Thread(...)`, `newFixedThreadPool`, `newCachedThreadPool`).\n   * Heavyweight (~1 MB stack) and expensive to context-switch.\n   * Blocking on `socket.readLine()` or `Thread.sleep()` **holds the OS thread hostage**, doing nothing.\n\n2. **Virtual Threads (M:N JVM-Managed):**\n   * Scheduled by the JVM onto a small pool of platform **carrier threads**.\n   * Lightweight enough to spawn **thousands or millions** (one per client).\n   * **Unmounting:** When a virtual thread blocks on network I/O (`readLine()`, `accept()`) or `Thread.sleep()`, the JVM **unmounts** it from its carrier and runs another virtual thread, remounting it when data arrives.\n\n> [!TIP]\n> **I/O-Bound vs. CPU-Bound Benchmark (`SLEEP` vs. `COMPUTE`):**\n> * **I/O-Bound (`SLEEP` 100 ms/req):** A fixed pool of 14 threads caps throughput at $\\text{pool\\_size} \\times \\frac{1000}{\\text{wait\\_ms}} = 14 \\times 10 = 140\\text{ req/s}$ (observed ~134 req/s), whereas **`virtual` achieved 4,500–5,800 req/s**!\n> * **CPU-Bound (`COMPUTE` 6 ms of math):** `fixed-14` achieved 1,310–1,530 req/s, and **`virtual` achieved 1,330–1,500 req/s**.\n>\n> **Rule of Thumb:** Virtual threads are **not faster** than platform threads—they are **lighter**. Use `Executors.newVirtualThreadPerTaskExecutor()` for **I/O-bound** network servers, and a fixed pool (~1 thread per core) for **CPU-bound** computation.",
           "bookmarkable": true
         },
         {
@@ -372,37 +372,6 @@
             { "line": 11, "note": "ClientHandler can use simple blocking I/O (readLine/accept) because blocking unmounts the virtual thread." },
             { "line": 18, "note": "Thread.ofVirtual().start(task) creates and starts a virtual thread directly without an ExecutorService." },
             { "line": 19, "note": "isVirtual() returns true for virtual threads and false for platform threads." }
-          ],
-          "bookmarkable": true
-        },
-        {
-          "id": "sim-io-throughput",
-          "block_type": "simulation",
-          "title": "Interactive Simulator: Fixed Thread Pool Throughput on Blocking I/O",
-          "description": "Explore why fixed platform thread pools bottleneck when clients spend time waiting on I/O (such as a database query or slow network read). Adjust the pool size and average I/O wait time per request to observe the maximum theoretical throughput in requests/second (assuming 1,000 concurrent clients).",
-          "formula": "\\text{Throughput} = \\min(\\text{clients}, \\text{pool\\_size}) \\times \\frac{1000}{\\text{io\\_wait\\_ms}}",
-          "variables": [
-            { "id": "pool_size", "name": "Fixed Pool Size (threads)", "min": 1, "max": 500, "step": 1, "default": 14, "unit": "threads" },
-            { "id": "io_wait_ms", "name": "Blocking I/O Wait per Request", "min": 10, "max": 500, "step": 10, "default": 100, "unit": "ms" },
-            { "id": "clients", "name": "Concurrent Clients", "min": 10, "max": 1000, "step": 10, "default": 1000, "unit": "clients" }
-          ],
-          "compute_expression": "Math.round(Math.min(clients, pool_size) * (1000 / io_wait_ms))",
-          "chart_type": "bar",
-          "output_label": "Max Theoretical Throughput",
-          "output_unit": "req/s",
-          "bookmarkable": true
-        },
-        {
-          "id": "feynman-virtual-threads",
-          "block_type": "feynman_prompt",
-          "concept": "Platform Threads vs. Virtual Threads",
-          "target_audience": "a first-year computer science student who knows what a phone hotline is",
-          "prompt": "Using the hotline analogy (operators, desks, and phone calls), explain why virtual threads allow a server to handle thousands of waiting network clients far more efficiently than platform threads—and why they don't speed up pure math calculations.",
-          "key_points_to_cover": [
-            "Platform thread = 1 operator locked to 1 call even while waiting on hold for a database.",
-            "Carrier thread = the physical operator/desk; Virtual thread = a lightweight call.",
-            "Unmounting: when a call waits on I/O, the operator puts it on hold and serves another call.",
-            "CPU-bound limit: if every call is nonstop mental math (no waiting), more calls don't create more operators (CPU cores)."
           ],
           "bookmarkable": true
         },
@@ -538,116 +507,35 @@
     },
     {
       "id": "sec-flashcards",
-      "title": "7. Spaced Repetition Flashcards",
-      "description": "Lock in core concurrency concepts, Java APIs, and thread-safety rules.",
+      "title": "7. High-Yield Exam-Trap Flashcards",
+      "description": "Lock in non-obvious concurrency traps and Java API details not duplicated by the quizzes.",
       "blocks": [
-        {
-          "id": "fc-concurrency-vs-parallelism",
-          "block_type": "flashcard",
-          "title": "Concurrency vs. Parallelism",
-          "front": "What is the difference between **concurrency** and **parallelism**?",
-          "back": "**Concurrency** means multiple tasks overlap in time (making progress without waiting for others to finish, even on 1 core via time-slicing). **Parallelism** means multiple tasks execute at the exact same instant on different physical CPU cores.",
-          "hint": "One is about overlapping in time; the other is about simultaneous execution on multiple cores.",
-          "tags": ["concurrency", "fundamentals"]
-        },
-        {
-          "id": "fc-process-vs-thread",
-          "block_type": "flashcard",
-          "title": "Process vs. Thread",
-          "front": "How do a **process** and a **thread** differ in memory and creation cost?",
-          "back": "A **process** has its own isolated memory space, is expensive to create/destroy, and communicates via IPC (sockets, pipes, files). A **thread** runs inside a process, has its own stack & program counter, **shares heap memory** with sibling threads, and is much cheaper to create.",
-          "hint": "Think about memory isolation vs. shared heap.",
-          "tags": ["os", "threads", "processes"]
-        },
-        {
-          "id": "fc-race-condition",
-          "block_type": "flashcard",
-          "title": "Race Condition & count++",
-          "front": "Why is `count++` unsafe across multiple threads?",
-          "back": "`count++` is three separate steps: **read** `count`, **add 1**, **write** `count`. Two threads can read the same value before either writes, causing a **race condition** where one increment is lost.",
-          "hint": "Count the machine-level steps in `count++`.",
-          "tags": ["race-condition", "thread-safety"]
-        },
         {
           "id": "fc-iterative-server",
           "block_type": "flashcard",
-          "title": "Iterative Server",
-          "front": "What is an **iterative server**, and why is `Executors.newSingleThreadExecutor()` still iterative?",
-          "back": "An iterative server handles clients **one after another**, each until it disconnects. `newSingleThreadExecutor()` has only **1 worker thread** draining an unbounded queue, so clients are still served sequentially one at a time.",
+          "title": "Iterative Server & newSingleThreadExecutor() Trap",
+          "front": "Why is a server using `Executors.newSingleThreadExecutor()` still an **iterative server**?",
+          "back": "It has only **1 worker thread** draining an unbounded queue, so clients are still served sequentially one after another (e.g., 3 concurrent 10s requests finish at **10s, 20s, and 30s**).",
           "hint": "How many worker threads serve the queue?",
           "tags": ["tcp", "architecture"]
         },
         {
-          "id": "fc-three-concurrency-models",
-          "block_type": "flashcard",
-          "title": "Three Client Concurrency Models",
-          "front": "Name the **three** main ways to handle multiple network clients concurrently.",
-          "back": "1. **Multiprocessing** (separate OS process per client; crash isolation, heavy IPC).\n2. **Multithreading** (threads sharing process memory; Java's focus).\n3. **Asynchronous programming** (few/one thread using non-blocking I/O and callbacks, e.g., Node.js).",
-          "hint": "Processes, threads, or callbacks.",
-          "tags": ["architecture", "concurrency"]
-        },
-        {
           "id": "fc-runnable-vs-callable",
           "block_type": "flashcard",
-          "title": "Runnable vs. Callable",
-          "front": "How do `Runnable` and `Callable<T>` differ, and what happens if you call `run()` directly?",
-          "back": "`Runnable.run()` returns `void` and cannot throw checked exceptions; `Callable<T>.call()` returns `T` and can throw checked exceptions. Calling `run()` directly executes on the **current thread**—use `new Thread(r).start()` or `executor.submit(task)` to run on another thread.",
-          "hint": "Return type + current thread vs. new thread.",
-          "tags": ["java", "threads"]
-        },
-        {
-          "id": "fc-executor-close",
-          "block_type": "flashcard",
-          "title": "ExecutorService Try-with-Resources",
-          "front": "What does `try (ExecutorService ex = ...)` do at the end of the `try` block in Java 19+?",
-          "back": "`ExecutorService` implements `AutoCloseable`. Its `close()` method initiates an orderly `shutdown()` and **blocks until all submitted tasks have completed**.",
-          "hint": "It does more than just `shutdown()`—it waits.",
-          "tags": ["java", "executor-service"]
+          "title": "Runnable vs. Callable & submit() Exception Trap",
+          "front": "How do `Runnable` and `Callable<T>` differ, and what happens to an uncaught exception thrown inside `executor.submit(task)`?",
+          "back": "`Runnable.run()` returns `void` and cannot throw checked exceptions; `Callable<T>.call()` returns `T` and can throw checked exceptions. Unlike `new Thread(r).start()`, `executor.submit(task)` **captures uncaught exceptions inside the returned `Future`** instead of printing them to `stderr`.",
+          "hint": "Return type/checked exceptions + where `submit()` hides exceptions.",
+          "tags": ["java", "threads", "executor-service"]
         },
         {
           "id": "fc-platform-vs-virtual",
           "block_type": "flashcard",
-          "title": "Platform Thread vs. Virtual Thread",
-          "front": "What is the key architectural difference between a **platform thread** and a **virtual thread** (Java 21+)?",
-          "back": "A **platform thread** is bound 1:1 to an OS thread for its whole life. A **virtual thread** is managed by the JVM (M:N) on a few **carrier threads** and **unmounts** whenever it blocks on I/O (`readLine()`, `accept()`, `Thread.sleep()`).",
-          "hint": "1:1 OS thread vs. M:N carrier threads.",
+          "title": "Platform Thread vs. Virtual Thread Mechanics",
+          "front": "What is the architectural difference between a **platform thread** and a **virtual thread** (Java 21+), and how do you check at runtime?",
+          "back": "A **platform thread** is bound **1:1** to an OS thread for its entire life. A **virtual thread** is managed by the JVM (**M:N**) on a small pool of **carrier threads** and **unmounts** whenever it blocks on I/O (`readLine()`, `accept()`, `Thread.sleep()`). Check with `thread.isVirtual()`.",
+          "hint": "1:1 OS thread vs. M:N carrier threads + unmounting.",
           "tags": ["virtual-threads", "java21"]
-        },
-        {
-          "id": "fc-virtual-io-vs-cpu",
-          "block_type": "flashcard",
-          "title": "Virtual Threads: I/O-Bound vs. CPU-Bound",
-          "front": "When should you use `Executors.newVirtualThreadPerTaskExecutor()` vs. `Executors.newFixedThreadPool(cores)`?",
-          "back": "Use **virtual threads** for **I/O-bound** tasks (network clients, databases) where threads spend most of their time waiting. Use a **fixed pool (~1 thread per core)** for **CPU-bound** computation, because virtual threads are lighter, not faster.",
-          "hint": "Virtual threads are lighter, not faster.",
-          "tags": ["virtual-threads", "performance"]
-        },
-        {
-          "id": "fc-atomic-types",
-          "block_type": "flashcard",
-          "title": "Atomic Variable Types",
-          "front": "Which classes in `java.util.concurrent.atomic` replace `boolean`, `int`, and `long` for thread-safe updates?",
-          "back": "`AtomicBoolean`, `AtomicInteger`, and `AtomicLong` (e.g., `incrementAndGet()` performs read-add-write atomically).",
-          "hint": "Prefix with `Atomic`.",
-          "tags": ["java", "atomics"]
-        },
-        {
-          "id": "fc-concurrent-hashmap-compound",
-          "block_type": "flashcard",
-          "title": "ConcurrentHashMap Compound Operations",
-          "front": "Why is `if (!map.containsKey(k)) map.put(k, v)` unsafe on a `ConcurrentHashMap`, and what should you use instead?",
-          "back": "Each method is atomic, but **another thread can run between them** (check-then-act race). Use single atomic methods like `putIfAbsent(k, v)`, `merge()`, `compute()`, `replace()`, or `put()` (which atomically returns the previous value).",
-          "hint": "Two atomic calls in a row are not one atomic operation.",
-          "tags": ["concurrenthashmap", "race-condition"]
-        },
-        {
-          "id": "fc-copy-on-write",
-          "block_type": "flashcard",
-          "title": "CopyOnWriteArrayList Trade-off",
-          "front": "When is `CopyOnWriteArrayList` a good choice, and when is it a bad choice?",
-          "back": "It is **good** when **reads vastly outnumber writes**, because readers never block. It is **bad** for write-heavy lists because **every write copies the entire array**.",
-          "hint": "Look at the name: Copy-On-Write.",
-          "tags": ["collections", "java"]
         }
       ]
     }
