@@ -7,6 +7,7 @@ import {
   BrainCircuit,
   GitFork,
   X,
+  ClipboardCheck,
 } from 'lucide-react';
 import { type Guide, type UserProgressData, type UserSrsData, getGuideSections } from '../types.js';
 import { MathText } from './MathText.js';
@@ -99,6 +100,10 @@ export const Dashboard: React.FC<Props> = ({
     return map;
   }, [filteredGuides]);
 
+  const isMockTest = (guide: Guide): boolean =>
+    guide.tags.some((t) => ['mock-exam', 'practice-test', 'exam'].includes(t.toLowerCase())) ||
+    /(-mock-exam|-exam)$/i.test(guide.id);
+
   // Transitive-reduced course dependency graph (only computed when opened)
   const dependencyGraphSource = useMemo(() => {
     if (!showDependencyGraph || guides.length === 0) return '';
@@ -107,13 +112,17 @@ export const Dashboard: React.FC<Props> = ({
     lines.push('  classDef inprogress fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e40af;');
     lines.push('  classDef review fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#92400e;');
     lines.push('  classDef notstarted fill:#f1f5f9,stroke:#94a3b8,stroke-width:1.5px,color:#475569;');
+    lines.push('  classDef mock_completed fill:#d1fae5,stroke:#059669,stroke-width:2px,stroke-dasharray:5 4,color:#065f46;');
+    lines.push('  classDef mock_inprogress fill:#dbeafe,stroke:#2563eb,stroke-width:2px,stroke-dasharray:5 4,color:#1e40af;');
+    lines.push('  classDef mock_review fill:#fef3c7,stroke:#d97706,stroke-width:2px,stroke-dasharray:5 4,color:#92400e;');
+    lines.push('  classDef mock_notstarted fill:#fffbeb,stroke:#d97706,stroke-width:1.5px,stroke-dasharray:5 4,color:#92400e;');
 
     const rawEdges: Array<{ from: string; to: string }> = [];
     for (const g of guides) {
       const cleanId = g.id.replace(/-/g, '_');
       const safeTitle = g.title.replace(/["\(\)\[\]]/g, '');
       const status = getGuideStatus(g);
-      const styleClass =
+      const baseClass =
         status === 'completed'
           ? 'completed'
           : status === 'in-progress'
@@ -122,7 +131,11 @@ export const Dashboard: React.FC<Props> = ({
           ? 'review'
           : 'notstarted';
 
-      lines.push(`  ${cleanId}["${safeTitle}"]:::${styleClass}`);
+      if (isMockTest(g)) {
+        lines.push(`  ${cleanId}(["Test: ${safeTitle}"]):::mock_${baseClass}`);
+      } else {
+        lines.push(`  ${cleanId}["${safeTitle}"]:::${baseClass}`);
+      }
 
       if (g.prerequisites && g.prerequisites.length > 0) {
         for (const prereqId of g.prerequisites) {
@@ -138,6 +151,16 @@ export const Dashboard: React.FC<Props> = ({
     return lines.join('\n');
   }, [showDependencyGraph, guides, progress]);
 
+  const handleGraphNodeClick = (nodeId: string, label: string) => {
+    const normalizedLabel = label.replace(/^Test:\s*/i, '').trim().toLowerCase();
+    const match =
+      guides.find((g) => g.id.replace(/-/g, '_') === nodeId) ||
+      guides.find((g) => g.title.replace(/["\(\)\[\]]/g, '').trim().toLowerCase() === normalizedLabel);
+    if (match) {
+      onSelectGuide(match.id);
+    }
+  };
+
   const renderGuideCard = (guide: Guide) => {
     const status = getGuideStatus(guide);
     const sections = getGuideSections(guide);
@@ -145,14 +168,25 @@ export const Dashboard: React.FC<Props> = ({
     const completedCount = (progress.completed_sections[guide.id] || []).length;
     const progressPercent = Math.min(100, Math.round((completedCount / totalSections) * 100));
     const prereqsMet = arePrerequisitesMet(guide);
+    const mockTest = isMockTest(guide);
 
     return (
       <div
         key={guide.id}
         onClick={() => onSelectGuide(guide.id)}
-        className="w-72 sm:w-80 flex-shrink-0 snap-start group bg-white border border-slate-200 hover:border-slate-400 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between"
+        className={`w-72 sm:w-80 flex-shrink-0 snap-start group bg-white border rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between ${
+          mockTest
+            ? 'border-amber-200 border-l-4 border-l-amber-400 hover:border-amber-400'
+            : 'border-slate-200 hover:border-slate-400'
+        }`}
       >
         <div>
+          {mockTest && (
+            <div className="flex items-center space-x-1 text-[10px] font-bold uppercase tracking-wider text-amber-700 mb-1.5">
+              <ClipboardCheck className="w-3 h-3" />
+              <span>Mock Test</span>
+            </div>
+          )}
           <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-slate-700 transition leading-snug mb-1.5 line-clamp-2">
             {guide.title}
           </h3>
@@ -210,7 +244,9 @@ export const Dashboard: React.FC<Props> = ({
           </div>
 
           <div className="mt-2.5 flex items-center justify-between text-xs font-semibold text-slate-700 group-hover:text-slate-900">
-            <span>{!prereqsMet ? 'Prerequisites Pending' : 'Open Guide'}</span>
+            <span>
+              {!prereqsMet ? 'Prerequisites Pending' : mockTest ? 'Open Test' : 'Open Guide'}
+            </span>
             <ArrowRight className="w-3.5 h-3.5 transform group-hover:translate-x-1 transition" />
           </div>
         </div>
@@ -265,8 +301,20 @@ export const Dashboard: React.FC<Props> = ({
             <div className="flex items-center space-x-2">
               <GitFork className="w-4 h-4 text-slate-700" />
               <h3 className="text-sm font-bold text-slate-800">Course Dependencies</h3>
+              <span className="text-[11px] text-slate-400 hidden sm:inline">
+                (Click any node to open)
+              </span>
             </div>
-            <div className="flex items-center space-x-3 text-[11px]">
+            <div className="flex items-center space-x-3 text-[11px] flex-wrap gap-y-1">
+              <span className="flex items-center space-x-1">
+                <span className="w-3 h-2.5 rounded-sm border border-slate-400 bg-slate-100 inline-block"></span>
+                <span className="text-slate-600">Guide</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <span className="w-3.5 h-2.5 rounded-full border border-dashed border-amber-600 bg-amber-50 inline-block"></span>
+                <span className="text-slate-600">Mock Test</span>
+              </span>
+              <span className="text-slate-300">|</span>
               <span className="flex items-center space-x-1">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
                 <span className="text-slate-600">Completed</span>
@@ -302,6 +350,7 @@ export const Dashboard: React.FC<Props> = ({
               source: dependencyGraphSource,
               bookmarkable: false,
             }}
+            onNodeClick={handleGraphNodeClick}
           />
         </div>
       )}

@@ -2,8 +2,8 @@ import type { Guide } from './types.js';
 
 export const API_BASE = '/api';
 
-// Bundle all guides at build/dev time so the app runs 100% statically on GitHub Pages
-const GUIDE_MODULES = import.meta.glob<Guide>('../../guides/**/*.json', {
+// Bundle all JSON & YAML guides at build/dev time so the app runs 100% statically on GitHub Pages
+const GUIDE_MODULES = import.meta.glob<Guide>('../../guides/**/*.{json,yaml,yml}', {
   eager: true,
   import: 'default',
 });

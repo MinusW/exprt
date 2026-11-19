@@ -3,5 +3,6 @@ dist/
 .env
 .env.*
 user-data/
+.validate-cache.json
 *.log
 .DS_Store

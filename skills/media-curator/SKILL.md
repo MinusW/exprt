@@ -5,7 +5,7 @@ description: Specialist skill for curating, verifying, timestamping, and pedagog
 
 # Media Curator Skill
 
-The `media-curator` skill governs the selection, verification, and integration of multimedia resources into Antigravity study guides. Embedded media is never meant to replace rigorous study; it serves to provide dynamic visual intuition for spatial, geometric, or temporal concepts that text alone struggles to convey.
+The `media-curator` skill governs the selection, verification, and integration of multimedia resources into `exprt` study guides. Embedded media is never meant to replace rigorous study; it serves to provide dynamic visual intuition for spatial, geometric, or temporal concepts that text alone struggles to convey.
 
 ---
 

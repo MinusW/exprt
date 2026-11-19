@@ -5,6 +5,7 @@ import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import chokidar from 'chokidar';
 import dotenv from 'dotenv';
+import YAML from 'yaml';
 import { GuideSchema, type Guide } from '../schemas/guide.js';
 import { getSandboxCapabilities, runInDocker, type DockerLanguage } from './dockerRunner.js';
 
@@ -54,6 +55,18 @@ interface DiscoveredGuideFile {
   folder: string;
 }
 
+function isGuideFile(filename: string): boolean {
+  return filename.endsWith('.json') || filename.endsWith('.yaml') || filename.endsWith('.yml');
+}
+
+function parseGuideFile(fullPath: string): Record<string, any> {
+  const content = fs.readFileSync(fullPath, 'utf-8');
+  if (fullPath.endsWith('.yaml') || fullPath.endsWith('.yml')) {
+    return YAML.parse(content);
+  }
+  return JSON.parse(content);
+}
+
 function findGuideFiles(dir: string, baseDir: string = dir): DiscoveredGuideFile[] {
   if (!fs.existsSync(dir)) return [];
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -63,7 +76,7 @@ function findGuideFiles(dir: string, baseDir: string = dir): DiscoveredGuideFile
     const resPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       files = files.concat(findGuideFiles(resPath, baseDir));
-    } else if (entry.isFile() && entry.name.endsWith('.json')) {
+    } else if (entry.isFile() && isGuideFile(entry.name)) {
       const relPath = path.relative(baseDir, resPath);
       const folder = path.dirname(relPath) === '.' ? '' : path.dirname(relPath);
       files.push({ fullPath: resPath, relPath, folder });
@@ -117,7 +130,7 @@ const guideWatcher = chokidar.watch(GUIDES_DIR, {
 });
 
 guideWatcher.on('all', (event, filePath) => {
-  if (filePath.endsWith('.json')) {
+  if (isGuideFile(filePath)) {
     const rel = path.relative(GUIDES_DIR, filePath);
     console.log(`[Watcher] Guide file ${event}: ${rel}`);
     broadcastGuideChange(event, rel);
@@ -185,8 +198,7 @@ app.get('/api/guides', (_req: Request, res: Response): void => {
 
     for (const item of discovered) {
       try {
-        const content = fs.readFileSync(item.fullPath, 'utf-8');
-        const parsed = JSON.parse(content);
+        const parsed = parseGuideFile(item.fullPath);
 
         // Auto-assign folder and infer category from folder if omitted
         if (!parsed.folder && item.folder) {
@@ -233,8 +245,7 @@ app.get('/api/categories', (_req: Request, res: Response): void => {
 
     for (const item of discovered) {
       try {
-        const content = fs.readFileSync(item.fullPath, 'utf-8');
-        const parsed = JSON.parse(content);
+        const parsed = parseGuideFile(item.fullPath);
         const cat = parsed.category || (item.folder ? item.folder.replace(/[-_]/g, ' ') : 'General');
         const trk = parsed.track || 'Core Curriculum';
         const est = parsed.estimated_minutes || 30;
@@ -282,10 +293,10 @@ app.get('/api/guides/:id', (req: Request, res: Response): void => {
 
   // Match by id or filename
   const match = discovered.find((item) => {
-    if (path.basename(item.fullPath, '.json') === guideId) return true;
+    const stem = path.basename(item.fullPath).replace(/\.(json|ya?ml)$/i, '');
+    if (stem === guideId) return true;
     try {
-      const content = fs.readFileSync(item.fullPath, 'utf-8');
-      const parsed = JSON.parse(content);
+      const parsed = parseGuideFile(item.fullPath);
       return parsed.id === guideId;
     } catch {
       return false;
@@ -298,8 +309,7 @@ app.get('/api/guides/:id', (req: Request, res: Response): void => {
   }
 
   try {
-    const content = fs.readFileSync(match.fullPath, 'utf-8');
-    const parsed = JSON.parse(content);
+    const parsed = parseGuideFile(match.fullPath);
     if (!parsed.folder && match.folder) parsed.folder = match.folder;
     res.json(parsed);
   } catch (err: unknown) {

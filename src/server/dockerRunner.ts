@@ -58,9 +58,10 @@ const RUNTIME_SPECS: Record<DockerLanguage, RuntimeSpec> = {
   },
   bash: {
     filename: 'script.sh',
-    command: 'sh /work/script.sh',
-    preferredImages: ['ubuntu:24.04', 'alpine:latest', 'sye-build:1.0'],
-    installHint: 'docker pull alpine:latest',
+    command:
+      'mkdir -p /tmp/playground && cd /tmp/playground && HOME=/tmp/playground GIT_AUTHOR_NAME="Student" GIT_AUTHOR_EMAIL="student@exprt.local" GIT_COMMITTER_NAME="Student" GIT_COMMITTER_EMAIL="student@exprt.local" sh -c "if command -v bash >/dev/null 2>&1; then exec bash /work/script.sh; else exec sh /work/script.sh; fi"',
+    preferredImages: ['sye-build:1.0', 'alpine/git:latest', 'ubuntu:24.04', 'alpine:latest'],
+    installHint: 'docker pull alpine/git:latest',
   },
   rust: {
     filename: 'main.rs',

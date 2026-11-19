@@ -90,7 +90,7 @@ To design an effective study guide, you must understand the cognitive architectu
 
 ## 2. Guide Structural Anatomy (`schemas/guide.schema.json`)
 
-Study guides are authored as JSON files in [`guides/<id>.json`](file:///var/home/minus/exprt/guides/).
+Study guides can be authored as **YAML** (`guides/<folder>/<id>.yaml`, **preferred** for clean multiline `|` blocks with zero `\n`/`\"` escaping) or **JSON** (`guides/<folder>/<id>.json`). Both are loaded natively by the server, Vite static builds (GitHub Pages), and `npm run validate`.
 
 The schema is **flexible**: you can organize guides into modular `sections`, or use traditional phase keys, without being trapped in a rigid format.
 
@@ -102,12 +102,15 @@ The schema is **flexible**: you can organize guides into modular `sections`, or 
   "estimated_minutes": 35,
   "tags": ["physics", "quantum-computing"],
   "prerequisites": [],
-  "layout_mode": "single-page",
   "sources": [
     {
       "title": "Nielsen & Chuang - Quantum Computation",
       "url_or_path": "sources/quantum-notes.md",
       "notes": "Chapter 1: Quantum Bits"
+    },
+    {
+      "title": "Official Reference Docs",
+      "url_or_path": "https://example.org/docs"
     }
   ],
   "sections": [
@@ -135,9 +138,13 @@ The schema is **flexible**: you can organize guides into modular `sections`, or 
 }
 ```
 
+* **Guides vs. Mock Tests:** To mark an item as a **Mock Test / Practice Exam** (which renders with a distinct amber accent on the dashboard and dashed pill nodes in the clickable dependency graph), include `"mock-exam"`, `"practice-test"`, or `"exam"` in `tags` (or end the `id` with `-exam` / `-mock-exam`).
+* **External & Local `sources`:** `url_or_path` accepts both local repository files (`sources/...`) and external `http://` / `https://` links.
+* **Continuous Scroll & Shareable URLs:** Guides render as a continuous scrollable page and are directly linkable via `#/guide/<id>` (and `#/guide/<id>?section=<section-id>`).
+
 ---
 
-## 3. The 9 Building Block Types
+## 3. The 10 Building Block Types
 
 Every block defines:
 * `id` (`string`, required): Unique identifier within the guide (e.g., `th-qubit-state`, `exp-slider-theta`).
@@ -156,7 +163,7 @@ Rich text with full inline ($...$) and block ($$...$$) KaTeX math, tables, callo
 ```
 
 ### 2. `code`
-Syntax-highlighted code block with line numbering, line highlighting, and explanatory annotations:
+Syntax-highlighted code block (`highlight.js`, supporting 40+ languages and automatic recognition of any library's types/classes) with line numbering, dark/light theme toggle, inline editing (with 4-space `Tab`), line highlighting, and callout annotations:
 ```json
 {
   "id": "exp-qubit-qiskit",
@@ -203,6 +210,8 @@ Targeted multimedia (YouTube, local video/audio/image) with verified oEmbed URL 
 Runnable code environment with console capture, assertions, optional Socratic `hints`, and timeout protection.
 * **Browser runtimes:** `javascript` (Web Worker), `html` (sandboxed iframe), `python` (Pyodide WebAssembly).
 * **Local Docker/Podman container runtimes:** `c`, `cpp`, `java`, `bash`, `rust`, `go` (and optionally `python` or `javascript` when `"runner": "docker"` is set, with optional `"docker_image"` override). Runs in an ephemeral `--network none`, memory- and PID-limited container via the local server:
+  * **Java (`runtime: "java"`):** Must declare `public class Main`. Because loopback (`127.0.0.1`) works inside `--network none`, you can author realistic TCP/UDP/SMTP exercises in a single `Main.java` by spawning a `ServerSocket` thread + `Socket` client!
+  * **Bash + Git (`runtime: "bash"`):** Runs inside a writable `/tmp/playground` directory with `git` pre-installed (when using `sye-build:1.0` or `alpine/git:latest`) and default Git author/committer env vars — ideal for real `git init`, `git add`, merge-conflict, and `.gitignore` exercises.
 ```json
 {
   "id": "exp-sandbox-state",
@@ -311,26 +320,54 @@ Dedicated interactive 3D flip card for high-frequency mental models, definitions
 
 ---
 
-## 4. Mandatory Quality Verification
+## 3.5 Exam-ROI & Anti-Bloat Guardrails (When NOT to Use a Block)
 
-Before finalizing any guide, run the validator:
-```bash
-npm run validate guides/<guide-id>.json
-```
-The validator checks:
-* JSON schema compliance.
-* Kroki diagram compilation via live dry run.
-* YouTube oEmbed verification (ensuring video exists and is embeddable).
-* Disk existence of local `/assets/` and `/sources/`.
-* `related_block_id` links pointing to valid blocks within the guide.
+Do **not** treat the 10 block types as a checklist that every chapter must fill. Every block must earn its cognitive space by directly sharpening exam performance or deep mental models:
+
+* **No gimmicky `simulation` blocks:** Only add a `simulation` when there is a genuine continuous mathematical or parametric trade-off worth sweeping (e.g., learning rate divergence, TCP throughput vs. RTT/packet loss, buffer sizing). Never invent toy formulas for conceptual topics, and always wrap floating-point expressions with `Number((...).toFixed(2))` to avoid `4.9399999999999995` artifacts.
+* **No off-language toy `sandbox` blocks:** Never write Python or JS string-builder simulations for Git, Docker, or Java networking chapters. Use a real `bash` (with `git`), `java` (including loopback `127.0.0.1` `ServerSocket` + `Socket` in one `Main.java`), `c`, or `cpp` sandbox — or omit the sandbox if the topic is purely conceptual.
+* **Never double up `feynman_prompt` AND `reflection_rubric` on the same concept:** Pick the single one with higher exam ROI per section (use `reflection_rubric` when there is a concrete grading checklist / model code answer; use `feynman_prompt` for pure intuition checks).
+* **No duplicate `flashcard` blocks:** Do not create flashcards that restate an existing `quiz_question` verbatim. Reserve flashcards for high-frequency formulas, protocol states, flags, or distinctions not already drilled in the quiz.
+* **No giveaway quizzes (`difficulty: 1`):** Aim for `difficulty: 2–5` with realistic distractors, at least 2 Socratic `hints`, and never prefix options with `"A) "` / `"B) "` (options are randomized locally).
 
 ---
 
-## 5. Primary Source Grounding & Token-Efficient PDF Reading
+## 4. Mandatory Quality Verification
 
-When authoring study guides grounded in primary literature (stored in `/sources/`), **never** ingest raw, uncleaned PDF text directly into your context window. Academic papers contain 50% to 85% token waste (repeated running headers, page numbers, repetitive copyright strings, and massive bibliographies).
+Before finalizing any guide (`.yaml` or `.json`), run the validator:
+```bash
+npm run validate guides/<folder>/<guide-id>.yaml
+# Include live execution verification of sandbox solutions & starter_code:
+npm run validate -- --run-sandboxes guides/<folder>/<guide-id>.yaml
+```
+The validator automatically catches:
+* JSON/YAML syntax & Zod schema compliance.
+* **Code annotation & highlight bounds:** Fails if `annotations[*].line` or `highlight_lines` is out of range or points to a blank line.
+* **Simulation dry-run:** Evaluates `compute_expression` at `min`, `default`, and `max` to catch syntax errors, `NaN`/`Infinity`, or unrounded floating-point noise.
+* **Quiz integrity:** Verifies `correct_answer` is an exact match/subset of `options`, forbids `"A) "`/`"B) "` prefixes, checks `related_block_id`, and warns on `< 2` hints or `difficulty: 1`.
+* **Sandbox verification:** Enforces `public class Main` for Java; with `--run-sandboxes`, verifies `solution` matches `expected_output` and fails if `starter_code` already outputs `expected_output` (leaked solution).
+* **Cross-guide track integrity:** Verifies `prerequisites` IDs exist in `guides/` and flags duplicate `track_order` values within a track.
+* Kroki diagram compilation, YouTube oEmbed verification, local `/assets/` & `/sources/` disk existence, and external `http(s)://` source URL validity.
 
-Always use the project's token-optimized PDF CLI tool:
+---
+
+## 5. Primary Source Grounding: Token-Efficient PDF & Course Web Fetching
+
+When authoring study guides grounded in primary literature (PDFs in `/sources/` or Quarto/GitHub Pages course websites), **never** ingest raw, uncleaned PDF text or raw HTML directly into your context window.
+
+### A. Fetching Quarto / GitHub Pages Course Websites (`npm run fetch-course`)
+```bash
+# 1. Inspect headings, token count, and same-site chapter links first:
+npm run fetch-course -- https://heig-vd-dai-course.github.io/heig-vd-dai-course/ --inspect
+
+# 2. Fetch a specific chapter as clean, stripped Markdown (removes nav, scripts, sidebars):
+npm run fetch-course -- https://example.github.io/course/chapter-02.html
+
+# 3. Extract a single section or save to a file:
+npm run fetch-course -- https://example.github.io/course/chapter-02.html -s "Rebase" -o sources/ch02-rebase.md
+```
+
+### B. Reading Source PDFs (`npm run read-pdf`)
 
 ### 1. Inspect Document Structure & Headings First
 ```bash
@@ -365,3 +402,12 @@ npm run read-pdf -- sources/<paper>.pdf --chunk-size 1000
 ```
 * **References Stripped by Default:** The tool automatically trims `References` / `Bibliography` sections (often 200–500+ tokens per paper) unless explicitly preserved with `--keep-refs`.
 * **Cleaned Text:** Automatically resolves unicode ligatures (`fi`, `fl`, `ff`), unwraps soft-hyphens across line breaks, and collapses extraneous vertical whitespace.
+
+---
+
+## 6. Requesting New Platform Capabilities (`FEATURE_REQUESTS.md`)
+
+If you hit a genuine authoring bottleneck while building a guide (for example, a new block type, sandbox runtime, or validator check that would meaningfully improve multiple guides):
+1. **Finish the current guide** cleanly using the existing 10 block types — do not modify `src/` or leave the guide blocked.
+2. **Append a concise proposal** to [`FEATURE_REQUESTS.md`](../../FEATURE_REQUESTS.md) using its template (`Status: proposed`, context guide, problem, proposed idea, and workaround used).
+3. Treat requests as **suggestions for developer agents to evaluate**, not guaranteed features — developer agents may accept, adapt, or decline them based on cross-course ROI, UI simplicity, and GitHub Pages compatibility.

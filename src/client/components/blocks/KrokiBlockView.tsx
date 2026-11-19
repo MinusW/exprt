@@ -6,9 +6,10 @@ import { MathText } from '../MathText.js';
 
 interface Props {
   block: KrokiBlock;
+  onNodeClick?: (nodeId: string, label: string) => void;
 }
 
-export const KrokiBlockView: React.FC<Props> = ({ block }) => {
+export const KrokiBlockView: React.FC<Props> = ({ block, onNodeClick }) => {
   const [svgContent, setSvgContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -19,6 +20,7 @@ export const KrokiBlockView: React.FC<Props> = ({ block }) => {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const dragStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+  const pointerMovedRef = useRef(false);
   const inlineCanvasRef = useRef<HTMLDivElement | null>(null);
   const modalCanvasRef = useRef<HTMLDivElement | null>(null);
 
@@ -58,6 +60,7 @@ export const KrokiBlockView: React.FC<Props> = ({ block }) => {
     if (e.button !== 0) return;
     e.preventDefault();
     setIsPanning(true);
+    pointerMovedRef.current = false;
     dragStartRef.current = {
       x: e.clientX,
       y: e.clientY,
@@ -68,6 +71,9 @@ export const KrokiBlockView: React.FC<Props> = ({ block }) => {
     const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - dragStartRef.current.x;
       const dy = ev.clientY - dragStartRef.current.y;
+      if (Math.hypot(dx, dy) > 5) {
+        pointerMovedRef.current = true;
+      }
       setPan({
         x: dragStartRef.current.panX + dx,
         y: dragStartRef.current.panY + dy,
@@ -82,6 +88,22 @@ export const KrokiBlockView: React.FC<Props> = ({ block }) => {
 
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+  };
+
+  const handleSvgClick = (e: React.MouseEvent) => {
+    if (!onNodeClick || pointerMovedRef.current) return;
+    const target = e.target as HTMLElement | null;
+    const nodeEl = target?.closest('.node') as HTMLElement | null;
+    if (!nodeEl) return;
+
+    const rawId = nodeEl.id || '';
+    const match = rawId.match(/^flowchart-(.+)-\d+$/);
+    const extractedId = match ? match[1] : rawId;
+    const label = (nodeEl.textContent || '').trim();
+    if (extractedId || label) {
+      setIsFullscreen(false);
+      onNodeClick(extractedId, label);
+    }
   };
 
   // Attach non-passive wheel listeners so Ctrl+Wheel / trackpad pinch zooms ONLY the diagram, not the browser
@@ -220,7 +242,10 @@ export const KrokiBlockView: React.FC<Props> = ({ block }) => {
 
         {!loading && !error && svgContent && (
           <div
-            className="flex items-center justify-center [&>svg]:max-w-none"
+            onClick={handleSvgClick}
+            className={`flex items-center justify-center [&>svg]:max-w-none ${
+              onNodeClick ? '[&_.node]:cursor-pointer [&_.node:hover]:opacity-80' : ''
+            }`}
             style={{
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
               transformOrigin: 'center center',
@@ -302,7 +327,10 @@ export const KrokiBlockView: React.FC<Props> = ({ block }) => {
               }`}
             >
               <div
-                className="[&>svg]:max-w-none"
+                onClick={handleSvgClick}
+                className={`[&>svg]:max-w-none ${
+                  onNodeClick ? '[&_.node]:cursor-pointer [&_.node:hover]:opacity-80' : ''
+                }`}
                 style={{
                   transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                   transformOrigin: 'center center',

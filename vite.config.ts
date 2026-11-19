@@ -2,6 +2,23 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import fs from 'node:fs';
 import path from 'node:path';
+import YAML from 'yaml';
+
+function yamlGuidesPlugin(): Plugin {
+  return {
+    name: 'yaml-guides-loader',
+    transform(src, id) {
+      if (id.endsWith('.yaml') || id.endsWith('.yml')) {
+        const parsed = YAML.parse(src);
+        return {
+          code: `export default ${JSON.stringify(parsed)};`,
+          map: null,
+        };
+      }
+      return null;
+    },
+  };
+}
 
 function copyDirRecursive(src: string, dest: string) {
   if (!fs.existsSync(src)) return;
@@ -31,7 +48,7 @@ function copyStaticContentPlugin(): Plugin {
 // https://vitejs.dev/config/
 export default defineConfig({
   base: './',
-  plugins: [react(), copyStaticContentPlugin()],
+  plugins: [react(), yamlGuidesPlugin(), copyStaticContentPlugin()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

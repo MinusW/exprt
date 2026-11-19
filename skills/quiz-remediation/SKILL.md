@@ -149,7 +149,7 @@ Both `question` and `explanation` support LaTeX math (`$...$` / `$$...$$`) as we
 
 ## 3. Automated Remediation Workflow
 
-When a learner struggles with a guide, the study webapp collects missed questions, user choices, and self-reflection notes, allowing the student to click **"Export Weak Spots for Antigravity"**. This writes a structured remediation report to:
+When a learner struggles with a guide, `exprt` collects missed questions, user choices, and self-reflection notes, allowing the student to click **"Export Weak Spots"**. This writes a structured remediation report to:
 
 ```text
 user-data/remediation-request.json
