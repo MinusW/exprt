@@ -1,0 +1,397 @@
+id: sye-lab02-study-guide
+title: SYE Labo 2 — Processus, Sockets & Ordonnancement
+description: Guide de révision complet pour les étapes 1 à 7 du Labo 2 SO3 (appels système, fork/waitpid, execve/environ, pipes/dup2, sockets TCP, SIGTSTP et ordonnancement par priorité statique).
+category: Operating Systems
+track: SYE - Operating Systems
+track_order: 4
+estimated_minutes: 45
+difficulty_level: intermediate
+tags:
+  - operating-systems
+  - syscalls
+  - pipes
+  - sockets
+  - scheduling
+prerequisites:
+  - sye-te1-mock-exam
+sources: []
+sections:
+  - id: sec-1-syscall-getparentpid
+    title: "1. Étape 1 — Ajouter un appel système (getparentpid)"
+    blocks:
+      - id: th-syscall-chain
+        block_type: markdown
+        title: "Chaîne complète d'un syscall dans SO3 (ARM32)"
+        content: |
+          Pour exposer une information du noyau à l'espace utilisateur (comme `getparentpid` ou `renice`), **4 fichiers** doivent être modifiés de manière cohérente :
+
+          | Fichier | Rôle exact | Exemple (`getparentpid`) |
+          | :--- | :--- | :--- |
+          | `so3/arch/arm32/syscall.h.in` | Associe le nom au numéro ABI (`r7`) | `#define __NR_getparentpid 454` |
+          | `so3/syscall.tbl` | Déclare le syscall et sa dépendance Kconfig | `getparentpid getparentpid MMU` |
+          | `so3/include/process.h` | Génère les prototypes `__sys_*` et `sys_do_*` | `SYSCALL_DECLARE(getparentpid, void);` |
+          | `so3/kernel/process.c` | Implémente la routine noyau | `SYSCALL_DEFINE0(getparentpid) { ... }` |
+
+          ### Mécanisme de génération (`syscall_gen.sh`) et macros
+          * `syscall_gen.sh` lit d'abord `syscall.tbl` pour construire `sys_cond[name] = requirement` (ex. `MMU`), puis filtre `arm32/syscall.h.in` : tout `__NR_<name>` absent de `syscall.tbl` est **ignoré** (`SYSCALL_<name>` non défini, aucune entrée dans `syscall_table.h.in` $\rightarrow$ `-ENOSYS` à l'appel). La colonne `MMU` entoure l'entrée de `#ifdef CONFIG_MMU` (sinon `&__sys_empty`).
+          * `SYSCALL_DEFINE0(name)` génère deux symboles C : le wrapper uniforme `long __sys_<name>(syscall_args_t *unused)` (placé dans `syscall_table[]`) et l'implémentation `inline long sys_do_<name>(void)`.
+          * `SYSCALL_DECLARE(name, ...)` dans `process.h` expose le prototype de `__sys_<name>` pour que `syscall_table.h.in` puisse prendre son adresse `&__sys_<name>`.
+
+          ### Pièges classiques d'examen
+          * **Nommage sans préfixe `sys_` :** Les macros `SYSCALL_DECLARE(name)` et `SYSCALL_DEFINE0(name)` préfixent déjà automatiquement le symbole par `__sys_` et `sys_do_`. Mettre `sys_getparentpid` dans `syscall.tbl` génère `__sys_sys_getparentpid`.
+          * **`current()` et déréférencement `NULL` :** `current()` retourne le `tcb_t *` du thread courant (`tcb->pcb` pointe vers son `pcb_t`). `fork()` initialise `pcb->parent`, mais `new_process()` met le PCB à zéro (`memset`) : le processus racine (`PID 1`, `create_root_process()`) a **`pcb->parent == NULL`**, et les threads noyau ont **`tcb->pcb == NULL`**. Sans garde, `current()->pcb->parent->pid` déclenche un **Kernel Panic (Data Abort)** :
+            ```c
+            if (!current()->pcb || !current()->pcb->parent)
+                return 0;
+            return current()->pcb->parent->pid;
+            ```
+          * **Pourquoi `#define SYS_getparentpid 454` au lieu de `getppid()` ?** La libc `musl` est précompilée dans la toolchain : son `getppid()` invoque `__NR_getppid` (`64`), qui est **absent** de `so3/syscall.tbl` et retourne donc `-ENOSYS`. Il faut donc cibler explicitement `454` via `syscall(SYS_getparentpid)`.
+      - id: diag-syscall-flow
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Cheminement User → Kernel sur ARM32"
+        source: |
+          flowchart LR
+            U["User: syscall(454)"] --> R7["r7 = 454, svc #0"]
+            R7 --> VEC["exception.S (Mode SVC)"]
+            VEC --> DISP["syscall_handle()"]
+            DISP --> TBL["syscall_table[454]"]
+            TBL --> FN["sys_do_getparentpid()"]
+            FN --> RET["Retour dans r0 (Mode USR)"]
+        caption: "Le script scripts/syscall_gen.sh génère syscall_number.h et syscall_table.h.in à partir de syscall.tbl et syscall.h.in."
+      - id: qz-syscall-null-parent
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Piège noyau dans sys_getparentpid"
+        question: |
+          Un étudiant implémente `SYSCALL_DEFINE0(getparentpid)` dans `so3/kernel/process.c` avec une seule ligne :
+
+          ```c
+          return current()->pcb->parent->pid;
+          ```
+
+          Lorsqu'un processus lancé depuis le shell appelle ce syscall, cela fonctionne. Que se passe-t-il si le processus racine (`PID 1`, créé par `create_root_process()`) l'appelle directement ?
+        options:
+          - "Le noyau provoque un Data Abort / Kernel Panic par déréférencement de pointeur NULL."
+          - "Le syscall retourne automatiquement 0 car le PCB du parent est initialisé à un PCB factice de PID 0."
+          - "Le syscall retourne -ESRCH grâce à la macro SYSCALL_DEFINE0."
+          - "Le compilateur refuse de compiler le noyau tant que la vérification NULL est absente."
+        correct_answer: "Le noyau provoque un Data Abort / Kernel Panic par déréférencement de pointeur NULL."
+        explanation: |
+          Le processus racine créé par `create_root_process()` n'a pas de parent : `new_process()` met le PCB à zéro, donc `pcb->parent == NULL`. Accéder à `pcb->parent->pid` déréférence `NULL` en mode noyau (`SVC`), ce qui déclenche un Data Abort fatal.
+
+          * "retourne automatiquement 0" est faux : il n'y a pas de PCB factice pour PID 0.
+          * "retourne -ESRCH" est faux : `SYSCALL_DEFINE0` ne fait aucune vérification sur `pcb->parent`.
+          * "refuse de compiler" est faux : le C ne vérifie pas les pointeurs `NULL` à la compilation.
+        hints:
+          - "Quel processus a `pcb->parent == NULL` dans `so3/kernel/process.c` ?"
+          - "Que fait le CPU lorsqu'on déréférence `NULL->pid` en mode privilégié ?"
+        difficulty: 3
+        related_block_id: th-syscall-chain
+
+  - id: sec-2-fork-sync
+    title: "2. Étape 2 — fork() et ordre d'exécution (test_parentpid)"
+    blocks:
+      - id: th-fork-order
+        block_type: markdown
+        title: "Pourquoi fork() ne garantit pas l'ordre d'affichage"
+        content: |
+          Après `pid_t pid = fork();` :
+          * Le parent reçoit `pid > 0` (le PID de l'enfant) ; l'enfant reçoit `pid == 0`.
+          * Les **deux** processus sont placés dans l'état `READY`. L'ordonnanceur choisit librement lequel prend le CPU en premier.
+
+          ### Garantir que l'enfant affiche toujours avant le parent
+          La seule garantie déterministe sans attente active est d'appeler **`waitpid(pid, &status, 0)`** dans le parent **avant** son `printf()` :
+          1. Le parent passe à l'état `WAITING` (bloqué) jusqu'à ce que l'enfant termine (`exit()`).
+          2. L'enfant exécute `syscall(SYS_getparentpid)` et son `printf()`.
+          3. À la fin de l'enfant (`ZOMBIE`), `waitpid()` réveille le parent et nettoie le PCB de l'enfant ; le parent affiche alors `getpid()`.
+
+          > **Pourquoi `sleep(1)` est faux :** `sleep()` est une temporisation arbitraire (race condition). Si l'enfant est retardé plus d'une seconde, le parent affichera avant l'enfant.
+      - id: qz-fork-waitpid
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Synchronisation parent / enfant après fork()"
+        question: "Dans `test_parentpid`, pourquoi `waitpid(pid, NULL, 0)` dans le parent garantit-il que le message de l'enfant s'affiche toujours avant celui du parent, contrairement à `sleep(1)` ?"
+        options:
+          - "waitpid() place le parent en état WAITING jusqu'à la terminaison effective de l'enfant, créant une barrière causale stricte."
+          - "waitpid() augmente temporairement la priorité de l'enfant au-dessus de celle du parent."
+          - "fork() exécute toujours l'enfant en premier, et waitpid() empêche seulement l'enfant de devenir orphelin."
+          - "waitpid() vide le buffer stdout de l'enfant avant de rendre la main au parent."
+        correct_answer: "waitpid() place le parent en état WAITING jusqu'à la terminaison effective de l'enfant, créant une barrière causale stricte."
+        explanation: |
+          `waitpid(pid, ...)` suspend le parent (`THREAD_STATE_WAITING`) jusqu'à ce que le processus enfant `pid` passe à l'état `ZOMBIE` (après avoir exécuté son `printf` et appelé `exit`). C'est une synchronisation événementielle exacte, contrairement à un délai fixe comme `sleep(1)`.
+
+          * "augmente la priorité" est faux : `waitpid()` bloque le parent, il ne modifie pas `prio`.
+          * "fork() exécute toujours l'enfant en premier" est faux : l'ordre après `fork()` est non déterministe.
+          * "vide le buffer stdout" est faux : l'enfant flush son propre `stdout` à sa terminaison.
+        hints:
+          - "Dans quel état l'ordonnanceur met-il un processus bloqué sur `waitpid()` ?"
+          - "À quel moment précis `waitpid()` retourne-t-il dans le parent ?"
+        difficulty: 2
+        related_block_id: th-fork-order
+      - id: fc-fork-returns
+        block_type: flashcard
+        title: "Valeurs de retour de fork()"
+        front: "Quelles sont les trois valeurs de retour possibles de `fork()` et que signifient-elles ?"
+        back: |
+          * **`< 0` (-1)** : Échec de création (aucun enfant créé).
+          * **`== 0`** : On est dans le **processus enfant** (il utilise `getpid()` / `getparentpid()` pour connaître les PIDs).
+          * **`> 0`** : On est dans le **processus parent** ; la valeur retournée est le **PID de l'enfant**.
+        hint: "Pensez à la différence entre le point de vue du parent (qui a besoin de l'ID de son nouvel enfant) et celui de l'enfant."
+
+  - id: sec-3-env-execve
+    title: "3. Étape 3 — Environnement des enfants et execve() dans sh.c"
+    blocks:
+      - id: th-execve-env
+        block_type: markdown
+        title: "execv() vs execve() et isolation de l'environnement"
+        content: |
+          Par défaut dans `sh.c`, `exec_elf()` appelait `execv(path, argv)`, qui transmet implicitement la variable globale `extern char **environ;` du shell parent au nouveau programme.
+
+          Pour que tout processus enfant lancé par le shell reçoive **uniquement** `CHILD=YES` tout en conservant `MYTEST=OK` dans le shell parent :
+          ```c
+          char *const child_env[] = { "CHILD=YES", NULL };
+          execve(path, argv, child_env);
+          ```
+
+          ### Subtilités importantes
+          1. **Pourquoi `setenv` doit être un *builtin* (et le cas `&` / `|`) :**
+             * Chaque processus possède son propre `environ`. Un exécutable externe `setenv.elf` modifierait uniquement la copie de son processus enfant puis quitterait sans affecter le shell parent.
+             * Dans `sh.c`, `run_builtin()` n'est appelé que si `ncmd == 1 && !background && cmds[0].in_file == NULL && cmds[0].out_file == NULL`. Si on tape `setenv MYTEST OK &` ou `setenv MYTEST OK | cat`, `sh` passe par `run_pipeline()` $\rightarrow$ `exec_elf()`, tente d'exécuter `/setenv.elf` et affiche `setenv: exec failed.`.
+          2. **Pourquoi le shell parent garde `MYTEST=OK` :**
+             * Les commandes externes (y compris `sh` qui lance `/sh.elf`) passent par `run_pipeline()` $\rightarrow$ `fork()` $\rightarrow$ `execve()`. L'environnement `child_env` ne remplace que l'image mémoire du **processus enfant**.
+          2. **Pourquoi `execve()` est préférable à `clearenv()` + `setenv()` ?**
+             * `execve()` est le syscall POSIX standard (`man 2 execve`) ; le noyau copie directement `envp` sur la nouvelle pile utilisateur (`setup_proc_image_replace()`).
+             * `clearenv()` est une extension GNU/BSD non POSIX qui modifie le tas de la libc après `fork()`.
+          3. **Ne jamais oublier le `NULL` final :** `child_env` doit impérativement se terminer par `NULL`, sinon le noyau lit hors du tableau.
+      - id: ref-env-isolation
+        block_type: reflection_rubric
+        title: "Synthèse : Isolation parent / enfant avec execve"
+        prompt: |
+          Dans le shell SO3 modifié à l'étape 3, on exécute :
+          `setenv MYTEST OK` $\rightarrow$ `sh` $\rightarrow$ `env` (affiche `CHILD=YES`) $\rightarrow$ `exit` $\rightarrow$ `env`.
+          Expliquez pourquoi le dernier `env` affiche toujours `MYTEST=OK` et non `CHILD=YES`.
+        self_check_criteria:
+          - "Précisé que `setenv` et `env` sont des builtins exécutés directement dans le shell parent (sans fork)."
+          - "Expliqué que `sh` lance `/sh.elf` dans un processus enfant créé par `fork()`."
+          - "Indiqué que `execve()` ne remplace l'espace d'adressage et `environ` que dans l'enfant, laissant le parent intact."
+        model_answer: |
+          `setenv` et `env` exécutés seuls sont des commandes internes (builtins) traitées directement dans le processus du shell parent : ils lisent et modifient son propre tableau `environ` contenant `MYTEST=OK`. Lorsque l'utilisateur lance `sh`, le shell appelle `fork()` puis `execve("/sh.elf", argv, child_env)` uniquement dans le processus enfant. Ce `execve()` écrase l'image mémoire de l'enfant avec `CHILD=YES`, sans affecter la mémoire isolée du parent. Une fois l'enfant terminé (`exit`), `env` dans le parent retrouve donc intact son environnement `MYTEST=OK`.
+      - id: qz-exec-variants
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Choix de la primitive exec* pour contrôler envp"
+        question: "Quelle fonction de la famille `exec` permet de passer explicitement un tableau d'environnement `char *const envp[]` en conservant le passage d'arguments sous forme de tableau `argv[]` ?"
+        options:
+          - "execve(path, argv, envp)"
+          - "execv(path, argv)"
+          - "execl(path, arg0, ..., NULL)"
+          - "execvp(file, argv)"
+        correct_answer: "execve(path, argv, envp)"
+        explanation: |
+          Dans la convention POSIX (`man 3 exec`), `v` signifie *vector* (`argv[]`), `l` signifie *list* (arguments variadiques), `p` utilise `PATH`, et `e` permet de passer explicitement `envp[]`. `execve(path, argv, envp)` combine donc le tableau `argv` et l'environnement explicite `envp`.
+
+          * `execv` et `execvp` héritent implicitement de `environ`.
+          * `execl` prend une liste variadique et hérite aussi de `environ`.
+        hints:
+          - "Que signifient les suffixes `v`, `l`, `p` et `e` dans la famille `exec*` ?"
+          - "Regardez la signature de l'appel système noyau sous-jacent dans `so3/kernel/process.c`."
+        difficulty: 2
+        related_block_id: th-execve-env
+
+  - id: sec-4-pipes
+    title: "4. Étape 4 — Pipeline « | », dup2(), close() et waitpid()"
+    blocks:
+      - id: th-pipe-mechanics
+        block_type: markdown
+        title: "Anatomie d'un pipeline `cmd1 | cmd2` dans sh.c"
+        content: |
+          ### 1. Découpage et erreurs de syntaxe (`parse_commands`)
+          * `parse_commands()` parcourt `tok[0..n-1]` avec un index d'étage `k` (initialisé à `0`) dans `struct command cmds[]` (`argv`, `argc`, `in_file`, `out_file`, `append`). Sur `"|"`, il incrémente `k` et remet `cmds[k]` à zéro.
+          * `| toupper` ou `echo hi | | toupper` (pipes consécutifs) $\rightarrow$ `cmds[k].argc == 0` immédiatement dans la boucle $\rightarrow$ `sh: syntax error near '|'.` (retourne `-1`).
+          * `echo hi |` (pipe en fin de ligne) $\rightarrow$ la boucle se termine avec `cmds[k].argc == 0`, détecté par la validation finale `for (i = 0; i <= k; i++) if (cmds[i].argc == 0)` $\rightarrow$ `sh: syntax error.` (retourne `-1`).
+
+          ### 2. Raccordement via `pipe()`, `dup2()` et `close()` (`run_pipeline`)
+          Pour relier l'étage $i$ à l'étage $i+1$, le parent crée un tube `pipe(pfd)` (`pfd[0]` = lecture, `pfd[1]` = écriture) :
+          * **Enfant $i$ :** si `prev_read != -1`, `dup2(prev_read, STDIN_FILENO)` ; si $i < ncmd - 1$, `dup2(pfd[1], STDOUT_FILENO)`. Puis fermeture de `prev_read`, `pfd[0]` et `pfd[1]` pour éviter toute fuite de descripteur et ne pas maintenir d'extrémité ouverte inutilement.
+          * **Priorité des redirections :** `apply_redirections()` est appelée **après** le câblage du tube ; pour `echo hi > out.txt | toupper`, `dup2(fd, STDOUT_FILENO)` écrase donc `pfd[1]`, `echo` écrit dans `out.txt`, et `toupper` reçoit immédiatement `EOF` sur `stdin`.
+          * **Parent :** ferme `pfd[1]` immédiatement, ferme l'ancien `prev_read` (évite les fuites de FDs entre étages) et sauvegarde `prev_read = pfd[0]` pour l'étage $i+1$.
+          * **Arrière-plan (`cmd1 | cmd2 &`) :** `*background = 1` saute la boucle `waitpid()`, affiche `[<pid>]` avec `pids[started - 1]` (le PID du dernier étage, `cmd2`), et les deux enfants sont nettoyés de manière non bloquante par `reap_children()` (`waitpid(-1, NULL, WNOHANG)`) au début de la boucle principale.
+
+          ### 3. La règle d'or Unix du `close()` (EOF)
+          Un `read()` sur un tube ne retourne **0 (EOF)** que lorsque **TOUS** les descripteurs ouverts en écriture (`pfd[1]`) sur ce tube ont été fermés dans **TOUS** les processus (y compris le parent !).
+      - id: diag-pipe-fds
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Câblage des descripteurs pour cmd1 | cmd2"
+        source: |
+          flowchart LR
+            C1["Enfant 1 (cmd1): stdout -> pfd[1]"] -->|"Tube (pfd[1] -> pfd[0])"| C2["Enfant 2 (cmd2): stdin <- prev_read"]
+            P["Parent (sh): close(pfd[1]) obligatoire"] -.->|"Sinon EOF jamais reçu"| C2
+        caption: "Après dup2(), chaque enfant ferme les FDs originaux (pfd[0], pfd[1], prev_read) et le parent ferme pfd[1] sans attendre."
+      - id: qz-pipe-hang
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Conséquence d'un close(pfd[1]) oublié dans le parent"
+        question: "Lors de l'exécution de `echo \"Hello\" | toupper`, si le shell parent (`sh`) oublie d'appeler `close(pfd[1])` après avoir forké `echo`, que se passe-t-il ?"
+        options:
+          - "echo affiche et termine, mais toupper reste bloqué indéfiniment sur read(STDIN_FILENO, ...) car le parent détient encore l'extrémité d'écriture."
+          - "echo reçoit SIGPIPE immédiatement et n'écrit rien dans le tube."
+          - "toupper lit les données deux fois puis retourne une erreur EBADF."
+          - "waitpid() retourne -ECHILD car le tube n'a pas été fermé."
+        correct_answer: "echo affiche et termine, mais toupper reste bloqué indéfiniment sur read(STDIN_FILENO, ...) car le parent détient encore l'extrémité d'écriture."
+        explanation: |
+          Un tube anonyme ne délivre `EOF` (`read()` retourne `0`) au lecteur (`toupper`) que lorsque **tous** les descripteurs pointant vers l'extrémité d'écriture (`pfd[1]`) sont fermés dans tous les processus. Comme le parent (`sh`) a gardé `pfd[1]` ouvert et attend ensuite la fin de `toupper` dans `waitpid()`, `toupper` attend éternellement un `EOF` qui n'arrivera jamais (interblocage / deadlock).
+
+          * `SIGPIPE` ne survient que si le *lecteur* est fermé alors qu'on écrit, pas l'inverse.
+          * Les données d'un tube ne sont jamais lues deux fois.
+        hints:
+          - "À quelle condition `read()` sur un tube retourne-t-il `0` (EOF) ?"
+          - "Qui hérite de `pfd[1]` lors d'un `fork()`, et que fait le parent juste après avoir lancé les enfants ?"
+        difficulty: 4
+        related_block_id: th-pipe-mechanics
+      - id: fc-pipe-waitpid
+        block_type: flashcard
+        title: "Ordre de waitpid() et code de retour d'un pipeline"
+        front: "Dans quel ordre `sh.c` attend-il les étages d'un pipeline et quelle valeur de retour récupère-t-il ?"
+        back: |
+          * **Ordre d'attente :** De **gauche à droite** (`for (i = 0; i < started; i++) waitpid(pids[i], NULL, 0)`). Si un étage aval termine avant l'étage amont, le parent attend d'abord l'étage amont, puis `waitpid` sur l'étage déjà zombie retourne immédiatement.
+          * **Valeur de retour :** `sh.c` passe `NULL` comme `wstatus` et retourne `void` (pas de `$?`). En POSIX/bash standard, le code de retour d'un pipeline est celui de la **dernière commande** (sauf `pipefail`).
+        hint: "Regardez la boucle `for` à la fin de `run_pipeline()` dans `so3/usr/src/sh.c`."
+
+  - id: sec-5-sockets-signals
+    title: "5. Étapes 5 & 6 — Sockets TCP et abandon SIGTSTP (Ctrl+Z)"
+    blocks:
+      - id: th-tcp-and-signals
+        block_type: markdown
+        title: "Flux TCP (Serveur/Client) et gestion asynchrone de SIGTSTP"
+        content: |
+          ### 1. Sockets TCP et saisie dans `battleship.c`
+          * **Serveur :** `socket(AF_INET, SOCK_STREAM, 0)` $\rightarrow$ `setsockopt(SO_REUSEADDR)` $\rightarrow$ `bind()` $\rightarrow$ `listen()` $\rightarrow$ `accept()` $\rightarrow$ **`close(srv_fd)`** (la partie n'accepte qu'un seul client : fermer la socket d'écoute libère le FD et refuse toute connexion supplémentaire).
+          * **Client :** `socket(AF_INET, SOCK_STREAM, 0)` $\rightarrow$ `inet_pton()` $\rightarrow$ `connect()`.
+          * **Pourquoi boucler dans `socketRecv` / `socketSend` ?** TCP est un **flux d'octets** (*byte stream*), pas un protocole à messages : `recv()` ou `send()` peut transférer moins que `size` octets en une fois. On boucle jusqu'à `total == size` (et on retourne `-1` si `n <= 0`).
+          * **Vidage de `stdin` dans `promptCell()` :** `fgets(buf, sizeof(buf), stdin)` lit au plus 63 caractères. Si `strchr(buf, '\n') == NULL`, une boucle `while ((c = getchar()) != '\n' && c != EOF);` purge le reste de la ligne, sans quoi l'appel suivant à `promptCell()` lirait les caractères restants comme le coup suivant.
+
+          ### 2. Abandon via `Ctrl+Z` (`SIGTSTP`)
+          Quand l'utilisateur appuie sur `Ctrl+Z`, le terminal envoie `SIGTSTP` au processus :
+          * **Handler `quitGame(int sig)` (async-signal safety) :** positionne `forfeit = 1`, envoie un octet sentinelle (`-1`) sur `sock_fd` pour prévenir l'adversaire, et ferme `sock_fd`. On n'appelle **pas** `printf()` ni `exit()` dans le handler car les fonctions `stdio` ne sont pas *async-signal-safe* (risque de deadlock ou corruption de buffer) ; `main()` affiche le message après sortie de boucle.
+          * **Piège crucial — `SA_RESTART` :** On configure `sigaction(SIGTSTP, &sa, NULL)` avec **`sa.sa_flags = 0`** (sans `SA_RESTART`). Ainsi, si le processus était bloqué dans `fgets()` ou `recv()`, l'appel système échoue avec `EINTR` au lieu de redémarrer, ce qui permet de sortir immédiatement de la boucle `while(1)` et d'afficher `You forfeited the game: YOU LOST T_T` dans `main()`.
+          * **Protection `SIGPIPE` :** On ignore `SIGPIPE` (`signal(SIGPIPE, SIG_IGN)`) pour que `send()` sur une socket fermée par l'adversaire retourne `-1` (`errno = EPIPE`) au lieu de tuer le programme brutalement.
+      - id: qz-tcp-partial
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Comportement de recv() sur une socket TCP"
+        question: "Pourquoi `socketRecv(sock_fd, buf, size)` doit-elle utiliser une boucle `while (total < size)` et vérifier `n <= 0` ?"
+        options:
+          - "Parce que TCP est un flux d'octets sans frontières de messages (un recv peut retourner moins de size octets), et n == 0 indique que le pair a fermé la connexion."
+          - "Parce que recv() retourne un octet à la fois par défaut en mode SOCK_STREAM."
+          - "Parce que n == 0 signifie qu'aucune donnée n'est encore prête et qu'il faut réessayer."
+          - "Parce que size est limité à 1 octet par l'ABI Linux sur les sockets locales."
+        correct_answer: "Parce que TCP est un flux d'octets sans frontières de messages (un recv peut retourner moins de size octets), et n == 0 indique que le pair a fermé la connexion."
+        explanation: |
+          En TCP (`SOCK_STREAM`), les données forment un flux continu : si l'émetteur envoie $N$ octets, `recv()` peut les recevoir en plusieurs fragments. Il faut donc boucler tant que `total < size`. De plus, sur une socket bloquante, `recv() == 0` ne signifie pas « réessayez » mais **EOF** (l'adversaire a fermé la connexion), et `< 0` indique une erreur (ou `EINTR`).
+
+          * "un octet à la fois" est faux : `recv()` lit tout ce qui est disponible dans le buffer noyau jusqu'à `size - total`.
+          * "aucune donnée prête" correspond à `EAGAIN`/`EWOULDBLOCK` en mode non-bloquant (`n == -1`), jamais `n == 0`.
+        hints:
+          - "Quelle est la différence entre un flux d'octets (`SOCK_STREAM`) et des datagrammes (`SOCK_DGRAM`) ?"
+          - "Que retourne `recv()` sur une socket TCP bloquante lorsque le pair appelle `close()` ?"
+        difficulty: 3
+        related_block_id: th-tcp-and-signals
+      - id: qz-sigtstp-restart
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Rôle de sa_flags = 0 avec SIGTSTP"
+        question: "Dans `battleship.c`, `quitGame()` met `forfeit = 1`, envoie `-1` et ferme `sock_fd`, sans appeler `exit()`. Si un joueur appuie sur `Ctrl+Z` alors qu'il est bloqué dans `fgets()` (`promptCell()`), pourquoi est-il crucial d'avoir `sa.sa_flags = 0` (et non `SA_RESTART`) ?"
+        options:
+          - "Pour que fgets() / read() soit interrompu avec EINTR et retourne NULL afin que main() sorte de la boucle de jeu."
+          - "Pour que le noyau redémarre automatiquement main() depuis le début."
+          - "Pour empêcher SIGTSTP de mettre le processus en pause (STOP) dans le shell."
+          - "Pour que send() dans le handler puisse utiliser le tampon stdio."
+        correct_answer: "Pour que fgets() / read() soit interrompu avec EINTR et retourne NULL afin que main() sorte de la boucle de jeu."
+        explanation: |
+          Si `SA_RESTART` est activé, le noyau relance automatiquement l'appel système bloquant (`read` sous `fgets`) après la fin du handler de signal : le programme resterait bloqué à attendre une saisie clavier au lieu de quitter la partie ! Avec `sa_flags = 0`, `read()` retourne `-1` (`EINTR`), `promptCell()` retourne `-1`, `main()` sort du `while(1)` et affiche le message de défaite.
+
+          * Mettre un handler personnalisé remplace déjà l'action par défaut (`SIG_DFL` qui stoppe le processus), indépendamment de `SA_RESTART`.
+        hints:
+          - "Que fait `SA_RESTART` lorsqu'un signal interrompt un appel système lent comme `read()` ou `recv()` ?"
+          - "Comment `main()` peut-il atteindre le test `if (forfeit)` s'il était bloqué dans `promptCell()` ?"
+        difficulty: 4
+        related_block_id: th-tcp-and-signals
+      - id: fc-so-reuseaddr
+        block_type: flashcard
+        title: "Rôle de SO_REUSEADDR côté serveur TCP"
+        front: "Pourquoi appelle-t-on `setsockopt(srv_fd, SOL_SOCKET, SO_REUSEADDR, ...)` avant `bind()` dans un serveur TCP ?"
+        back: |
+          Lorsqu'un serveur ferme sa connexion en premier, la socket reste brièvement dans l'état TCP **`TIME_WAIT`**. Sans `SO_REUSEADDR`, relancer immédiatement le serveur sur le même port (`5000`) échoue avec `bind: Address already in use` (`EADDRINUSE`).
+        hint: "Quel état TCP suit la fermeture active d'une connexion ?"
+
+  - id: sec-6-renice-sched
+    title: "6. Étape 7 — Appel système renice() et ordonnancement par priorité statique"
+    blocks:
+      - id: th-sched-prio
+        block_type: markdown
+        title: "Ordonnanceur CONFIG_SCHED_PRIO et famine (starvation)"
+        content: |
+          Dans `so3/kernel/schedule.c`, lorsque `CONFIG_SCHED_PRIO=y` est activé dans `so3/so3/.config`, `next_thread()` sélectionne le thread prêt avec la priorité numérique la **plus élevée** (priorité par défaut : `10`) :
+          ```c
+          else if (tcb->prio > tcb_to_schedule->prio)
+              tcb_to_schedule = tcb;
+          ```
+
+          ### Piège `.config` et priorité égale (`>`)
+          * **Oublier `CONFIG_SCHED_PRIO=y` :** Si `CONFIG_SCHED_RR=y` reste actif dans `so3/so3/.config`, `renice` met bien à jour `tcb->prio` sans erreur, mais `next_thread()` du mode Round-Robin ignore totalement `prio` et alterne les threads équitablement.
+          * **Priorités égales sous `CONFIG_SCHED_PRIO` :** Comme la condition `tcb->prio > tcb_to_schedule->prio` est **stricte (`>`)**, deux processus continus `time_loop &` à priorité égale (`10 == 10`) ne se préemptent **pas** en Round-Robin sur les ticks d'horloge : le premier garde le CPU jusqu'à ce qu'il bloque ou termine.
+
+          ### Implémentation de `renice(pid, prio)`
+          * La priorité est portée par le **thread** (`tcb_t->prio` dans `thread.h`), pas directement par `pcb_t`.
+          * `prio == 0` est rejeté avec **`-EINVAL`** car, selon `thread.h`, `0` est réservé pour indiquer la priorité par défaut (`THREAD_PRIO_DEFAULT = 10`) ; les priorités explicites commencent à `1`.
+          * `renice(pid, prio)` encapsule `find_proc_by_pid(pid)` et la mise à jour de `pcb->main_thread->prio` + `pcb->threads` sous **`local_irq_save()` / `local_irq_restore()`** afin d'empêcher une interruption timer/ordonnanceur de préempter ou modifier les listes pendant le parcours.
+
+          ### Mode continu (`time_loop &`) vs Mode bloquant (`time_loop b &`)
+          1. **`time_loop &` (mode continu — attente active sur `gettimeofday`) :**
+             * Le processus ne se bloque jamais et reste toujours `READY` ou `RUNNING`.
+             * Si on abaisse la priorité du shell (`PID 1`) en dessous de 10 (`renice 1 5`), `time_loop` (prio `10`) a toujours une priorité **strictement supérieure** au shell (`10 > 5`).
+             * **Résultat : famine (*starvation*) totale du shell.** Aucune commande ne s'exécute tant que `time_loop` n'a pas fini ses 30 itérations.
+          2. **`time_loop b &` (mode bloquant — `usleep(1000000)`) :**
+             * À chaque itération, `usleep()` place `time_loop` en état `WAITING` (hors de `readyThreads`).
+             * Même avec une priorité inférieure (`5 < 10`), le shell s'exécute normalement pendant toute la durée du sommeil de `time_loop` ; lorsque le timer réveille `time_loop`, celui-ci préempte brièvement pour afficher son compteur puis se rendort.
+      - id: diag-sched-states
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Pourquoi le mode bloquant évite la famine du shell"
+        source: |
+          flowchart LR
+            C["time_loop (continu, prio 10)"] -->|"Boucle gettimeofday -> toujours READY/RUNNING"| S1["next_thread(): 10 > 5 -> Shell (prio 5) affamé"]
+            B["time_loop b (bloquant, prio 10)"] -->|"usleep(1s) -> état WAITING"| S2["retiré de readyThreads -> Shell (prio 5) s'exécute"]
+        caption: "La priorité statique ne préempte qu'entre threads prêts (readyThreads) ; un thread endormi cède le CPU."
+      - id: qz-renice-starvation
+        block_type: quiz_question
+        question_type: multiple_choice
+        title: "Diagnostic de famine sous CONFIG_SCHED_PRIO"
+        question: |
+          Sous `CONFIG_SCHED_PRIO=y`, le shell (`PID 1`) a sa priorité abaissée à `5` via `renice 1 5`. On lance ensuite `time_loop &` (priorité par défaut `10`, mode continu sans `b`) puis on tape `ls` dans le shell. Que observe-t-on et pourquoi ?
+        options:
+          - "Le shell est complètement bloqué (famine) jusqu'à la fin des 30 secondes de time_loop, car time_loop reste toujours prêt avec prio 10 > 5."
+          - "ls s'exécute immédiatement après le prochain tick d'horloge (30 ms) grâce à la préemption périodique."
+          - "time_loop et le shell se partagent le CPU à parts égales car le shell gère les interruptions clavier."
+          - "time_loop s'arrête automatiquement après 1 seconde parce que le shell est PID 1."
+        correct_answer: "Le shell est complètement bloqué (famine) jusqu'à la fin des 30 secondes de time_loop, car time_loop reste toujours prêt avec prio 10 > 5."
+        explanation: |
+          Même si l'interruption série (clavier) réveille le shell et le place dans `readyThreads`, l'ordonnanceur (`next_thread()`) compare la priorité du thread courant (`time_loop`, `prio = 10`) à celle du shell (`prio = 5`). Comme `10 > 5` et que `time_loop` ne bloque jamais en mode continu (attente active sur `gettimeofday`), le shell ne gagne jamais l'élection tant que `time_loop` n'a pas terminé.
+
+          * La préemption périodique (30 ms) réinvoque `schedule()`, mais `next_thread()` re-sélectionne toujours `time_loop` (prio 10).
+          * `PID 1` n'a aucun privilège spécial d'ordonnancement par rapport aux autres processus.
+        hints:
+          - "En mode continu, `time_loop` quitte-t-il jamais les états `RUNNING` / `READY` ?"
+          - "Dans `next_thread()`, quel critère décide quel thread obtient le CPU lors d'un tick d'horloge ?"
+        difficulty: 4
+        related_block_id: th-sched-prio
+      - id: fc-tcb-prio
+        block_type: flashcard
+        title: "Où réside la priorité dans le noyau SO3 ?"
+        front: "Dans le noyau SO3, quelle structure porte le champ `prio` utilisé par `CONFIG_SCHED_PRIO`, et comment `renice(pid, prio)` doit-il le mettre à jour ?"
+        back: |
+          Le champ `uint32_t prio` appartient à **`tcb_t`** (`struct tcb` dans `include/thread.h`), et non directement à `pcb_t`.
+          `renice(pid, prio)` doit donc trouver le `pcb_t` via `find_proc_by_pid(pid)` puis mettre à jour **`pcb->main_thread->prio`** ainsi que tous les threads secondaires dans `pcb->threads` (sous `local_irq_save()`/`local_irq_restore()`).
+        hint: "L'ordonnanceur SO3 ordonnance des threads (`tcb_t`), pas directement des `pcb_t`."
