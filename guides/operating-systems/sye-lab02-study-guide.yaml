@@ -38,6 +38,10 @@ sections:
           * `SYSCALL_DECLARE(name, ...)` in `process.h` declares `__sys_<name>` so the generated `syscall_table.h.in` can take its address `&__sys_<name>`.
 
           ### Classic Exam Traps
+          * **Where is the parent stored & when is it set?** In `pcb_t` (`struct pcb` in `include/process.h`) via the `pcb_t *parent;` pointer. It is populated during `fork()` / `do_clone()` inside `duplicate_process(pcb_t *parent)` (`pcb->parent = parent;`).
+          * **What if the parent exits before the child (orphan process)?**
+            * **In standard Linux/POSIX:** The orphan is re-parented to `init` (`PID 1`), so `getppid()` returns `1`.
+            * **In SO3 (`wait4` in `process.c`):** SO3 avoids orphans by checking `if (!find_proc_by_parent(child)) remove_proc(child);` — it keeps the parent's `ZOMBIE` PCB in `proc_list` as long as it still has children. Thus `getparentpid` still returns the **original parent's PID** (not `1`).
           * **Naming without the `sys_` prefix:** `SYSCALL_DECLARE(name)` and `SYSCALL_DEFINE0(name)` already prepend `__sys_` and `sys_do_`. Putting `sys_getparentpid` in `syscall.tbl` generates `__sys_sys_getparentpid`.
           * **`current()` and `NULL`-pointer dereference:** `current()` returns the `tcb_t *` of the currently executing thread (`tcb->pcb` points to its `pcb_t`). `fork()` initializes `pcb->parent`, whereas `new_process()` zeroes the PCB (`memset`): the root process (`PID 1`, `create_root_process()`) has **`pcb->parent == NULL`**, and kernel threads have **`tcb->pcb == NULL`**. Without a guard, `current()->pcb->parent->pid` triggers a **Kernel Panic (Data Abort)**:
             ```c
@@ -107,6 +111,8 @@ sections:
           3. When the child exits (`ZOMBIE`), `waitpid()` wakes the parent and reaps the child's PCB; the parent then prints `getpid()`.
 
           > **Why `sleep(1)` is wrong:** `sleep()` is an arbitrary time delay (a race condition). If the child is delayed longer than 1 second, the parent prints first.
+
+          > **Why `waitpid(pid, NULL, 0)` instead of `wait(NULL)` or `waitpid(-1, NULL, 0)`?** `wait(NULL)` and `waitpid(-1, ...)` wait for **any** child process. Using `waitpid(pid, ...)` explicitly targets the specific child created by `fork()`, which is safer and scales if other child processes exist.
       - id: qz-fork-waitpid
         block_type: quiz_question
         question_type: multiple_choice
@@ -146,6 +152,12 @@ sections:
         block_type: markdown
         title: "execv() vs. execve() and Environment Isolation"
         content: |
+          ### What is an Environment Variable & How Programs Read It
+          An environment variable is a `"KEY=VALUE"` string passed in a `NULL`-terminated array (`envp`) onto the new process's user stack by `execve()` (copied by the kernel in `setup_proc_image_replace()`). A C program can read them in three ways:
+          * `getenv("NAME")` (searches `environ` and returns the value string or `NULL`)
+          * `extern char **environ;` (global array of `"KEY=VALUE"` strings, used by `builtin_env` in `sh.c`)
+          * `int main(int argc, char *argv[], char *envp[])` (third argument to `main`)
+
           By default in `sh.c`, `exec_elf()` called `execv(path, argv)`, which implicitly passes the parent shell's global `extern char **environ;` to the new program.
 
           To ensure every child process spawned by the shell receives **only** `CHILD=YES` while keeping `MYTEST=OK` in the parent shell:
@@ -267,14 +279,15 @@ sections:
         title: "TCP Flow (Server/Client) & Async SIGTSTP Handling"
         content: |
           ### 1. TCP Sockets & Input Handling in `battleship.c`
-          * **Server:** `socket(AF_INET, SOCK_STREAM, 0)` $\rightarrow$ `setsockopt(SO_REUSEADDR)` $\rightarrow$ `bind()` $\rightarrow$ `listen()` $\rightarrow$ `accept()` $\rightarrow$ **`close(srv_fd)`** (the game serves a single client: closing the listening socket frees the FD and stops accepting new connections).
+          * **Server:** `socket(AF_INET, SOCK_STREAM, 0)` $\rightarrow$ `setsockopt(SO_REUSEADDR)` $\rightarrow$ `bind()` (`INADDR_ANY` = all local interfaces, `htons(port)` = host-to-network big-endian byte order) $\rightarrow$ `listen()` $\rightarrow$ `accept()` $\rightarrow$ **`close(srv_fd)`** (the game serves a single client: closing the listening socket frees the FD and stops accepting new connections).
+          * **Scaling to multiple clients:** Keep `srv_fd` open inside a `while (1)` `accept()` loop, and handle each `client_fd` concurrently via **`fork()`** (parent closes `client_fd` and reaps exited children via `SIGCHLD` + `waitpid(-1, NULL, WNOHANG)` to avoid zombies; child closes `srv_fd` and serves the client), **`pthread_create()`** (one thread per client), or **I/O multiplexing** (`select()` / `poll()` / `epoll()`).
           * **Client:** `socket(AF_INET, SOCK_STREAM, 0)` $\rightarrow$ `inet_pton()` $\rightarrow$ `connect()`.
           * **Why loop in `socketRecv` / `socketSend`?** TCP is a **byte stream**, not a message-framed protocol: `recv()` or `send()` can transfer fewer than `size` bytes at once. Loop until `total == size` (and return `-1` if `n <= 0`).
           * **Draining `stdin` in `promptCell()`:** `fgets(buf, sizeof(buf), stdin)` reads at most 63 characters. If `strchr(buf, '\n') == NULL`, `while ((c = getchar()) != '\n' && c != EOF);` flushes the rest of the line so leftover characters aren't read as the next move.
 
           ### 2. Forfeiting with `Ctrl+Z` (`SIGTSTP`)
           When the user presses `Ctrl+Z`, the terminal sends `SIGTSTP` to the process:
-          * **Handler `quitGame(int sig)` (async-signal safety):** sets `forfeit = 1`, sends a sentinel byte (`-1`) on `sock_fd` to notify the opponent, and closes `sock_fd`. We intentionally avoid `printf()` and `exit()` inside the handler because `stdio` functions are not *async-signal-safe* (risking deadlocks or buffer corruption); `main()` prints the forfeit message after exiting the loop.
+          * **Handler `quitGame(int sig)` (async-signal safety):** sets `forfeit = 1` (ideally `volatile sig_atomic_t` so the compiler doesn't cache it in a register and reads/writes are atomic across signal delivery), sends a sentinel byte (`-1`) on `sock_fd` to notify the opponent, and closes `sock_fd`. We intentionally avoid `printf()` and `exit()` inside the handler because `stdio` functions are not *async-signal-safe* (risking deadlocks or buffer corruption); `main()` prints the forfeit message after exiting the loop.
           * **Crucial Trap — `SA_RESTART`:** Register `sigaction(SIGTSTP, &sa, NULL)` with **`sa.sa_flags = 0`** (without `SA_RESTART`). That way, if the process was blocked in `fgets()` or `recv()`, the syscall fails with `EINTR` instead of restarting, breaking out of `while(1)` so `main()` prints `You forfeited the game: YOU LOST T_T`.
           * **`SIGPIPE` protection:** Ignore `SIGPIPE` (`signal(SIGPIPE, SIG_IGN)`) so calling `send()` after the opponent closed the socket returns `-1` (`errno = EPIPE`) instead of killing the process.
       - id: qz-tcp-partial
