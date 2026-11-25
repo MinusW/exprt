@@ -36,5 +36,5 @@ Read the relevant skill before authoring:
 
 ## Proposing Platform Improvements (`FEATURE_REQUESTS.md`)
 
-* **Content-authoring agents:** If you hit a genuine platform limitation while writing a guide (e.g. a missing block type, sandbox runtime, or validator check), finish the guide using existing blocks and append a concise `proposed` entry to [`FEATURE_REQUESTS.md`](FEATURE_REQUESTS.md). Do not modify `src/` during guide-authoring tasks.
+* **Content-authoring agents (actively encouraged!):** Whenever you finish authoring a guide—or hit any friction, awkward workaround, missing input/answer format, sandbox limitation, validator gap, or CLI annoyance—**log a `proposed` entry in [`FEATURE_REQUESTS.md`](FEATURE_REQUESTS.md)** before wrapping up. Don't stay silent or assume something is too small: if it would make future guides cleaner or more effective, propose it! Still finish your guide using existing blocks and do not modify `src/` during guide-authoring tasks.
 * **Developer agents:** Review `proposed` entries in [`FEATURE_REQUESTS.md`](FEATURE_REQUESTS.md) critically — proposals are **possibilities, not automatic approvals**. Evaluate cross-course ROI, UI simplicity, and GitHub Pages compatibility, then mark each entry `accepted`, `implemented`, or `declined` with a brief rationale.

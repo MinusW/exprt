@@ -1,8 +1,42 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useId, useMemo } from 'react';
 import { ZoomIn, ZoomOut, RotateCcw, AlertTriangle, Maximize2, X, Download, Move } from 'lucide-react';
 import type { KrokiBlock } from '../../types.js';
 import { renderKroki } from '../../api.js';
 import { MathText } from '../MathText.js';
+
+/**
+ * Scope SVG `<defs>` / `<clipPath>` / `<marker>` / gradient IDs per rendered
+ * instance so multiple inline Kroki SVGs (especially Batik/UMLet SVGs that emit
+ * `clipPath1`, `clipPath2`, ...) do not collide across the same DOM document.
+ */
+function scopeSvgIds(svg: string, prefix: string): string {
+  const referencedIds = new Set<string>();
+  const urlRe = /url\(\s*['"]?#([^)'"\s]+)['"]?\s*\)/g;
+  const hrefRe = /(?:xlink:)?href\s*=\s*['"]#([^'"]+)['"]/g;
+
+  let m: RegExpExecArray | null;
+  while ((m = urlRe.exec(svg)) !== null) {
+    if (!m[1].startsWith('flowchart-')) referencedIds.add(m[1]);
+  }
+  while ((m = hrefRe.exec(svg)) !== null) {
+    if (!m[1].startsWith('flowchart-')) referencedIds.add(m[1]);
+  }
+
+  if (referencedIds.size === 0) return svg;
+
+  const mapId = (id: string) => (referencedIds.has(id) ? `${prefix}_${id}` : id);
+
+  return svg
+    .replace(/\bid\s*=\s*(['"])([^'"]+)\1/g, (full, q, id) =>
+      referencedIds.has(id) ? `id=${q}${mapId(id)}${q}` : full
+    )
+    .replace(/url\(\s*(['"]?)#([^)'"\s]+)\1\s*\)/g, (full, q, id) =>
+      referencedIds.has(id) ? `url(${q}#${mapId(id)}${q})` : full
+    )
+    .replace(/((?:xlink:)?href\s*=\s*['"])#([^'"]+)(['"])/g, (full, pre, id, post) =>
+      referencedIds.has(id) ? `${pre}#${mapId(id)}${post}` : full
+    );
+}
 
 interface Props {
   block: KrokiBlock;
@@ -15,6 +49,16 @@ export const KrokiBlockView: React.FC<Props> = ({ block, onNodeClick }) => {
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  const inlineSvg = useMemo(
+    () => (svgContent ? scopeSvgIds(svgContent, `k_${instanceId}_i`) : null),
+    [svgContent, instanceId]
+  );
+  const modalSvg = useMemo(
+    () => (svgContent ? scopeSvgIds(svgContent, `k_${instanceId}_m`) : null),
+    [svgContent, instanceId]
+  );
 
   // Pan state (shared for inline and fullscreen inspection)
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -240,7 +284,7 @@ export const KrokiBlockView: React.FC<Props> = ({ block, onNodeClick }) => {
           </div>
         )}
 
-        {!loading && !error && svgContent && (
+        {!loading && !error && inlineSvg && (
           <div
             onClick={handleSvgClick}
             className={`flex items-center justify-center [&>svg]:max-w-none ${
@@ -250,7 +294,7 @@ export const KrokiBlockView: React.FC<Props> = ({ block, onNodeClick }) => {
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
               transformOrigin: 'center center',
             }}
-            dangerouslySetInnerHTML={{ __html: svgContent }}
+            dangerouslySetInnerHTML={{ __html: inlineSvg }}
           />
         )}
       </div>
@@ -335,7 +379,7 @@ export const KrokiBlockView: React.FC<Props> = ({ block, onNodeClick }) => {
                   transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                   transformOrigin: 'center center',
                 }}
-                dangerouslySetInnerHTML={{ __html: svgContent }}
+                dangerouslySetInnerHTML={{ __html: modalSvg || '' }}
               />
             </div>
           </div>

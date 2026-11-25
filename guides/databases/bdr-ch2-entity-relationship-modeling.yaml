@@ -244,7 +244,7 @@ sections:
             </element>
             <element>
               <id>UMLClass</id>
-              <coordinates><x>560</x><y>160</y><w>170</w><h>95</h></coordinates>
+              <coordinates><x>560</x><y>175</y><w>170</w><h>95</h></coordinates>
               <panel_attributes>Occupation
           --
           dateDebut [partielle]
@@ -254,23 +254,23 @@ sections:
             </element>
             <element>
               <id>Relation</id>
-              <coordinates><x>495</x><y>110</y><w>95</w><h>70</h></coordinates>
+              <coordinates><x>495</x><y>110</y><w>95</w><h>85</h></coordinates>
               <panel_attributes>lt=&lt;&lt;&lt;&lt;&lt;-
           m1=1..1
           m2=*</panel_attributes>
-              <additional_attributes>20;0;65;50</additional_attributes>
+              <additional_attributes>20;0;65;65</additional_attributes>
             </element>
             <element>
               <id>Relation</id>
-              <coordinates><x>700</x><y>110</y><w>95</w><h>70</h></coordinates>
+              <coordinates><x>700</x><y>110</y><w>95</w><h>85</h></coordinates>
               <panel_attributes>lt=&lt;&lt;&lt;&lt;&lt;-
           m1=1..1
           m2=*</panel_attributes>
-              <additional_attributes>75;0;30;50</additional_attributes>
+              <additional_attributes>75;0;30;65</additional_attributes>
             </element>
             <element>
               <id>UMLClass</id>
-              <coordinates><x>560</x><y>320</y><w>170</w><h>85</h></coordinates>
+              <coordinates><x>560</x><y>375</y><w>170</w><h>85</h></coordinates>
               <panel_attributes>ServiceDeChambre
           --
           _IdService_
@@ -280,12 +280,12 @@ sections:
             </element>
             <element>
               <id>Relation</id>
-              <coordinates><x>580</x><y>255</y><w>130</w><h>65</h></coordinates>
+              <coordinates><x>580</x><y>270</y><w>130</w><h>105</h></coordinates>
               <panel_attributes>lt=-
           m1=1..1
           m2=*
           Effectue_pour</panel_attributes>
-              <additional_attributes>65;0;65;65</additional_attributes>
+              <additional_attributes>65;0;65;105</additional_attributes>
             </element>
           </diagram>
 

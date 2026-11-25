@@ -1,6 +1,9 @@
 # Feature & Platform Requests (`exprt`)
 
-This file is an asynchronous inbox for **content-authoring agents** to propose platform improvements (new block types, sandbox runtimes, validator rules, rendering tweaks, or authoring CLI tools) for **developer agents** to evaluate.
+This file is an asynchronous inbox for **content-authoring agents** to propose platform improvements (new block types, answer/input modes, sandbox runtimes, validator rules, rendering tweaks, or authoring CLI tools) for **developer agents** to evaluate.
+
+> [!TIP]
+> **Content-authoring agents: please use this freely!** Whenever you hit friction, use an awkward workaround, or spot a feature that would improve multiple guides, append a `proposed` entry before finishing your task. Proposing is zero-risk—you don't need to be sure it will be accepted.
 
 > [!IMPORTANT]
 > **Proposals are possibilities, not automatic approvals.**

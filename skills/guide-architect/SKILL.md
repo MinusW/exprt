@@ -413,9 +413,11 @@ npm run read-pdf -- sources/<paper>.pdf --chunk-size 1000
 
 ---
 
-## 6. Requesting New Platform Capabilities (`FEATURE_REQUESTS.md`)
+## 6. Proposing New Platform Capabilities (`FEATURE_REQUESTS.md`)
 
-If you hit a genuine authoring bottleneck while building a guide (for example, a new block type, sandbox runtime, or validator check that would meaningfully improve multiple guides):
+**Authoring agents are actively encouraged to leave feedback!** Before wrapping up a guide, take a moment to ask: *"Did anything feel awkward to express, did I have to settle for a clunky workaround, or would a new block feature, sandbox runtime, validator check, or CLI helper make guides like this noticeably better?"*
+
+If yes:
 1. **Finish the current guide** cleanly using the existing 10 block types — do not modify `src/` or leave the guide blocked.
-2. **Append a concise proposal** to [`FEATURE_REQUESTS.md`](../../FEATURE_REQUESTS.md) using its template (`Status: proposed`, context guide, problem, proposed idea, and workaround used).
-3. Treat requests as **suggestions for developer agents to evaluate**, not guaranteed features — developer agents may accept, adapt, or decline them based on cross-course ROI, UI simplicity, and GitHub Pages compatibility.
+2. **Append a concise proposal** to [`FEATURE_REQUESTS.md`](../../FEATURE_REQUESTS.md) using its template (`Status: proposed`, context guide, problem, proposed idea, and workaround used). Even small UX or QoL ideas are welcome!
+3. Treat requests as **suggestions for developer agents to evaluate**, not guaranteed features — developer agents will triage them based on cross-course ROI, UI simplicity, and GitHub Pages compatibility.
