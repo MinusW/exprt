@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { HelpCircle, CheckCircle, XCircle, Star, ArrowUpRight, AlertCircle, Lightbulb, RotateCcw } from 'lucide-react';
 import type { QuizQuestionBlock } from '../../types.js';
 import { MathText } from '../MathText.js';
+import { RichMarkdown } from '../RichMarkdown.js';
+import { KrokiBlockView } from './KrokiBlockView.js';
 import { shuffleOptions } from '../../utils/shuffle.js';
 
 interface Props {
@@ -378,8 +380,24 @@ export const QuizBlockView: React.FC<Props> = ({
                   </>
                 )}
               </div>
-              <MathText text={block.explanation} className="text-slate-800 text-xs leading-relaxed" />
+              <RichMarkdown content={block.explanation} className="text-slate-800" />
             </div>
+
+            {block.explanation_diagram && (
+              <div className="mb-3">
+                <KrokiBlockView
+                  block={{
+                    id: `${block.id}-explanation-diagram`,
+                    block_type: 'kroki',
+                    diagram_type: block.explanation_diagram.diagram_type,
+                    title: block.explanation_diagram.title || 'Visual Explanation',
+                    source: block.explanation_diagram.source,
+                    caption: block.explanation_diagram.caption,
+                    bookmarkable: false,
+                  }}
+                />
+              </div>
+            )}
 
             {/* Links and retry button */}
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs">

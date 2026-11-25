@@ -52,8 +52,8 @@ Every diagnostic quiz question should incorporate an array of 2 to 3 step-by-ste
 * **Hint 2 (Intermediate Formulation):** Outlines the mathematical operation or algebraic substitution required.
 * **Hint 3 (Sanity Check / Verification):** Provides a bounds check or sanity test that helps the student self-correct without giving away the final answer.
 
-### G. Formatted Code & Math in Questions & Explanations
-Both `question` and `explanation` support LaTeX math (`$...$` / `$$...$$`) as well as fenced code blocks (` ```c ... ``` `, ` ```cpp ... ``` `, etc.), which render as formatted monospace `<pre><code>` blocks with preserved indentation.
+### G. Rich Formatting & Diagrams in Explanations
+`question` supports LaTeX math (`$...$` / `$$...$$`) and fenced code blocks. `explanation` renders full Rich Markdown (GFM headings, bullet/numbered lists, tables, blockquotes, syntax-highlighted fenced code blocks, and KaTeX math) so answers never collapse into flat walls of text. When a visual trace, state machine, or architecture diagram clarifies why an answer is right, include an optional `explanation_diagram` (`{ diagram_type, source, title?, caption? }`), which is validated against Kroki and rendered in both the Quiz and SRS review drawers.
 
 ---
 

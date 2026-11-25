@@ -1,0 +1,242 @@
+id: bdr-ch4-er-to-relational-mapping
+title: "ER-to-Relational Schema Mapping"
+description: "The complete 8-step algorithm for translating ER and Extended ER (EER) diagrams into normalized relational schemas: strong/weak entities, 1:1/1:N/M:N/n-ary associations, multivalued attributes, and inheritance strategies (8A, 8B, 8C)."
+category: "Database Systems"
+track: "Relational Database Fundamentals (BDR)"
+track_order: 4
+estimated_minutes: 35
+tags: ["databases", "bdr", "er-to-relational", "schema-mapping", "inheritance"]
+prerequisites: ["bdr-ch3-relational-model-constraints"]
+sources:
+  - title: "BDR Chapter 4 — Passage d'un modèle EA à un modèle relationnel"
+    url_or_path: "sources/BDR-TE1/04-Passage_EA_vers_relationnel_avec_correction.pdf"
+    notes: "8-step ER-to-relational mapping algorithm and comparison of inheritance strategies 8A, 8B, 8C"
+
+sections:
+  - id: sec-steps-1-to-5
+    title: "1. Entities & Binary Associations (Steps 1–5)"
+    blocks:
+      - id: th-steps-1-2-entities
+        block_type: markdown
+        title: "Steps 1 & 2: Strong and Weak Entities"
+        content: |
+          **Step 1 — Strong (Normal) Entity Types:**
+          For each strong entity $E$:
+          * Create relation $R$ with all **simple** attributes of $E$.
+          * Flatten **composite** attributes into their simple sub-components (e.g., `Adresse` $\to$ `Numéro, Rue, Ville, CodePostal`).
+          * Omit **derived** attributes; defer **multivalued** attributes to Step 6.
+          * Choose one candidate key as `PRIMARY KEY` (underlined in relational notation).
+
+          **Step 2 — Weak Entity Types:**
+          For each weak entity $F$ owned by strong entity/entities $E_i$:
+          * Create relation $R$ with all simple attributes of $F$ (including its **partial key**).
+          * Add the `PRIMARY KEY` of each owner $E_i$ as a `FOREIGN KEY` in $R$ (typically with `ON DELETE CASCADE`).
+          * The `PRIMARY KEY` of $R$ is **`(owner PK(s), partial key)`**.
+          * Example: `Dépendant(<u>Prénom_dep</u>, <u>NoSS</u>, LienFamilial, Sex, DateNaissance)` where `NoSS` $\to$ `Employé.NoSS`.
+          * **Downstream Associations on Weak Entities:** Because a weak entity's identity *is* its composite PK `(owner PK(s), partial key)`, any downstream `1:N` or `M:N` association involving that weak entity must import the **entire composite key** as a **composite `FOREIGN KEY`** (never just the partial key alone). For example, if `B(<u>i</u>, <u>a1</u>, b1)` is weak of `A(<u>a1</u>)` and participates in `M:N` `BC` with `C(<u>c1</u>)`, then `BC(<u>i</u>, <u>a1</u>, <u>c1</u>, s1)` has `(i, a1)` referencing `B(i, a1)`.
+
+      - id: th-steps-3-4-5-binary
+        block_type: markdown
+        title: "Steps 3, 4 & 5: Binary Associations (1:1, 1:N, M:N) & Recursive Renaming"
+        content: |
+          **Step 3 — Binary 1:1 Associations** (3 sub-cases based on `min..max` participation):
+
+          | Participation | Where to Place the FK | Constraints on FK |
+          | :--- | :--- | :--- |
+          | **Mandatory $\leftrightarrow$ Mandatory** (`1..1` — `1..1`) | Either side $R_1$ (plus association attributes) | `UNIQUE`, `NOT NULL` |
+          | **Optional $\leftrightarrow$ Mandatory** (`0..1` — `1..1`) | On the **mandatory-participation (`1..1` target) side** (e.g., `Département`), referencing the optional side (`Employé`). | `UNIQUE`, `NOT NULL` (avoids `NULL`s for non-manager employees; e.g., `DirecteurSS`, `DateDébut` in `Département`) |
+          | **Optional $\leftrightarrow$ Optional** (`0..1` — `0..1`) | Either side $R_1$ (nullable), OR create a separate link table $R_3(k_1, k_2, c)$ to avoid `NULL`s | `UNIQUE` (nullable if merged; `NOT NULL` if separate table) |
+
+          > [!TIP]
+          > **Why put `DirecteurSS` in `Département` for `Dirige`?** In UML notation, `1..1` is next to `Employé` (meaning each `Département` has *exactly 1* `Employé` manager), and `0..1` is next to `Département` (an `Employé` manages *at most 1* `Département`). Placing `DirecteurSS` in `Département` avoids `NULL`s for all non-manager employees and lets us enforce both `UNIQUE` and `NOT NULL`!
+
+          **Step 4 — Binary 1:N / N:1 Associations:**
+          * Place the PK of the `1`-side relation as an **FK in the `N`-side relation** (`*` / `0..*` / `1..*`), along with any association attributes.
+          * If participation on the `N`-side is mandatory (`1..1` on the opposite end, e.g., every `Employé` works for `1..1` `Département`), mark the FK **`NOT NULL`**. (Do **not** mark it `UNIQUE`, or you'd turn 1:N into 1:1!)
+
+          **Step 5 — Binary M:N Associations:**
+          * Always create a **new associative relation** $R_{\text{assoc}}$ containing the PKs of both participating entities as FKs + any association attributes.
+          * The PK of $R_{\text{assoc}}$ is the **composite `(PK_1, PK_2)`** (e.g., `Travaille_sur(<u>NoSS</u>, <u>NumProj</u>, Heures)`).
+
+          **Recursive Associations & FK Name Collisions:**
+          A relation cannot have two columns with the same name. Whenever a `1:N` or `M:N` association is **recursive** (self-referencing) or links **sibling subclasses** that inherit the same superclass PK name, the imported FK attribute(s) must be **renamed**:
+          * **Recursive `1:N`** (e.g., `Supervise`: `Employé` `0..1` — `*` `Employé`): Place a renamed self-referencing FK `SuperviseurSS` in `Employé` referencing `Employé.NoSS`. Its nullability follows the `min` cardinality on the `1`-side: **`0..1` $\to$ nullable** (`NULL` for top-level managers), **`1..1` $\to$ `NOT NULL`**. If the entity is weak with composite PK `(e1, i)`, rename *both* columns (e.g., `(e12, i2)` referencing `(e1, i)`).
+          * **Recursive `M:N`:** Create a separate associative table with two renamed FKs forming the composite PK (e.g., `Prérequis(<u>CodeCours</u>, <u>CodePrérequis</u>)`).
+          * **Sibling subclasses:** If subclasses `F` and `G` both inherit PK `c1` from `C`, a `1:N` link `F * — 1..1 G` places a renamed FK `c1g` (`NOT NULL`, referencing `G.c1`) inside `F`.
+
+  - id: sec-steps-6-to-8
+    title: "2. Multivalued, N-ary & Inheritance Mapping (Steps 6–8)"
+    blocks:
+      - id: th-steps-6-7
+        block_type: markdown
+        title: "Steps 6 & 7: Multivalued Attributes & N-ary Associations"
+        content: |
+          **Step 6 — Multivalued Attributes:**
+          * For each multivalued attribute $A$ of entity $E$ (e.g., `Lieu` of `Département`), create a **separate relation** $R_A(\underline{K_E}, \underline{A})$ where $K_E$ is a `FOREIGN KEY` referencing $E$. Both attributes together form the composite `PRIMARY KEY`.
+
+          **Step 7 — N-ary Associations ($n > 2$):**
+          * Reify the n-ary association into a **weak entity** connected to the $n$ entities, then map it to a relation $R_{\text{assoc}}$.
+          * **Key rule:** The `PRIMARY KEY` of $R_{\text{assoc}}$ is formed by the PKs of all entities on the **`*` side** (the owner entities). Any entity on a **`1` side** is **not** part of the primary key—it becomes a regular `FOREIGN KEY ... NOT NULL`.
+          * Example (`Projection`): `Salle` (`*`) and `Séance` (`*`) form the PK; `Film` (`1`) is a `NOT NULL` FK:
+            `Projection(<u>NomSalle</u>, <u>DateSéance</u>, <u>HeureSéance</u>, TitreFilm)`
+
+          **Worked Step 1–7 Trace (`COMPANY`):**
+          1. **Strong entities (Step 1):** `Employé(<u>NoSS</u>, Prénom, Nom, Salaire)`, `Département(<u>Numéro</u>, Nom)`, `Projet(<u>NumProj</u>, Nom)`.
+          2. **Weak entity (Step 2):** `Dépendant(<u>Prénom_dep</u>, <u>NoSS</u>, LienFamilial)` with `NoSS` $\to$ `Employé.NoSS`.
+          3. **1:1 `Dirige` (Step 3):** Add `DirecteurSS` (`UNIQUE NOT NULL`, $\to$ `Employé.NoSS`) and `DateDébut` to `Département`.
+          4. **1:N `Travaille_pour` + recursive `Supervise` (Step 4):** Add `NumDép` (`NOT NULL`, $\to$ `Département.Numéro`) and `SuperviseurSS` (nullable, $\to$ `Employé.NoSS`) to `Employé`.
+          5. **M:N `Travaille_sur` (Step 5):** `Travaille_sur(<u>NoSS</u>, <u>NumProj</u>, Heures)`.
+          6. **Multivalued `Lieu` of `Département` (Step 6):** `Dép_Lieu(<u>NumDép</u>, <u>Lieu</u>)`.
+
+      - id: diag-inheritance-strategies
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Step 8: Choosing an Inheritance Mapping Strategy (8A vs. 8B vs. 8C)"
+        caption: "Summary of the three relational strategies for mapping superclass/subclass hierarchies."
+        source: |
+          flowchart TD
+            Root["EER Inheritance Hierarchy (E1 -> E2, E3)"] --> Q1{"Is specialization PARTIAL or OVERLAPPING?"}
+            Q1 -->|"Yes"| S8A["8A: One table per class (Superclass + each Subclass)"]
+            Q1 -->|"No (Disjoint & Total)"| Q2{"Few nulls & single table preferred?"}
+            Q2 -->|"Yes"| S8C["8C: Single table with type discriminator + CHECKs"]
+            Q2 -->|"No (Separate subclass tables)"| S8B["8B: Tables for subclasses only (push down E1 attrs)"]
+
+            classDef strat fill:#ede9fe,stroke:#4f46e5,stroke-width:1.5px;
+            class S8A,S8B,S8C strat;
+
+      - id: th-step-8-comparison
+        block_type: markdown
+        title: "Step 8: Comparing Strategies 8A, 8B, and 8C"
+        content: |
+          | Criterion | 8A: Table per Class | 8B: Subclass Tables Only | 8C: Single Table |
+          | :--- | :--- | :--- | :--- |
+          | **Partial specialization** | Supported | **Not applicable** (loses non-subclass entities!) | Supported (`type` can be `NULL`) |
+          | **Overlapping specialization** | Supported | **Avoid** (duplicates inherited attributes!) | Supported (use boolean flags `estE2`, `estE3`) |
+          | **NULL values** | Few | Few | **Many** (unused subclass columns are `NULL`) |
+          | **Read full subclass** | Requires `JOIN` with superclass | Direct (1 table) | Direct (1 table) |
+          | **Read all instances** | Direct (query superclass) | Requires `UNION` | Direct (1 table) |
+          | **Other pitfalls** | Disjoint/total constraints need extra checks | Cannot FK to superclass; PK uniqueness across $R_2, R_3$ not enforced by schema | Requires `CHECK (type <> 'E2' OR (c1 IS NULL AND c2 IS NULL))` |
+
+          > [!NOTE]
+          > **In practice, Strategy 8A** is the most general and widely applicable default because it works cleanly for **all** four combinations (partial/total, disjoint/overlapping) without duplicating inherited attributes.
+
+          **Concrete Table Layouts (`Employé(NoSS, Nom)` $\to$ `Secrétaire(VitesseFrappe)`, `Technicien(Grade)`):**
+          * **8A (3 tables):**
+            `Employé(<u>NoSS</u>, Nom)` | `Secrétaire(<u>NoSS</u>, VitesseFrappe)` (`NoSS` $\to$ `Employé.NoSS`) | `Technicien(<u>NoSS</u>, Grade)` (`NoSS` $\to$ `Employé.NoSS`)
+          * **8B (2 tables — only valid if `{Disjoint, Total}`):**
+            `Secrétaire(<u>NoSS</u>, Nom, VitesseFrappe)` | `Technicien(<u>NoSS</u>, Nom, Grade)`
+          * **8C (1 table):**
+            `Employé(<u>NoSS</u>, Nom, TypeEmp, VitesseFrappe, Grade)` (or boolean flags `estSecrétaire, estTechnicien` if overlapping).
+
+      - id: ref-ch4-mapping-rubric
+        block_type: reflection_rubric
+        title: "Apply: Mapping Weak Entities, Recursive Links & EER"
+        answer_mode: text
+        prompt: |
+          Map the following ER/EER fragment to relational schemas (underline PKs, list FKs, `UNIQUE`, and `NOT NULL`):
+          * `Clinique(idC, nom)` — `1..1` — `Emploie` — `1..*` — `Vétérinaire` (weak entity with partial key `numInt`, attribute `nomV`).
+          * `Vétérinaire` has a recursive `Supervise` association (`0..1` supervisor — `*` subordinate).
+          * `Personne(idP, nom)` has `{Disjoint, Partial}` subclasses `Médecin(spécialité)` and `Infirmier(service)`.
+        self_check_criteria:
+          - "Mapped `Vétérinaire(<u>idC</u>, <u>numInt</u>, nomV, idC_sup, numInt_sup)` with composite PK `(idC, numInt)` and renamed nullable composite FK `(idC_sup, numInt_sup)` referencing `Vétérinaire(idC, numInt)`."
+          - "Chose Strategy 8A or 8C (and rejected 8B because the specialization is partial)."
+        model_answer: |
+          * `Clinique(<u>idC</u>, nom)`
+          * `Vétérinaire(<u>idC</u>, <u>numInt</u>, nomV, idC_sup, numInt_sup)`:
+            * `idC` $\to$ `Clinique.idC` (`NOT NULL`, part of PK).
+            * `(idC_sup, numInt_sup)` $\to$ `Vétérinaire(idC, numInt)` (nullable because supervisor is `0..1`; renamed to avoid colliding with `(idC, numInt)`).
+          * **EER (`Personne`):** Because `{Disjoint, Partial}` cannot use 8B, use **Strategy 8A**:
+            * `Personne(<u>idP</u>, nom)`
+            * `Médecin(<u>idP</u>, spécialité)` (`idP` $\to$ `Personne.idP`)
+            * `Infirmier(<u>idP</u>, service)` (`idP` $\to$ `Personne.idP`)
+
+      - id: fc-mapping-cheatsheet
+        block_type: flashcard
+        title: "ER-to-Relational Quick Mapping Table"
+        front: "How do **1:N**, **M:N**, **Weak Entity**, and **Multivalued Attribute** map to relational tables?"
+        back: |
+          * **1:N:** FK on the `N` (`*`) side referencing the `1` side (`NOT NULL` if mandatory).
+          * **M:N:** New associative table with `(PK_1, PK_2)` as composite PK + FKs.
+          * **Weak Entity:** Table with `(owner_PK, partial_key)` as composite PK + FK (`ON DELETE CASCADE`).
+          * **Multivalued Attribute:** Separate table `(entity_PK, attribute_value)` as composite PK + FK.
+        hint: "Only 1:1 and 1:N avoid creating a new table."
+        tags: ["bdr", "mapping", "cheatsheet"]
+
+  - id: sec-ch4-quiz
+    title: "3. Knowledge Retrieval & Check"
+    blocks:
+      - id: qz-ch4-1to1-dirige
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: th-steps-3-4-5-binary
+        title: "Mapping a 1:1 Association (0..1 vs 1..1)"
+        question: "In `Employé` (`1..1`) — `Dirige(DateDébut)` — (`0..1`) `Département` (each department has 1 manager; an employee manages at most 1 department), what is the best relational mapping and what constraints apply to the FK?"
+        options:
+          - "Add `DirecteurSS, DateDébut` to `Département`, with `DirecteurSS` referencing `Employé.NoSS`, both `UNIQUE` and `NOT NULL`."
+          - "Add `DptDirigé, DateDébut` to `Employé`, with `DptDirigé` referencing `Département.Numéro`, `NOT NULL`."
+          - "Add `DateDébut` to `Employé` without any foreign key."
+          - "Add `DirecteurSS, DateDébut` to `Département` without `UNIQUE`, so multiple departments can share a manager."
+        correct_answer: "Add `DirecteurSS, DateDébut` to `Département`, with `DirecteurSS` referencing `Employé.NoSS`, both `UNIQUE` and `NOT NULL`."
+        explanation: |
+          Because every `Département` has **exactly 1** manager (`1..1`), placing `DirecteurSS` and `DateDébut` inside `Département` guarantees **zero `NULL`s** (`NOT NULL`). Adding **`UNIQUE`** on `DirecteurSS` enforces the `0..1` limit so no employee can manage two departments.
+        hints:
+          - "Which table avoids `NULL` values for the foreign key?"
+          - "Without `UNIQUE` on `DirecteurSS`, would the association still be 1:1?"
+
+      - id: qz-ch4-strategy-8b
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 4
+        related_block_id: th-step-8-comparison
+        title: "When Strategy 8B Fails"
+        question: "Suppose `PersonnelUni(NumPersonnel, Nom, Prénom)` has a **partial** specialization into `{Enseignant, Chercheur}`. Is **Strategy 8B** (creating only `Enseignant` and `Chercheur` tables, omitting `PersonnelUni`) appropriate?"
+        options:
+          - "No—because the specialization is partial, staff who are neither Enseignant nor Chercheur could not be stored, and someone who is both would have duplicated attributes."
+          - "Yes—Strategy 8B works for all specializations as long as `NumPersonnel` is copied to both tables."
+          - "Yes—because `Enseignant` and `Chercheur` inherit `NumPersonnel`, `Nom`, `Prénom` automatically."
+          - "No—because Strategy 8B can only be used when there are at least 3 subclasses."
+        correct_answer: "No—because the specialization is partial, staff who are neither Enseignant nor Chercheur could not be stored, and someone who is both would have duplicated attributes."
+        explanation: |
+          Strategy 8B eliminates the superclass table, which **fails for partial specializations** (there is nowhere to store superclass-only instances) and is ill-suited for overlapping specializations (duplicating superclass attributes and breaking global key uniqueness). Use **8A** or **8C** instead.
+        hints:
+          - "Where would an administrative staff member who is neither a teacher nor a researcher be stored if there is no `PersonnelUni` table?"
+          - "Check the compatibility table for 8B under 'Partial specialization'."
+
+      - id: qz-ch4-nary-key
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 4
+        related_block_id: th-steps-6-7
+        title: "Primary Key of a Reified Ternary Association"
+        question: "When `Projection` links `Salle` (`*`), `Séance` (`*`), and `Film` (`1`), what is the `PRIMARY KEY` of the `Projection` relation?"
+        options:
+          - "`(NomSalle, DateSéance, HeureSéance)` — the PKs of the `*`-side entities; `TitreFilm` is a `NOT NULL` FK."
+          - "`(NomSalle, DateSéance, HeureSéance, TitreFilm)` — all three participating entities' PKs."
+          - "`(TitreFilm)` alone, since `Film` is on the `1` side."
+          - "`(NomSalle, TitreFilm)` only."
+        correct_answer: "`(NomSalle, DateSéance, HeureSéance)` — the PKs of the `*`-side entities; `TitreFilm` is a `NOT NULL` FK."
+        explanation: |
+          In Step 7, the PK of the reified weak entity is formed **only from the PKs of the `*`-side (owner) entities** (`Salle` and `Séance`). Because each `(Salle, Séance)` pair screens at most `1` `Film`, `TitreFilm` is functionally determined by `(NomSalle, DateSéance, HeureSéance)` and is a non-key `NOT NULL` foreign key.
+        hints:
+          - "If `TitreFilm` were in the PK, could two different films be scheduled in the same room at the same time?"
+          - "Check the Step 7 rule: `*` side vs. `1` side."
+
+      - id: qz-ch4-1n-fk-side
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 2
+        related_block_id: th-steps-3-4-5-binary
+        title: "Placing the Foreign Key in a 1:N Association"
+        question: "In `Employé` (`4..*`) — `Travaille_pour` — (`1..1`) `Département` (each employee works for 1 department; each department has 4+ employees), where does the foreign key go?"
+        options:
+          - "In `Employé`, referencing `Département.Numéro`, with `NOT NULL`."
+          - "In `Département`, referencing `Employé.NoSS`, with `NOT NULL`."
+          - "In a new associative table `Travaille_pour(NoSS, Numéro)`."
+          - "In `Employé`, with both `UNIQUE` and `NOT NULL`."
+        correct_answer: "In `Employé`, referencing `Département.Numéro`, with `NOT NULL`."
+        explanation: |
+          In a 1:N association, the FK always goes on the **`N` (`*`) side** (`Employé`), referencing the `1` side (`Département`). It is `NOT NULL` (since every employee must have a department), and **must NOT be `UNIQUE`** (otherwise only one employee could work in each department!).
+        hints:
+          - "Can a single column in `Département` hold 4 or more `NoSS` values?"
+          - "Check whether `UNIQUE` on `DepNum` would allow multiple employees in the same department."

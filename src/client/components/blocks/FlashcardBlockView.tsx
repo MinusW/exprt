@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Layers, Lightbulb, RotateCw, CheckCircle2, Star, Sparkles } from 'lucide-react';
 import type { FlashcardBlock } from '../../types.js';
 import { MathText } from '../MathText.js';
+import { RichMarkdown } from '../RichMarkdown.js';
 
 interface Props {
   block: FlashcardBlock;
@@ -133,8 +134,8 @@ export const FlashcardBlockView: React.FC<Props> = ({
                 <span>Answer & Core Mental Model</span>
               </div>
               <div className="p-4 bg-white/80 rounded-xl border border-indigo-100 text-slate-800">
-                <MathText
-                  text={block.back}
+                <RichMarkdown
+                  content={block.back}
                   className="text-sm sm:text-base leading-relaxed font-normal"
                 />
               </div>

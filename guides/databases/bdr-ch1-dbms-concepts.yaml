@@ -1,0 +1,241 @@
+id: bdr-ch1-dbms-concepts
+title: "DBMS Concepts & Three-Schema Architecture"
+description: "Why file systems break down under concurrency and schema changes, how a DBMS guarantees program-data independence via the catalog and three-schema architecture, ACID transactions, and database languages (DDL, DML, DCL, TCL)."
+category: "Database Systems"
+track: "Relational Database Fundamentals (BDR)"
+track_order: 1
+estimated_minutes: 20
+tags: ["databases", "bdr", "dbms", "architecture", "acid"]
+prerequisites: []
+sources:
+  - title: "BDR Chapter 1 — Concepts de base et Architecture des SGBD"
+    url_or_path: "sources/BDR-TE1/BDR-01-ConceptDeBaseSGBD.pdf"
+    notes: "Course slides covering DBMS motivation, catalog, three-schema architecture, ACID, and DBMS languages"
+
+sections:
+  - id: sec-why-dbms
+    title: "1. From Raw Files to a DBMS: Three Core Properties"
+    blocks:
+      - id: th-dbms-motivation
+        block_type: markdown
+        title: "Why File-Based Storage Fails"
+        content: |
+          Imagine an e-commerce platform (`MonShop.ch`) where two customers click **"Pay now"** at the exact same instant for the last item in stock, or where the program crashes right after decrementing `stock` (`UPDATE`) and before recording the order (`INSERT`).
+
+          Traditional file-processing systems embed file layouts directly inside application code and lack centralized concurrency or crash-recovery controls. A **Database Management System (DBMS / SGBD)** solves this through **three defining properties**:
+
+          1. **Program-Data Independence (*Indépendance données-programmes*):** Application programs do not hardcode physical storage formats. Data structure, types, and constraints live in a centralized **catalog** (*métadonnées*) managed by the DBMS.
+          2. **Multiple Views of Data (*Vues multiples*):** Different user groups (e.g., customer service vs. warehouse) see tailored virtual subsets (`ORDER_HISTORY`) derived from underlying tables without duplicating stored data.
+          3. **Multi-User Transaction Processing (*Traitement des transactions multi-utilisateurs*):** Concurrency control and recovery subsystems allow hundreds of **OLTP** (Online Transaction Processing) transactions per second without corrupting shared state.
+
+      - id: th-catalog-metadata
+        block_type: markdown
+        title: "The DBMS Catalog & Metadata"
+        content: |
+          The **catalog** is created and maintained **by the DBMS itself** once the database designer supplies an abstract data model description (DDL). It stores:
+          * **Logical metadata:** `RELATIONS` (relation name, column count) and `COLUMNS` (column name, data type, owning relation).
+          * **Physical storage metadata:** internal field offsets and byte lengths (e.g., `Name CHAR 30` at offset `0`, `CustomerNumber INT 4` at offset `30`).
+
+          Because applications query the DBMS rather than reading raw byte offsets, adding a column such as `DateOfBirth` to `CUSTOMER` does **not** break existing access programs. Both the DBMS and users (when inspecting schemas) can read the catalog.
+
+      - id: fc-schema-vs-state
+        block_type: flashcard
+        title: "Database Schema vs. Database State (Instance)"
+        front: "What is the difference between a **database schema** (*schéma*) and a **database state** (*état / instance*)?"
+        back: |
+          * **Database Schema (Intension):** The *description* of the database specified during modeling (relation names, attribute types, constraints). Changes infrequently. Example: `CUSTOMER(Name, CustomerNumber, City, MembershipLevel)`.
+          * **Database State / Instance (Extension):** The actual *data* stored in the database at a given instant $t$ (e.g., state $t_1$ vs. state $t_2$ after an `INSERT` or `UPDATE`). The DBMS ensures every state is **valid** with respect to the schema constraints.
+        hint: "Think 'class definition vs. runtime object' or 'empty table structure vs. populated rows at time t'."
+        tags: ["bdr", "schema", "state"]
+
+  - id: sec-three-schema-architecture
+    title: "2. Data Models & The Three-Schema Architecture"
+    blocks:
+      - id: th-data-models
+        block_type: markdown
+        title: "Three Categories of Data Models"
+        content: |
+          A **data model** is a collection of concepts describing **data structures**, **manipulation operations**, and **integrity constraints**. Models sit at three levels of abstraction:
+
+          | Category | Purpose | Example |
+          | :--- | :--- | :--- |
+          | **Conceptual (High-Level)** | Close to how humans perceive the domain | Entity-Relationship (ER / EA) model |
+          | **Logical (Implementation)** | Bridges conceptual design and physical storage | Relational model |
+          | **Physical (Low-Level)** | Describes how bytes, records, and indexes are stored on disk | B-tree indexes, heap files, byte offsets |
+
+      - id: diag-three-schema
+        block_type: kroki
+        diagram_type: mermaid
+        title: "The Three-Schema Architecture (ANSI/SPARC)"
+        caption: "Only the Internal/Physical level stores actual bytes on disk; upper levels are abstract descriptions connected by DBMS-managed mappings."
+        source: |
+          flowchart TD
+            U1["End User / App 1"] --> E1["External View 1"]
+            U2["End User / App 2"] --> E2["External View 2"]
+            E1 -->|"External / Logical Mapping"| L["Logical Schema (Relational Tables & Constraints)"]
+            E2 -->|"External / Logical Mapping"| L
+            L -->|"Logical / Internal Mapping"| I["Internal Schema (Storage Structures & Indexes)"]
+            I --> DB[("Stored Database (Physical Disk)")]
+
+            classDef ext fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;
+            classDef log fill:#ede9fe,stroke:#4f46e5,stroke-width:2px;
+            classDef phys fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;
+            class E1,E2 ext;
+            class L log;
+            class I,DB phys;
+
+      - id: th-mappings-independence
+        block_type: markdown
+        title: "Mappings & Two Levels of Data Independence"
+        content: |
+          The DBMS automatically performs **mapping** (*correspondance*), translating queries from External $\to$ Logical $\to$ Internal and results back up. This separation creates two levels of **data independence**:
+          * **Physical Data Independence:** Changing the internal schema—such as moving a table to a faster SSD or adding a B-tree index—only requires updating the **Logical/Internal mapping**; the logical schema and application programs remain untouched.
+          * **Logical Data Independence:** Changing the logical schema—such as splitting one table into two or adding a new column—only requires updating the **External/Logical mapping** (e.g., redefining a view with a join); external views and applications remain unaffected.
+
+  - id: sec-acid-and-languages
+    title: "3. ACID Transactions, DBMS Languages & History"
+    blocks:
+      - id: th-acid-properties
+        block_type: markdown
+        title: "ACID Transaction Properties"
+        content: |
+          A **transaction** is an executing program or unit of work involving one or more database accesses (e.g., decrementing `product.stock` and inserting into `orders`). To guarantee reliability under concurrent access and crashes, a DBMS enforces **ACID**:
+
+          * **Atomicity (*Atomicité*):** All-or-nothing. Either every operation in the transaction succeeds, or if anything fails before `COMMIT`, all prior effects are rolled back.
+          * **Consistency (*Cohérence*):** A transaction must transition the database from one valid state to another, satisfying all schema constraints. If the resulting state would violate a constraint, the transaction fails and rolls back.
+          * **Isolation (*Isolation*):** Concurrent transactions execute as if each were running alone—intermediate uncommitted changes are hidden from interfering transactions.
+          * **Durability (*Durabilité*):** Once committed, changes are permanent; subsequent hardware or power failures cannot undo them.
+
+      - id: code-jdbc-transaction
+        block_type: code
+        language: sql
+        filename: "checkout_tx.sql"
+        title: "Anatomy of an Atomic Purchase Transaction"
+        code: |
+          BEGIN; -- Start explicit transaction (TCL)
+          UPDATE product SET stock = stock - 1 WHERE id = 1;
+          INSERT INTO orders (product_id, quantity, total)
+            VALUES (1, 1, 49.90);
+          COMMIT; -- Atomicity & Durability boundary
+        highlight_lines: [1, 5]
+        annotations:
+          - line: 1
+            note: "Groups UPDATE and INSERT into a single atomic unit; intermediate uncommitted state is hidden (Isolation)."
+          - line: 5
+            note: "If the system crashes or a constraint fails before COMMIT, the DBMS rolls back the UPDATE on line 2."
+
+      - id: th-dbms-languages
+        block_type: markdown
+        title: "The Four Sub-Languages of SQL"
+        content: |
+          | Sub-Language | French Acronym | Purpose | Examples |
+          | :--- | :--- | :--- | :--- |
+          | **DDL** (Data Definition Language) | **LDD** | Define logical, internal (indexes), and external (views) schemas | `CREATE TABLE`, `ALTER`, `DROP` |
+          | **DML** (Data Manipulation Language) | **LMD** | Query and modify stored tuples (interactive or embedded in host code) | `SELECT`, `INSERT`, `UPDATE`, `DELETE` |
+          | **DCL** (Data Control Language) | **LCD** | Manage user/role access permissions | `GRANT`, `REVOKE` |
+          | **TCL** (Transaction Control Language) | **LCT** | Demarcate and control transaction boundaries | `BEGIN`, `COMMIT`, `ROLLBACK` |
+
+      - id: ref-three-schema-rubric
+        block_type: reflection_rubric
+        title: "Synthesis: Why Three Schemas Instead of Two?"
+        answer_mode: text
+        prompt: |
+          Suppose a DBA decides to move the `ORDER` table to a faster SSD tablespace and add a B-tree index on `ClientNumber`. Using the three-schema architecture, explain which schema(s) and mapping(s) change, and why the e-commerce Java application does not need to be recompiled.
+        self_check_criteria:
+          - "Identified that only the Internal Schema changes (storage location and index)."
+          - "Stated that the Logical/Internal mapping is updated by the DBMS."
+          - "Explained that the Logical Schema, External Views, and External/Logical mapping remain unchanged, preserving physical data independence."
+        model_answer: |
+          1. **Internal Schema changes:** Moving to an SSD tablespace and adding a B-tree index are physical storage and access-path decisions, so only the **Internal Schema** is modified.
+          2. **Mapping update:** The **Logical/Internal mapping** is updated so the DBMS knows how to use the new index and file path.
+          3. **Preserved independence:** The **Logical Schema** and **External Views** stay identical. Because the Java application only interacts with an External View (or Logical Schema), it continues running without modification or recompilation (**physical data independence**).
+
+  - id: sec-ch1-quiz
+    title: "4. Knowledge Retrieval & Check"
+    blocks:
+      - id: qz-ch1-catalog
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 2
+        related_block_id: th-catalog-metadata
+        title: "Who Creates and Uses the DBMS Catalog?"
+        question: "Which statement about the DBMS catalog (metadata repository) is **correct**?"
+        options:
+          - "The catalog is created by the DBMS automatically from the abstract schema description provided by the designer."
+          - "The catalog is only used internally by the DBMS and can never be queried by users."
+          - "Application developers must manually maintain the catalog file offsets in their host language code."
+          - "The catalog stores the actual data tuples of every table at the logical level."
+        correct_answer: "The catalog is created by the DBMS automatically from the abstract schema description provided by the designer."
+        explanation: |
+          When the database designer defines the schema (via DDL), the DBMS automatically populates and maintains the **catalog** (metadata: table names, column types, constraints, and internal storage offsets).
+          * Users *can* query the catalog to inspect database structure.
+          * Application developers do **not** maintain catalog offsets—that would violate program-data independence.
+          * The catalog stores **metadata** (descriptions), not the actual data tuples.
+        hints:
+          - "Recall how program-data independence separates application code from storage layout."
+          - "Think about who generates the `RELATIONS` and `COLUMNS` metadata tables when you run `CREATE TABLE`."
+
+      - id: qz-ch1-three-schema
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: th-mappings-independence
+        title: "Three-Schema Architecture Misconception"
+        question: "Which statement about the three-schema architecture is **FALSE**?"
+        options:
+          - "The mapping between the three schema levels must be coded manually by the application developer."
+          - "The logical schema describes the structure and constraints of the entire database."
+          - "Logical and external schemas can be defined without knowing physical storage details in the internal schema."
+          - "Actual data is physically stored only at the internal/physical level, not at the logical or external levels."
+        correct_answer: "The mapping between the three schema levels must be coded manually by the application developer."
+        explanation: |
+          **Mappings** (*correspondances*) between External $\leftrightarrow$ Logical $\leftrightarrow$ Internal levels are handled **automatically by the DBMS**, not written by application developers. All three other statements are true: the logical schema describes global structure/constraints, is independent of physical storage, and only the physical level stores actual data bytes.
+        hints:
+          - "Ask yourself: if an application developer had to write the External-to-Internal mapping, would program-data independence still exist?"
+          - "Review which component translates an external query down to disk reads."
+
+      - id: qz-ch1-acid-atomicity
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: th-acid-properties
+        title: "ACID Atomicity Under Failure"
+        question: "In an ACID-compliant DBMS, what happens if a transaction updates `product.stock` and then crashes before inserting into `orders` and committing?"
+        options:
+          - "The transaction fails and the DBMS rolls back all operations performed so far in that transaction."
+          - "The `UPDATE` remains permanently applied while the `INSERT` is skipped."
+          - "Transactions in an ACID DBMS must always execute sequentially one at a time, so crashes cannot leave partial state."
+          - "All operations inside a transaction are guaranteed to succeed without ever failing."
+        correct_answer: "The transaction fails and the DBMS rolls back all operations performed so far in that transaction."
+        explanation: |
+          **Atomicity** means *all or nothing*: a transaction *can* fail mid-execution (due to a crash, constraint violation, or explicit `ROLLBACK`), in which case the DBMS **undoes all its partial operations**.
+          * Leaving `UPDATE` applied without `INSERT` violates atomicity.
+          * ACID does **not** require purely sequential execution—**Isolation** allows concurrent execution while preserving the illusion of serial execution.
+        hints:
+          - "Does 'all-or-nothing' mean a transaction can never fail, or that partial effects are undone if it fails?"
+          - "Distinguish Atomicity (crash/abort recovery) from Isolation (concurrency)."
+
+      - id: qz-ch1-languages
+        block_type: quiz_question
+        question_type: multi_select
+        difficulty: 2
+        related_block_id: th-dbms-languages
+        title: "Classifying DBMS Sub-Languages"
+        question: "Which of the following statements about SQL sub-languages are **true**? (Select all that apply)"
+        options:
+          - "DDL (LDD) is used to define the logical schema and often internal/external objects like indexes and views."
+          - "DML (LMD) commands can be used interactively or embedded inside host languages like Java or Python."
+          - "DCL (LCD) is responsible for committing and rolling back transactions."
+          - "TCL (LCT) manages transaction validation and rollback."
+        correct_answer:
+          - "DDL (LDD) is used to define the logical schema and often internal/external objects like indexes and views."
+          - "DML (LMD) commands can be used interactively or embedded inside host languages like Java or Python."
+          - "TCL (LCT) manages transaction validation and rollback."
+        explanation: |
+          * **DDL (LDD):** Defines schemas (`CREATE TABLE`), indexes, and views.
+          * **DML (LMD):** Queries/modifies data (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) interactively or via host APIs like JDBC.
+          * **TCL (LCT):** Handles `COMMIT` and `ROLLBACK`.
+          * **DCL (LCD)** handles access rights (`GRANT`, `REVOKE`), **not** transaction commits.
+        hints:
+          - "Separate Data *Control* (who can access what) from *Transaction* Control (commit/rollback)."
+          - "Remember that `CREATE INDEX` and `CREATE VIEW` are schema definitions."

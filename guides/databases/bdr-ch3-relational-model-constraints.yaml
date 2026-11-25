@@ -1,0 +1,271 @@
+id: bdr-ch3-relational-model-constraints
+title: "The Relational Model, Integrity Constraints & SQL DDL/DML/DCL"
+description: "Formal set-theoretic foundations of the relational model (schema, tuple, domain, state), the 6 classes of relational constraints, PostgreSQL data types, referential actions (CASCADE, SET NULL, DEFERRABLE), DML updates, and role-based DCL."
+category: "Database Systems"
+track: "Relational Database Fundamentals (BDR)"
+track_order: 3
+estimated_minutes: 30
+tags: ["databases", "bdr", "relational-model", "sql", "constraints", "postgresql"]
+prerequisites: ["bdr-ch2-entity-relationship-modeling"]
+sources:
+  - title: "BDR Chapter 3 — Le modèle relationnel"
+    url_or_path: "sources/BDR-TE1/03-Modele_relationnel.pdf"
+    notes: "Formal relational definitions, SQL DDL/DML/DCL, 6 constraint categories, referential integrity actions, and DEFERRABLE constraints"
+
+sections:
+  - id: sec-formal-relational
+    title: "1. Formal Foundations: Relation, Schema, Tuple & State"
+    blocks:
+      - id: th-formal-definitions
+        block_type: markdown
+        title: "Set-Theoretic Definition of a Relation"
+        content: |
+          Introduced by **E. F. Codd (1970)**, the relational model is a **logical data model** grounded in set theory:
+          * **Relation schema** $R(A_1, A_2, \dots, A_n)$: relation name $R$ and its $n$ attributes $A_i$, each with a **domain** $\text{dom}(A_i)$ of valid atomic values.
+          * **Tuple:** An ordered list of $n$ values $\langle v_1, v_2, \dots, v_n \rangle$ where $v_i \in \text{dom}(A_i)$.
+          * **Relation state** $r(R)$: A **set** of tuples that is a subset of the Cartesian product of its domains:
+            $$r(R) \subseteq \text{dom}(A_1) \times \text{dom}(A_2) \times \dots \times \text{dom}(A_n)$$
+
+          **Order matters inside a tuple, NOT between tuples:**
+          * Within a tuple, positional order follows the schema attributes (`<James, E, Borg, ...>`).
+          * Between tuples, $r(R)$ is a mathematical **set**—row order is irrelevant and duplicate tuples are impossible in a pure relation.
+
+          > [!WARNING]
+          > **Relation vs. SQL Table:** A SQL table *without* a `PRIMARY KEY` or `UNIQUE` constraint is a **multiset (bag)** that permits duplicate rows! Always declare a primary key.
+
+  - id: sec-six-constraints
+    title: "2. The Six Relational Constraints & PostgreSQL DDL"
+    blocks:
+      - id: th-six-constraints-overview
+        block_type: markdown
+        title: "Six Categories of Relational Constraints"
+        content: |
+          1. **Domain Constraints:** Every attribute value must be an atomic, single-valued element of $\text{dom}(A)$ (types like `integer`, `numeric(p, s)` where $p$ = total digits and $s$ = fractional digits—so `numeric(5, 2)` holds up to `999.99`—`varchar(n)`, `date`, `interval`, plus `CHECK` predicates).
+             * *Gotcha:* `CHECK (salary > 3000)` only rejects rows where the condition evaluates to **FALSE**. If `salary` is `NULL`, the condition evaluates to **UNKNOWN**, so the row is **accepted** unless `NOT NULL` is also specified!
+          2. **Key Constraints (Superkey vs. Key):** A **key** $K$ is a **minimal** attribute set such that for any two distinct tuples $t_1 \ne t_2$, $t_1[K] \ne t_2[K]$. Adding extra attributes (e.g., `{Ssn, Lname}`) creates a **superkey** that is no longer minimal.
+          3. **Entity Integrity Constraint (*Intégrité des entités*):** **No attribute of a Primary Key can be `NULL`.** Automatically enforced by `PRIMARY KEY`.
+          4. **NOT NULL Constraint:** Explicitly forbids `NULL` on non-PK attributes (e.g., `fname`, `lname`).
+          5. **Uniqueness Constraint (`UNIQUE`):** Forbids duplicate non-null values. To declare an alternate **candidate key** in SQL, you must write **`UNIQUE NOT NULL`** (because `UNIQUE` alone permits `NULL`s!).
+          6. **Referential Integrity Constraint (*Intégrité référentielle*):** A **Foreign Key (FK)** in referencing relation $R_1$ must match the domain of the referenced PK (or `UNIQUE` column) in $R_2$, and every tuple $t_1 \in R_1$ must have either $t_1[\text{FK}] = t_2[\text{PK}]$ for some $t_2 \in R_2$, or $t_1[\text{FK}] = \text{NULL}$ (if `NULL` is allowed).
+
+      - id: code-ddl-constraints
+        block_type: code
+        language: sql
+        filename: "company_schema.sql"
+        title: "PostgreSQL DDL with Named Constraints & Identity Columns"
+        code: |
+          CREATE TABLE department (
+            dnumber integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            dname   varchar(15) UNIQUE NOT NULL
+          );
+
+          CREATE TABLE employee (
+            fname     varchar(15) NOT NULL,
+            minit     char(1),
+            lname     varchar(15) NOT NULL,
+            ssn       char(9),
+            bdate     date,
+            salary    decimal(10, 2) CONSTRAINT salary_range CHECK (salary > 3000.00),
+            super_ssn char(9),
+            dno       integer NOT NULL DEFAULT 1,
+            CONSTRAINT employee_pk PRIMARY KEY (ssn),
+            FOREIGN KEY (super_ssn) REFERENCES employee(ssn) ON UPDATE CASCADE,
+            FOREIGN KEY (dno) REFERENCES department(dnumber) ON DELETE SET DEFAULT
+          );
+        highlight_lines: [2, 3, 12, 16, 17]
+        annotations:
+          - line: 2
+            note: "SQL-standard auto-incrementing identity column (preferred over PostgreSQL-specific SERIAL)."
+          - line: 3
+            note: "Candidate key: requires BOTH UNIQUE and NOT NULL."
+          - line: 12
+            note: "Named CHECK constraint; still needs NOT NULL if NULL salaries should be rejected."
+          - line: 16
+            note: "Self-referencing FK: updating a supervisor's ssn cascades to super_ssn on supervised employees."
+          - line: 17
+            note: "If a department is deleted, its employees' dno resets to DEFAULT 1 (which must exist in department!)."
+
+      - id: th-ref-actions-deferrable
+        block_type: markdown
+        title: "Referential Actions & Deferred Checking (`DEFERRABLE`)"
+        content: |
+          When deleting or updating a referenced PK row that still has referencing FK rows, PostgreSQL supports five actions on `ON DELETE` / `ON UPDATE`:
+          * `NO ACTION` *(default)*: Raises an error if referencing rows exist when the constraint is checked (can be deferred to end of transaction).
+          * `RESTRICT`: Raises an error **immediately**—cannot be deferred.
+          * `CASCADE`: Deletes or updates all referencing FK rows automatically.
+          * `SET NULL`: Sets the referencing FK column(s) to `NULL`.
+          * `SET DEFAULT`: Sets the referencing FK column(s) to their `DEFAULT` value (which must itself exist in the referenced table!).
+
+          **Circular FKs & Swapping Values (`DEFERRABLE`):**
+          Mutually referencing tables (e.g., `husbands.wife_id -> wives.id` and `wives.husband_id -> husbands.id`, both `NOT NULL`) cannot be inserted one-by-one under immediate checking. Declaring the FK `DEFERRABLE INITIALLY DEFERRED` postpones verification until `COMMIT` inside a `BEGIN ... COMMIT` block. Similarly, `UNIQUE DEFERRABLE` lets `UPDATE snowflakes SET i = i + 1` succeed by checking uniqueness at the end of the statement rather than row-by-row.
+
+      - id: code-deferrable-tx
+        block_type: code
+        language: sql
+        filename: "circular_fk.sql"
+        title: "Inserting Circular Foreign Keys with DEFERRABLE INITIALLY DEFERRED"
+        code: |
+          CREATE TABLE husbands (id int PRIMARY KEY, wife_id int NOT NULL);
+          CREATE TABLE wives (id int PRIMARY KEY,
+            husband_id int NOT NULL REFERENCES husbands(id) DEFERRABLE INITIALLY DEFERRED);
+          ALTER TABLE husbands ADD FOREIGN KEY (wife_id)
+            REFERENCES wives(id) DEFERRABLE INITIALLY DEFERRED;
+          BEGIN;
+          INSERT INTO husbands VALUES (1, 10); -- wife 10 not inserted yet!
+          INSERT INTO wives VALUES (10, 1);    -- both rows valid before COMMIT
+          COMMIT;
+        highlight_lines: [3, 6, 9]
+        annotations:
+          - line: 3
+            note: "Deferring FK checking postpones validation from each INSERT to COMMIT."
+          - line: 6
+            note: "Without BEGIN...COMMIT + DEFERRABLE, line 7 would fail immediately because wife 10 does not exist yet."
+
+  - id: sec-dml-dcl
+    title: "3. DML Updates & DCL Role-Based Security"
+    blocks:
+      - id: th-dml-dcl-summary
+        block_type: markdown
+        title: "DML (`INSERT`, `DELETE`, `UPDATE`) & `RETURNING`"
+        content: |
+          * `INSERT INTO tbl(col1, col2) VALUES (...)`: Omitted columns receive `DEFAULT` or `NULL`. Add `RETURNING id` to retrieve generated identity/`serial` values immediately.
+          * `DELETE FROM tbl WHERE ...`: Omitting `WHERE` empties the table (while keeping its schema). `RETURNING *` returns deleted rows.
+          * `UPDATE tbl SET col = expr WHERE ...`: Modifies one relation at a time; `RETURNING` exposes the **new** row values.
+          * `ALTER TABLE ... DROP col CASCADE` vs. `RESTRICT`: `CASCADE` also drops dependent views/FKs; `RESTRICT` (default) aborts if dependencies exist.
+
+          **DCL & Principle of Least Privilege (PoLP):**
+          * PostgreSQL unifies users and groups as **roles** (`CREATE ROLE dev1 WITH LOGIN PASSWORD '...'` vs. `CREATE ROLE devgrp WITH NOLOGIN`).
+          * Only the object owner (or superuser `postgres`) can access an object until explicitly granted: `GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA public TO devgrp; GRANT devgrp TO dev1;`.
+          * **Gotcha:** `ON ALL TABLES` only affects **existing** tables—future tables require `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ...`.
+          * `REVOKE devgrp FROM dev1` removes group membership (not privileges granted directly to `dev1`).
+
+      - id: ref-ddl-design-rubric
+        block_type: reflection_rubric
+        title: "Apply: PostgreSQL DDL with Constraints & Referential Actions"
+        answer_mode: code
+        answer_language: sql
+        prompt: |
+          Write PostgreSQL DDL for two tables:
+          1. `clinic(id, name)` where `id` is an auto-incrementing identity PK and `name` is a required candidate key.
+          2. `vet(clinic_id, internal_num, salary)` where `(clinic_id, internal_num)` is the composite PK, `clinic_id` references `clinic(id)` (deleting a clinic cascades to its vets), and `salary` must be strictly positive and non-null.
+        self_check_criteria:
+          - "Used `GENERATED ALWAYS AS IDENTITY PRIMARY KEY` on `clinic.id` and `UNIQUE NOT NULL` on `clinic.name`."
+          - "Declared composite `PRIMARY KEY (clinic_id, internal_num)` on `vet`."
+          - "Added `FOREIGN KEY (clinic_id) REFERENCES clinic(id) ON DELETE CASCADE` and `salary numeric(...) NOT NULL CHECK (salary > 0)`."
+        model_answer: |
+          ```sql
+          CREATE TABLE clinic (
+            id   integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            name varchar(80) UNIQUE NOT NULL
+          );
+
+          CREATE TABLE vet (
+            clinic_id    integer NOT NULL,
+            internal_num integer NOT NULL,
+            salary       numeric(10, 2) NOT NULL CHECK (salary > 0),
+            PRIMARY KEY (clinic_id, internal_num),
+            FOREIGN KEY (clinic_id) REFERENCES clinic(id) ON DELETE CASCADE
+          );
+          ```
+
+  - id: sec-ch3-quiz
+    title: "4. Knowledge Retrieval & Check"
+    blocks:
+      - id: qz-ch3-cartesian-state
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 2
+        related_block_id: th-formal-definitions
+        title: "Valid Relation State"
+        question: "Let $R(A_1, A_2)$ have $\\text{dom}(A_1) = \\{0, 1\\}$ and $\\text{dom}(A_2) = \\{a, b, c\\}$. Which statement is **always true**?"
+        options:
+          - "Any valid state $r(R)$ satisfies $r(R) \\subseteq \\text{dom}(A_1) \\times \\text{dom}(A_2)$."
+          - "$\\{\\langle 0, a \\rangle, \\langle 0, b \\rangle, \\langle 2, c \\rangle\\}$ is a valid state of $R$."
+          - "$\\{\\langle a, 0 \\rangle, \\langle b, 1 \\rangle, \\langle c, 0 \\rangle\\}$ is a valid state of $R$."
+          - "A valid state $r(R)$ can contain duplicate tuples if $R$ has no primary key."
+        correct_answer: "Any valid state $r(R)$ satisfies $r(R) \\subseteq \\text{dom}(A_1) \\times \\text{dom}(A_2)$."
+        explanation: |
+          By definition, a relation state $r(R)$ is a subset of the Cartesian product $\text{dom}(A_1) \times \text{dom}(A_2)$.
+          * $\langle 2, c \rangle$ is invalid because $2 \notin \text{dom}(A_1)$.
+          * $\langle a, 0 \rangle$ is invalid because tuple order matters: $a \notin \text{dom}(A_1)$ and $0 \notin \text{dom}(A_2)$.
+          * Mathematical relations are **sets**, so duplicate tuples are never allowed (only unkeyed SQL tables allow duplicates).
+        hints:
+          - "Check whether `2` is in `dom(A_1)` and whether tuple value order is fixed."
+          - "Recall the mathematical definition of a relation state."
+
+      - id: qz-ch3-check-null
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: th-six-constraints-overview
+        title: "CHECK Constraints and NULL Values"
+        question: "Given `salary decimal(10, 2) CHECK (salary > 3000.00)` (with no `NOT NULL`), what happens if you insert a tuple with `salary = NULL`?"
+        options:
+          - "The row is accepted because `NULL > 3000.00` evaluates to UNKNOWN, and `CHECK` only rejects FALSE."
+          - "The row is rejected because `NULL` is not greater than `3000.00`."
+          - "The row is accepted only if `DEFAULT 0` is also declared."
+          - "PostgreSQL raises a syntax error because `CHECK` requires `NOT NULL`."
+        correct_answer: "The row is accepted because `NULL > 3000.00` evaluates to UNKNOWN, and `CHECK` only rejects FALSE."
+        explanation: |
+          SQL uses three-valued logic (`TRUE`, `FALSE`, `UNKNOWN`). A `CHECK` constraint fails **only when its predicate evaluates to `FALSE`**. Since `NULL > 3000.00` yields `UNKNOWN`, the row passes the `CHECK`! Add `NOT NULL` if `NULL` must be forbidden.
+        hints:
+          - "Recall SQL three-valued logic: what does `NULL > 3000` evaluate to?"
+          - "Does `CHECK` require the condition to be TRUE, or merely *not FALSE*?"
+
+      - id: qz-ch3-fk-violation
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: th-six-constraints-overview
+        title: "Diagnosing Constraint Violations on INSERT / UPDATE"
+        question: "In `employee(ssn PK, dno FK -> department(dnumber))`, suppose `department` only has `dnumber` values `{1, 4, 5}`, and `employee` already has `ssn = '999887777'`. Which constraint is violated by `UPDATE employee SET dno = 2 WHERE ssn = '123123123'`?"
+        options:
+          - "Referential integrity constraint"
+          - "Entity integrity constraint"
+          - "Key constraint"
+          - "Domain constraint"
+        correct_answer: "Referential integrity constraint"
+        explanation: |
+          `dno = 2` is a valid integer (domain OK) and does not touch `ssn` (key and entity integrity OK), but `2` does not exist in `department(dnumber)`, violating **referential integrity**.
+        hints:
+          - "Which table does `dno` reference?"
+          - "Check if `2` is an integer (domain) vs. whether `2` exists in `department` (referential integrity)."
+
+      - id: qz-ch3-on-update-cascade
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 4
+        related_block_id: th-ref-actions-deferrable
+        title: "Direction of `ON UPDATE CASCADE`"
+        question: "Suppose `employee` has `FOREIGN KEY (super_ssn) REFERENCES employee(ssn) ON UPDATE CASCADE`. What happens if a supervisor's `ssn` is updated?"
+        options:
+          - "The `super_ssn` of all employees supervised by that supervisor is automatically updated to the new `ssn`."
+          - "If a supervised employee's `ssn` is updated, their supervisor's `ssn` is updated in cascade."
+          - "If a supervisor is deleted, all their supervised employees are deleted in cascade."
+          - "No automatic update occurs because self-referencing foreign keys ignore `CASCADE`."
+        correct_answer: "The `super_ssn` of all employees supervised by that supervisor is automatically updated to the new `ssn`."
+        explanation: |
+          Referential actions **always** propagate from the **referenced PK** (`employee.ssn`) to the **referencing FK** (`employee.super_ssn`).
+          * `ON UPDATE CASCADE` updates `super_ssn` on all subordinates when the supervisor's `ssn` changes—never the reverse, and it does not affect `DELETE` (which would need `ON DELETE CASCADE`).
+        hints:
+          - "Which column is the FK and which is the referenced PK?"
+          - "Does `ON UPDATE` trigger on `DELETE`, or only on `UPDATE` of the referenced PK?"
+
+      - id: qz-ch3-dcl-privileges
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: th-dml-dcl-summary
+        title: "PostgreSQL Role Privileges on Future Tables"
+        question: "After running `GRANT SELECT ON ALL TABLES IN SCHEMA public TO devgrp;` and `GRANT devgrp TO dev1;`, a DBA creates a new table `invoice`. Why does `dev1` get a permission-denied error when querying `invoice`?"
+        options:
+          - "`ON ALL TABLES` only grants privileges on tables that already existed; future tables require `ALTER DEFAULT PRIVILEGES`."
+          - "`devgrp` was created with `NOLOGIN`, so members cannot inherit table privileges from it."
+          - "`GRANT SELECT` only applies to `UPDATE` and `INSERT`, not `SELECT`."
+          - "PostgreSQL requires `COMMIT` before `GRANT` takes effect on `NOLOGIN` roles."
+        correct_answer: "`ON ALL TABLES` only grants privileges on tables that already existed; future tables require `ALTER DEFAULT PRIVILEGES`."
+        explanation: |
+          In PostgreSQL, `GRANT ... ON ALL TABLES IN SCHEMA public` is a one-time grant over *currently existing* tables. To automatically grant privileges on **newly created** tables, you must configure `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO devgrp;`.
+        hints:
+          - "Does `ON ALL TABLES` apply retroactively only, or also to future `CREATE TABLE` statements?"
+          - "Review the DCL gotcha in Section 3."

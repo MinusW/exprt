@@ -126,12 +126,30 @@ export const SimulationBlockSchema = BaseBlockSchema.extend({
   output_unit: z.string().optional(),
 });
 
+// Reusable diagram spec for rich answers & explanations
+export const AnswerDiagramSchema = z.object({
+  diagram_type: KrokiDiagramTypeSchema,
+  source: z.string().min(1, 'Diagram source is required'),
+  title: z.string().optional(),
+  caption: z.string().optional(),
+});
+
+export const ModelAnswerSubBlockSchema = z.discriminatedUnion('block_type', [
+  MarkdownBlockSchema,
+  CodeBlockSchema,
+  KrokiBlockSchema,
+]);
+
 // 7. Reflection Rubric Block
 export const ReflectionRubricBlockSchema = BaseBlockSchema.extend({
   block_type: z.literal('reflection_rubric'),
   prompt: z.string().min(1, 'Reflection prompt is required'),
+  answer_mode: z.enum(['text', 'code', 'paper']).default('text'),
+  answer_language: z.string().optional(),
   self_check_criteria: z.array(z.string()).min(1, 'At least one self-check criterion is required'),
-  model_answer: z.string().min(1, 'Model answer is required'),
+  model_answer: z.string().optional(),
+  model_answer_diagram: AnswerDiagramSchema.optional(),
+  model_answer_blocks: z.array(ModelAnswerSubBlockSchema).optional(),
 });
 
 // 8. Feynman Prompt Block
@@ -159,6 +177,7 @@ export const QuizQuestionBlockSchema = BaseBlockSchema.extend({
   options: z.array(z.string()).optional(),
   correct_answer: z.union([z.string(), z.array(z.string())]),
   explanation: z.string().min(1, 'Explanation is required'),
+  explanation_diagram: AnswerDiagramSchema.optional(),
   hints: z.array(z.string()).optional(),
   difficulty: z.number().int().min(1).max(5).default(3),
   related_block_id: z.string().min(1, 'Related block ID reference is required'),

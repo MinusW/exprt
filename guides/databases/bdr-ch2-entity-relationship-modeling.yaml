@@ -1,0 +1,282 @@
+id: bdr-ch2-entity-relationship-modeling
+title: "Entity-Relationship (ER & EER) Modeling"
+description: "Conceptual database modeling with entities, attributes (simple, composite, multivalued, derived), keys, binary and n-ary relationships, min..max cardinalities, weak entities, recursive associations, and Extended ER (EER) specialization/generalization."
+category: "Database Systems"
+track: "Relational Database Fundamentals (BDR)"
+track_order: 2
+estimated_minutes: 40
+tags: ["databases", "bdr", "er-model", "eer", "conceptual-modeling", "uml"]
+prerequisites: ["bdr-ch1-dbms-concepts"]
+sources:
+  - title: "BDR Chapter 2 (Part 1) — Modèle Entité-Association"
+    url_or_path: "sources/BDR-TE1/BDR-02-ModeleEA-partie1.pdf"
+    notes: "Entities, attributes, keys, binary associations, roles, and min..max / UML cardinalities"
+  - title: "BDR Chapter 2 (Part 2) — Modèle EA avancé & EAE"
+    url_or_path: "sources/BDR-TE1/BDR-02-ModeleEA-partie2.pdf"
+    notes: "Weak entities, recursive associations, n-ary associations, redundant associations, semantic constraints, and EER inheritance"
+
+sections:
+  - id: sec-er-foundations
+    title: "1. Conceptual Design, Entities & Attributes"
+    blocks:
+      - id: th-conceptual-vs-logical
+        block_type: markdown
+        title: "Where ER Modeling Sits in Database Design"
+        content: |
+          Database design proceeds in three phases after requirements gathering:
+          1. **Conceptual Modeling (ER / EA):** Formalizes the *mini-world* **independently of any DBMS or implementation choices**. It produces a **Conceptual Data Model (MCD)**.
+          2. **Logical Modeling:** Translates the conceptual schema into a DBMS-specific logical model (e.g., Relational Model / **MLD**).
+          3. **Physical Modeling:** Tunes indexes, storage, and access paths (**Internal Schema**).
+
+          > [!IMPORTANT]
+          > **Conceptual Boundary Rules:**
+          > * The ER model is a **conceptual** model (MCD), **not** a logical model (MLD)—never add foreign keys (`clientEmail`, `numChambre`) to an ER diagram; associations express links directly.
+          > * **Never model the system itself as a singleton entity:** An organization or application being modeled (e.g., `Hôpital`, `Chaîne Ibis`, `HEIG-VD`) defines the *boundary* of the mini-world, not a set of distinguishable instances. Only create an entity type when multiple distinct instances exist (e.g., individual `Hôtel` branches or `Clinique`s).
+
+      - id: th-attribute-taxonomy
+        block_type: markdown
+        title: "Entities & Attribute Classification"
+        content: |
+          An **entity** represents a real-world object (e.g., an employee or department). An **entity type** (*type d'entité*) defines the schema shared by an **entity set** (*ensemble d'entités*). Attributes describe properties along four axes:
+
+          | Dimension | Type | Meaning & Course Notation |
+          | :--- | :--- | :--- |
+          | **Structure** | **Simple (Atomic)** vs. **Composite** | Composite attributes decompose into sub-parts, e.g., `Adresse(Numéro, Rue, Ville, Département, CodePostal)` |
+          | **Multiplicity** | **Single-valued** vs. **Multivalued** | Multivalued attributes hold multiple values per entity, e.g., `Prénom [1..*]` or `DiplômesUniversitaires` |
+          | **Persistence** | **Stored** vs. **Derived** | `Age` is derived from stored `DateNaissance` + current date; `NombreEmployés` is derived by counting. **Only stored attributes appear in the schema.** |
+          | **Optionality** | **Mandatory** vs. **Optional (`NULL`)** | Unknown or inapplicable values use `NULL`, denoted `[0..1]`, e.g., `Adresse [0..1]`. |
+
+      - id: th-keys-natural-surrogate
+        block_type: markdown
+        title: "Candidate Keys, Primary Keys & Natural vs. Surrogate Keys"
+        content: |
+          A **key (identifier)** of an entity type $E$ is a **minimal subset** of attributes that uniquely identifies every instance of $E$.
+          * **Candidate keys:** All minimal identifying attribute sets.
+          * **Primary key:** The chosen candidate key. A good primary key is **unambiguous**, **immutable** (never needs changing), and **compact** (small storage size).
+          * **Natural key:** Belongs naturally to the domain (e.g., `NoSS`). Advantage: already exists. Drawback: tied to business rules—if business rules change, the key may break.
+          * **Surrogate (artificial) key:** Non-intelligent generated ID independent of business logic. Advantage: stable. Drawback: harder for humans to read/use directly.
+
+  - id: sec-associations-cardinalities
+    title: "2. Associations, Roles & Cardinalities"
+    blocks:
+      - id: th-associations-roles
+        block_type: markdown
+        title: "Associations, Association Classes, Degree & Roles"
+        content: |
+          An **association** links two or more entities with a specific meaning (e.g., `Travaille_pour`, `Dirige`, `Travaille_sur`).
+          * **Degree:** Number of participating entity types (**binary** = 2, **ternary** = 3, **n-ary** = $n$).
+          * **Association Classes (*Classes d'association*):** When an attribute belongs to the *link itself* rather than either entity—such as `Heures` on `Travaille_sur(Employé, Projet)` or `(dateArrivée, dateDépart, nbPersonnes)` on `Occupation(Chambre, Réservation)`—UML-ER attaches an **association class** via a dashed line.
+            * **Structural Rule:** An association class is *still a relationship*, not an independent entity with its own identity—therefore **another entity cannot associate directly with an association class**. If a third entity must reference a specific link (e.g., `ServiceDeChambre` linked to a specific room `Occupation`), **reify** the association into a **weak entity** owned by both participating entities (`Chambre` and `Réservation`).
+          * **Roles:** Clarify the function of each participating entity (e.g., `employeur` vs. `employé`). Roles are **mandatory** in **recursive associations** (where the same entity type participates twice, e.g., `Supervise` between `Employé` as `superviseur` and `Employé` as `supervisé`).
+
+      - id: th-minmax-vs-uml
+        block_type: markdown
+        title: "Min..Max Cardinalities, Reading Rule & Temporal History"
+        content: |
+          In this course's UML-style ER notation, `min..max` obeys the **cross-reading rule**: read from entity $A$ *across* the association to the multiplicity written next to entity $B$ to know how many instances of $B$ can be associated with **one** instance of $A$ (default if unconstrained: `0..*`, with $\min \le \max$, $\min \ge 0$, $\max \ge 1$).
+
+          | UML Shorthand | Meaning | Example in `COMPANY` |
+          | :--- | :--- | :--- |
+          | `1` | `1..1` (exactly one) | Each `Employé` works for `1..1` `Département` |
+          | `0..1` | zero or one | Each `Employé` manages `0..1` `Département` |
+          | `0..*` or `*` | zero or more | Each `Employé` supervises `*` other `Employé`s |
+          | `1..*` | one or more | Each `Département` is on `1..*` `Site`s |
+          | `4..*` | at least 4 | Each `Département` has `4..*` `Employé`s |
+
+          The **cardinality ratio** looks at the **maximum** values of a binary association: **1:1** (`Dirige`), **1:N / N:1** (`Travaille_pour`), or **M:N** (`Travaille_sur`).
+
+          **Modeling Temporal History (Why "One at a Time" Becomes `*`):**
+          ER cardinalities govern **all instances stored in the database across time**, not merely the active snapshot at the current instant. Whenever a specification states *"at most one at a time, and we keep history"* (e.g., an event has one organizer at a time with organizer history, or a room hosts one reservation at a time over different dates):
+          1. Widen the association from `0..1`/`1..1` to **`*` (`M:N`)** (or model a weak history entity with a date/timestamp partial key),
+          2. Attach an association class with **`(dateDébut, dateFin)`**, and
+          3. Add a **semantic integrity constraint (CI)** stating that active intervals for the same entity cannot overlap.
+
+      - id: diag-company-er
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Core COMPANY ER Relationships (UML-Style Notation)"
+        caption: "Binary associations (1:1, N:1, M:N), recursive supervision with roles, and weak entity Dépendant."
+        source: |
+          classDiagram
+            class Employe {
+              +NoSS [PK]
+              +Prenom
+              +Nom
+              +Salaire
+            }
+            class Departement {
+              +Numero [PK]
+              +Nom
+            }
+            class Projet {
+              +Numero [PK]
+              +Nom
+            }
+            class Dependant {
+              +Prenom_dep [partial]
+              +LienFamilial
+              +DateNaissance
+            }
+
+            Employe "4..*" --> "1..1" Departement : Travaille_pour
+            Employe "1..1" --> "0..1" Departement : Dirige
+            Employe "*" --> "*" Projet : Travaille_sur (Heures)
+            Employe "supervisé *" --> "superviseur 0..1" Employe : Supervise
+            Employe "1..1" *-- "*" Dependant : A_la_charge_de
+
+  - id: sec-advanced-er-eer
+    title: "3. Weak Entities, N-ary Associations & Extended ER (EER)"
+    blocks:
+      - id: th-weak-entities
+        block_type: markdown
+        title: "Weak Entities & Identifying Associations"
+        content: |
+          A **weak entity** (*entité faible*, e.g., `Dépendant`) cannot exist or be uniquely identified without a **strong (owner / identifying) entity** (`Employé`).
+          * It participates in an **identifying association** (`A_la_charge_de`) with `1..1` (or `1`) multiplicity on the owner side.
+          * It is identified by combining its **partial key / discriminator** (`Prénom_dép`) with the owner's primary key (`NoSS`).
+          * A weak entity can even have **multiple owners**—for example, when converting a ternary association into a weak entity!
+
+      - id: th-nary-and-redundant
+        block_type: markdown
+        title: "N-ary Associations, Redundancy & Semantic Constraints (CI)"
+        content: |
+          A **ternary (or n-ary) association** (e.g., `Projection` linking `Film`, `Séance`, and `Salle`) is **not** equivalent to three separate binary associations—splitting it loses which specific film is shown in which room at which time:
+          * Suppose `Salle 1` screens `Dune` at `20:00` and `Matrix` at `22:00`, while `Salle 2` screens `Matrix` at `20:00`. Three binary links (`(Salle 1, 20:00)`, `(Salle 1, Dune)`, `(20:00, Matrix)`) falsely imply `Salle 1` might be showing `Matrix` at `20:00`!
+          * In UML, n-ary associations ($n \ge 2$) are drawn as a diamond, or equivalently **reified into a weak entity** (`Projection`) with binary `1..1` links to the participating entities (`Salle`, `Séance`, `Film`).
+          * **Redundant (derived) associations:** If an association can be *unambiguously deduced* from a path of other associations, remove it. **Watch out:** only remove it if the path actually determines the exact link! Knowing which `Département` an `Employé` works in and which `Local`s a `Département` occupies (`1..*`) only gives *potential* locations, **not** the specific `Local` where the employee actually works (`Lieu_Travail`).
+
+          **Semantic Integrity Constraints (CI):** Cardinalities only bound local link counts; they cannot express **cross-tuple** or **path-consistency** rules. Document these as explicit **CI comments** on the ER diagram (enforced later via triggers/assertions):
+          1. **Temporal exclusivity:** No two `Occupation` or `Organize` intervals for the same `Chambre` or `Événement` may overlap.
+          2. **Path / cycle consistency:** All `Infirmier`s assigned to a `Patient` must assist the *same* `Médecin`; a `Vétérinaire`'s supervisor must work in the *same* `Clinique`; a `Vétérinaire` only performs `Consultation`s in their own `Clinique`.
+          3. **Aggregate business rules:** Total weekly hours of an `Employé` across all `Projet`s $\le 40$.
+
+      - id: th-eer-inheritance
+        block_type: markdown
+        title: "Extended ER (EER): Specialization, Type Entities & Lattices"
+        content: |
+          The **Extended ER (EAE)** model adds **superclass / subclass (`Is-A`)** hierarchies with **attribute and association inheritance**:
+          * **Specialization** (top-down): Partitioning a superclass (`Employé`) into subclasses (`Secrétaire`, `Technicien`, `Ingénieur`) by a defining characteristic.
+          * **Generalization** (bottom-up): Factoring common attributes of `Crédit`, `Cash`, `CarteCadeau` into a superclass `Paiement(Montant, Devise)`. (Usually **total**.)
+
+          Two orthogonal constraints govern every specialization/generalization:
+          1. **Disjointness:** **Disjoint** (an entity belongs to *at most one* subclass) vs. **Overlapping (*Chevauchante*)** (can belong to *multiple* subclasses).
+          2. **Completeness:** **Total** (every superclass entity must belong to at least one subclass) vs. **Partial** (some superclass entities belong to none).
+
+          This yields 4 combinations: `{Disjoint, Total}`, `{Disjoint, Partial}`, `{Overlapping, Total}`, `{Overlapping, Partial}`.
+
+          **Three Essential EER Design Patterns:**
+          * **Type-Level Entity vs. Subclass:** A subclass is only justified when subtypes have distinct *instance* attributes or distinct *associations*. If every instance of a category shares the exact same type-level value (e.g., `tarif` for `Simple`/`Double`/`Suite` rooms across all hotels, or commission rates per `TypeAnimal`), model a separate **Type entity** (`TypeChambre(nom, tarif)`) linked to `Chambre` instead of empty subclasses with duplicated values.
+          * **Orthogonal Hierarchies (Selective Overlap):** If `Médecin` and `Infirmier` are mutually exclusive, yet either can also be a `Patient`, do **not** turn `{Médecin, Infirmier, Patient}` into `{Overlapping}`—that would allow someone to be both `Médecin` and `Infirmier`. Instead, use **two separate specializations** from `Personne` (e.g., `{Disjoint, Partial}` for `{Médecin, Infirmier}` and an independent `Patient` subclass, or `{Employé, Patient}` `{Overlapping, Total}` with `Employé` `{Disjoint, Total}` $\to$ `{Médecin, Infirmier}`).
+          * **Shared Subclasses (Multiple Inheritance / Lattice):** When the *intersection* of two overlapping subclasses carries its own attributes or associations (e.g., a `Vétérinaire` who is also a `Propriétaire` receives a personalized `rabais`), introduce a **shared subclass** (`VétérinairePropriétaire`) inheriting from both superclasses, forming a **lattice (*treillis*)**.
+
+      - id: fc-er-pros-cons
+        block_type: flashcard
+        title: "ER Modeling Decision: Entity vs. Attribute vs. Weak Entity"
+        front: "How do you decide whether a concept should be a **simple/composite attribute**, a **Type entity**, a **strong entity**, or a **weak entity**?"
+        back: |
+          * **Attribute:** Depends on a single owner instance and has no own associations or shared type-level metadata (e.g., `Adresse`, `Téléphone [1..*]`).
+          * **Type Entity:** Holds shared metadata common to a whole category rather than individual instances (e.g., `TypeChambre(nom, tarif)`).
+          * **Strong Entity:** Has its own standalone primary key and independent existence.
+          * **Weak Entity:** Cannot be uniquely identified without combining its **partial key** with its owner's PK (e.g., `Chambre` inside `Hôtel`), or is a **reified association** needed so a third entity can link to it.
+        hint: "Ask: Does it have its own global key? Does it carry type-level data? Must another entity link to it?"
+        tags: ["bdr", "er-model", "design-decisions"]
+
+      - id: ref-eer-design-rubric
+        block_type: reflection_rubric
+        title: "Apply: Designing a Ternary Reification & EER Constraint"
+        answer_mode: text
+        prompt: |
+          1. In the `Projection(Salle, Séance, Film)` example, `Salle` and `Séance` have `*` multiplicity toward `Projection`, while `Film` has `1` (meaning a given room + timeslot screens at most one film). What is the key of the weak entity `Projection`?
+          2. In `COMPANY`, an employee can be categorized by job role (`{Secrétaire, Technicien, Ingénieur}`) and by pay type (`{Salarié, Payé_par_heure}`), while some employees are `Directeur`. Which specialization is `{Disjointe, Totale}` and which is `{Disjointe, Partielle}`?
+        self_check_criteria:
+          - "Identified `(Salle.Nom, Séance.Date, Séance.HeureDébut)` as the key of `Projection` (the `*`-side owners), excluding `Film`."
+          - "Classified `{Salarié, Payé_par_heure}` as `{Disjointe, Totale}` (every employee is paid one way or the other)."
+          - "Classified `{Secrétaire, Technicien, Ingénieur}` as `{Disjointe, Partielle}` (e.g., a Directeur might not be any of these three)."
+        model_answer: |
+          1. **Key of `Projection`:** `(Salle.Nom, Séance.Date, Séance.HeureDébut)`. Because a room (`Salle`) at a specific timeslot (`Séance`) uniquely determines the `Film` being screened, `Film` is on the `1` side and is a non-key attribute/reference rather than part of the identifier.
+          2. **EER constraints:**
+             * `{Salarié, Payé_par_heure}` is **`{Disjointe, Totale}`**: every employee has exactly one payment method.
+             * `{Secrétaire, Technicien, Ingénieur}` is **`{Disjointe, Partielle}`**: an employee has at most one of those job titles, but some employees (such as `Directeur`) belong to none of them.
+
+  - id: sec-ch2-quiz
+    title: "4. Knowledge Retrieval & Check"
+    blocks:
+      - id: qz-ch2-derived-attr
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 2
+        related_block_id: th-attribute-taxonomy
+        title: "Derived vs. Stored Attributes in ER"
+        question: "Which statement regarding **derived attributes** (e.g., `Age` from `DateNaissance`, or `NombreEmployés` of a `Département`) is **correct**?"
+        options:
+          - "Only stored attributes are included in the ER schema; derived attributes are computed on demand."
+          - "Derived attributes must always be stored in the ER schema with a `[0..1]` marker."
+          - "An attribute can only be derived from attributes of the same entity, never from associated entities."
+          - "Derived attributes are represented identically to multivalued attributes (`[1..*]`)."
+        correct_answer: "Only stored attributes are included in the ER schema; derived attributes are computed on demand."
+        explanation: |
+          In this course's ER methodology, **only stored attributes** are placed in the schema (`DateNaissance` is stored; `Age` is computed from `DateNaissance` and the current date).
+          * Attributes *can* be derived across associations (e.g., `NombreEmployés` counts associated `Employé` entities).
+          * `[0..1]` denotes optionality (`NULL` allowed), and `[1..*]` denotes a multivalued attribute.
+        hints:
+          - "Think about redundancy: if `DateNaissance` is stored, why avoid storing `Age`?"
+          - "Recall the rule from the slides: 'Le schéma contiendra seulement les attributs stockés'."
+
+      - id: qz-ch2-redundant-assoc
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 4
+        related_block_id: th-nary-and-redundant
+        title: "Detecting Truly Redundant Associations"
+        question: "Suppose `Employé` `Travaille` (`*` — `1..*`) in `Département`, and `Département` `A_lieu` (`*` — `1..*`) in `Local`. Can we eliminate a direct `Lieu_Travail` association between `Employé` and `Local`?"
+        options:
+          - "No—the path through Département only gives all potential locations of the department, not the specific location(s) where that employee actually works."
+          - "Yes—any triangle of associations in an ER diagram is automatically redundant and must be removed."
+          - "Yes—because every Employé belongs to at least one Département, and every Département has at least one Local."
+          - "No—associations between entities can never be derived from other associations."
+        correct_answer: "No—the path through Département only gives all potential locations of the department, not the specific location(s) where that employee actually works."
+        explanation: |
+          When a `Département` has **multiple** `Local`s (`1..*`) and an `Employé` works in **multiple** `Département`s (`1..*`), the join path `Employé -> Département -> Local` only tells us *all possible* locations associated with those departments—not which specific `Local` the employee actually works at!
+          * By contrast, if `Employé` worked for `1..1` `Company` and `Company` was in `1..1` `Ville`, then `Employé -> Ville` *would* be uniquely determined and redundant.
+        hints:
+          - "Check the `1..*` cardinalities: if a department is spread across 3 buildings, do you know which building Bob sits in?"
+          - "Contrast a `1..1` chain (deterministic) with a `1..*` chain (ambiguous)."
+
+      - id: qz-ch2-weak-entity
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: th-weak-entities
+        title: "Identifying a Weak Entity"
+        question: "How is an instance of a **weak entity** (such as `Dépendant` with partial key `Prénom_dép`, owned by `Employé` with primary key `NoSS`) uniquely identified?"
+        options:
+          - "By combining its partial key (`Prénom_dép`) with the primary key of its owner entity (`NoSS`)."
+          - "By its partial key (`Prénom_dép`) alone, since `Prénom_dép` is unique across the entire company."
+          - "By generating a mandatory surrogate key inside the weak entity so it no longer depends on `Employé`."
+          - "By storing all attributes of `Dépendant` as a composite attribute inside `Employé`."
+        correct_answer: "By combining its partial key (`Prénom_dép`) with the primary key of its owner entity (`NoSS`)."
+        explanation: |
+          A weak entity has no standalone primary key; two different employees can both have a dependent named `"Alice"`. Its identifier is the **combination** of the owner's primary key (`NoSS`) and the weak entity's **partial key / discriminator** (`Prénom_dép`).
+        hints:
+          - "Could two different employees have children with the same first name?"
+          - "What does 'identifying association' mean for a weak entity?"
+
+      - id: qz-ch2-eer-constraints
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: th-eer-inheritance
+        title: "EER Overlapping vs. Total Constraints"
+        question: "In an EER schema, a superclass `Personne` is specialized into `{Étudiant, Employé}` where some people are both students and employees, and every `Personne` in the database must be at least one of the two. Which constraint pair applies?"
+        options:
+          - "{Chevauchante (Overlapping), Totale}"
+          - "{Disjointe, Totale}"
+          - "{Chevauchante (Overlapping), Partielle}"
+          - "{Disjointe, Partielle}"
+        correct_answer: "{Chevauchante (Overlapping), Totale}"
+        explanation: |
+          * Because a `Personne` can be **both** an `Étudiant` and an `Employé` simultaneously, the subclasses are **overlapping (*chevauchante*)**, not disjoint.
+          * Because **every** `Personne` must belong to at least one subclass, the specialization is **total**, not partial.
+        hints:
+          - "Evaluate the two axes independently: (1) Can one entity be in >1 subclass? (2) Can an entity be in 0 subclasses?"
+          - "'At least one' = Total; 'can be both' = Overlapping."

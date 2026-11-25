@@ -587,7 +587,25 @@ async function validateGuideFile(filePath: string, opts: ValidateOptions): Promi
       }
     } else if (b.block_type === 'reflection_rubric') {
       validateLatexInText(b.prompt, b.id, 'prompt', result.errors);
-      validateLatexInText(b.model_answer, b.id, 'model_answer', result.errors);
+      const hasModelAnswer =
+        Boolean(b.model_answer && b.model_answer.trim().length > 0) ||
+        Boolean(b.model_answer_diagram) ||
+        Boolean(b.model_answer_blocks && b.model_answer_blocks.length > 0);
+      if (!hasModelAnswer) {
+        result.errors.push(
+          `[Block '${b.id}'] reflection_rubric must provide at least one of model_answer, model_answer_diagram, or model_answer_blocks.`
+        );
+      }
+      if (b.model_answer) {
+        validateLatexInText(b.model_answer, b.id, 'model_answer', result.errors);
+      }
+      if (b.model_answer_blocks) {
+        for (const sb of b.model_answer_blocks) {
+          if (sb.block_type === 'markdown') {
+            validateLatexInText(sb.content, b.id, `model_answer_blocks[${sb.id}].content`, result.errors);
+          }
+        }
+      }
     } else if (b.block_type === 'feynman_prompt') {
       validateLatexInText(b.prompt, b.id, 'prompt', result.errors);
     }
@@ -595,10 +613,38 @@ async function validateGuideFile(filePath: string, opts: ValidateOptions): Promi
 
   // 10. Kroki Dry-Run Check (cached + bounded concurrency)
   if (!opts.skipNetwork) {
-    const krokiBlocks = allBlocks.filter(
-      (b): b is Extract<GuideBlock, { block_type: 'kroki' }> => b.block_type === 'kroki'
-    );
-    await runWithConcurrency(krokiBlocks, 5, async (b) => {
+    const krokiChecks: Array<{ id: string; diagram_type: string; source: string }> = [];
+    for (const b of allBlocks) {
+      if (b.block_type === 'kroki') {
+        krokiChecks.push({ id: b.id, diagram_type: b.diagram_type, source: b.source });
+      } else if (b.block_type === 'quiz_question' && b.explanation_diagram) {
+        krokiChecks.push({
+          id: `${b.id}.explanation_diagram`,
+          diagram_type: b.explanation_diagram.diagram_type,
+          source: b.explanation_diagram.source,
+        });
+      } else if (b.block_type === 'reflection_rubric') {
+        if (b.model_answer_diagram) {
+          krokiChecks.push({
+            id: `${b.id}.model_answer_diagram`,
+            diagram_type: b.model_answer_diagram.diagram_type,
+            source: b.model_answer_diagram.source,
+          });
+        }
+        if (b.model_answer_blocks) {
+          for (const sb of b.model_answer_blocks) {
+            if (sb.block_type === 'kroki') {
+              krokiChecks.push({
+                id: `${b.id}.${sb.id}`,
+                diagram_type: sb.diagram_type,
+                source: sb.source,
+              });
+            }
+          }
+        }
+      }
+    }
+    await runWithConcurrency(krokiChecks, 5, async (b) => {
       const key = krokiCacheKey(b.diagram_type, b.source);
       if (opts.useCache && opts.krokiCache[key]) {
         return;

@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import type { SrsItem, UserSrsData, UserProgressData } from '../types.js';
 import { MathText } from './MathText.js';
+import { RichMarkdown } from './RichMarkdown.js';
+import { KrokiBlockView } from './blocks/KrokiBlockView.js';
 import { shuffleOptions } from '../utils/shuffle.js';
 
 interface Props {
@@ -562,23 +564,41 @@ export const SrsReviewView: React.FC<Props> = ({
                     {currentItem.item_type === 'flashcard' || currentItem.flashcard ? 'Core Concept Answer:' : 'Correct Answer:'}
                   </span>
                   <div className="text-emerald-950 font-semibold text-sm">
-                    <MathText
-                      text={
+                    <RichMarkdown
+                      content={
                         currentItem.flashcard?.back ||
                         currentItem.back ||
                         (Array.isArray(currentItem.question?.correct_answer)
                           ? currentItem.question.correct_answer.join(', ')
                           : String(currentItem.question?.correct_answer || ''))
                       }
-                      as="div"
+                      className="text-sm leading-relaxed"
                     />
                   </div>
                 </div>
 
                 {currentItem.question?.explanation && (
-                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed">
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed space-y-2.5">
                     <span className="font-semibold text-slate-800 block mb-1">Explanation:</span>
-                    <MathText text={currentItem.question.explanation} />
+                    <RichMarkdown
+                      content={currentItem.question.explanation}
+                      className="text-xs leading-relaxed"
+                    />
+                    {currentItem.question.explanation_diagram && (
+                      <div className="pt-1">
+                        <KrokiBlockView
+                          block={{
+                            id: `${currentItem.id}-explanation-diagram`,
+                            block_type: 'kroki',
+                            bookmarkable: false,
+                            diagram_type: currentItem.question.explanation_diagram.diagram_type,
+                            source: currentItem.question.explanation_diagram.source,
+                            title: currentItem.question.explanation_diagram.title,
+                            caption: currentItem.question.explanation_diagram.caption,
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
 

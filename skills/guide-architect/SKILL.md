@@ -248,19 +248,27 @@ Parameterized mathematical model where sliders update dynamic KaTeX formulas and
 
 ### 7. `reflection_rubric`
 Synthesis prompt where the student drafts a response before viewing self-check criteria and a model answer:
-```json
-{
-  "id": "ref-collapse-rubric",
-  "block_type": "reflection_rubric",
-  "title": "Synthesis: The Measurement Postulate",
-  "prompt": "Why can an observer never directly measure the complex amplitudes alpha and beta of a single isolated qubit?",
-  "self_check_criteria": [
-    "Mentioned that measurement is fundamentally projective and destroys superposition.",
-    "Explained that a single measurement yields only 0 or 1, not probabilities.",
-    "Noted that determining probabilities requires preparing and measuring an ensemble of identical states."
-  ],
-  "model_answer": "Measurement irreversibly collapses the superposition into an eigenstate (|0> or |1>). A single outcome provides only one classical bit. Estimating |alpha|^2 and |beta|^2 requires tomography across an ensemble of identically prepared qubits."
-}
+- `prompt` and `model_answer` render full Rich Markdown (headings, lists, tables, blockquotes, syntax-highlighted code, and KaTeX).
+- **`answer_mode`** (default `'text'`):
+  - `'text'`: multi-line prose/math textarea.
+  - `'code'`: syntax-highlighted code editor (pair with `answer_language`, e.g., `'java'`, `'python'`, `'c'`, `'sql'`).
+  - `'paper'`: hides the input box so the student solves on paper/whiteboard before revealing the rubric. **Use `'paper'` ONLY when genuinely necessary** (e.g., hand-drawing a diagram, graph/tree trace, or complex multi-line derivation that cannot be typed cleanly).
+- **Rich / visual model answers**: Provide at least one of `model_answer` (Markdown), `model_answer_diagram` (`{ diagram_type, source, title?, caption? }` rendered via Kroki), or `model_answer_blocks` (an array of `markdown`, `code`, or `kroki` sub-blocks for multi-part answers).
+```yaml
+id: ref-collapse-rubric
+block_type: reflection_rubric
+title: "Synthesis: The Measurement Postulate"
+answer_mode: text # or 'code' (with answer_language) or 'paper' (only when drawing/paper work is genuinely required)
+prompt: |
+  Why can an observer never directly measure the complex amplitudes $\alpha$ and $\beta$ of a single isolated qubit?
+self_check_criteria:
+  - "Mentioned that measurement is fundamentally projective and destroys superposition."
+  - "Explained that a single measurement yields only 0 or 1, not probabilities."
+  - "Noted that determining probabilities requires preparing and measuring an ensemble of identical states."
+model_answer: |
+  1. **Projective collapse:** Measurement irreversibly collapses the superposition into an eigenstate ($|0\rangle$ or $|1\rangle$).
+  2. **Single-bit outcome:** A single run yields only one classical bit, never $|\alpha|^2$ or $|\beta|^2$.
+  3. **Ensemble tomography:** Estimating probabilities requires preparing and measuring an ensemble of identically prepared qubits.
 ```
 
 ### 8. `feynman_prompt`
@@ -280,7 +288,7 @@ Plain-language articulation with 1-click prompt packaging for AI critique:
 ```
 
 ### 9. `quiz_question`
-Diagnostic assessment item testing application and misconceptions, linked to upstream blocks for SRS, with optional step-by-step Socratic `hints`:
+Diagnostic assessment item testing application and misconceptions, linked to upstream blocks for SRS, with optional step-by-step Socratic `hints`. `explanation` renders full Rich Markdown (lists, tables, syntax-highlighted code, KaTeX) and supports an optional `explanation_diagram` (`{ diagram_type, source, title?, caption? }`) when a visual diagram clarifies the solution:
 ```json
 {
   "id": "qz-superposition-calc",
@@ -305,7 +313,7 @@ Diagnostic assessment item testing application and misconceptions, linked to ups
 ```
 
 ### 10. `flashcard`
-Dedicated interactive 3D flip card for high-frequency mental models, definitions, and formulas, fully integrated into the FSRS Spaced Repetition queue:
+Dedicated interactive 3D flip card for high-frequency mental models, definitions, and formulas, fully integrated into the FSRS Spaced Repetition queue (`back` renders full Rich Markdown including lists, tables, syntax-highlighted code, and KaTeX):
 ```json
 {
   "id": "fc-born-rule",

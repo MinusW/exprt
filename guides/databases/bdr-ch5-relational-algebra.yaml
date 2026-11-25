@@ -1,0 +1,247 @@
+id: bdr-ch5-relational-algebra
+title: "Relational Algebra & Query Trees"
+description: "Closed set-based query language for the relational model: the 6 fundamental operators (σ, π, ρ, ×, ∪, −), derived operators (∩, θ-join, equijoin, natural join, division /), operator precedence, query trees, and algebraic optimization heuristics."
+category: "Database Systems"
+track: "Relational Database Fundamentals (BDR)"
+track_order: 5
+estimated_minutes: 40
+tags: ["databases", "bdr", "relational-algebra", "query-trees", "division", "joins"]
+prerequisites: ["bdr-ch4-er-to-relational-mapping"]
+sources:
+  - title: "BDR Chapter 5 — Algèbre relationnelle"
+    url_or_path: "sources/BDR-TE1/05-Algebre_relationnelle.pdf"
+    notes: "Unary, set-theoretic, join, and division operators; precedence; query trees; and optimization"
+
+sections:
+  - id: sec-fundamental-unary
+    title: "1. Closure & Unary Operators (σ, π, ρ)"
+    blocks:
+      - id: th-closure-and-fundamental
+        block_type: markdown
+        title: "Closure & the Six Fundamental Operators"
+        content: |
+          **Relational Algebra (RA / AR)** is a **closed** algebra: every operator takes one or two relations as input and produces a **new relation** as output, allowing arbitrary composition.
+
+          **Six Fundamental Operators** (every other RA operator can be expressed from these six):
+          * Unary: **Selection** ($\sigma$), **Projection** ($\pi$), **Renaming** ($\rho$)
+          * Binary: **Cartesian Product** ($\times$), **Union** ($\cup$), **Difference** ($-$)
+
+          Derived operators include **Intersection** ($R \cap S = R - (R - S)$), **Joins** ($R \otimes_c S = \sigma_c(R \times S)$), and **Division** ($/$).
+
+      - id: th-unary-operators
+        block_type: markdown
+        title: "Selection (σ), Projection (π) & Renaming (ρ)"
+        content: |
+          * **Selection** $\sigma_c(R)$: Filters **rows (tuples)** satisfying boolean condition $c$ (using `AND`, `OR`, `NOT`, comparisons). Schema is **unchanged**; result size $\le |R|$.
+          * **Projection** $\pi_L(R)$: Keeps only the **columns (attributes)** in list $L$ and **automatically eliminates duplicate tuples** (unlike SQL `SELECT` without `DISTINCT`!). Result size $\le |R|$.
+          * **Renaming** $\rho_{S(B_1, \dots, B_n)}(R)$: Renames the relation to $S$ and/or its attributes to $B_1, \dots, B_n$. **Mandatory** when combining a relation with itself (e.g., $R \times \rho_{R_2}(R)$), because prefixing $R.A$ vs. $R.A$ would still collide!
+
+  - id: sec-set-and-joins
+    title: "2. Set Operators, Cartesian Product & Joins"
+    blocks:
+      - id: th-set-operators
+        block_type: markdown
+        title: "Union (∪), Intersection (∩), Difference (−) & Product (×)"
+        content: |
+          **Union-Compatibility (Two Mandatory Conditions for $\cup, \cap, -$):**
+          Set operators require $R$ and $S$ to be **union-compatible**, which means **both**:
+          1. **Identical arity and attribute names/positions:** $R$ and $S$ must have the exact same number of columns (use $\pi$ and $\rho$ to align them). Attempting $T(A, B, C) - \rho_{A,B}(S)$ is **invalid** because arity $3 \ne 2$.
+          2. **Pairwise compatible domains (data types):** Corresponding columns must share compatible types. Attempting $\pi_{A,B}(R) \cap \rho_{A,B}(S)$ when $R.B$ is `integer` and $S.E$ (renamed to `B`) is `char` is **invalid**—name matching alone is not enough! (Natural join $\otimes$ likewise requires compatible domains on every shared attribute name.)
+
+          * **Union** $R \cup S$: Tuples in $R$ or $S$ (duplicates removed). Commutative & associative. Size $\in [\max(|R|,|S|), |R|+|S|]$.
+          * **Intersection** $R \cap S$: Tuples in *both* $R$ and $S$. Commutative & associative. Size $\le \min(|R|,|S|)$.
+          * **Difference** $R - S$: Tuples in $R$ that are **not** in $S$. **Neither commutative nor associative!** ($R - S \ne S - R$). Size $\le |R|$.
+
+          **Cartesian Product** $R \times S$ (no schema compatibility required):
+          * Combines every tuple of $R$ with every tuple of $S$: $|R \times S| = |R| \cdot |S|$.
+          * Schema is the concatenation of $R$ and $S$'s attributes (homonyms are prefixed `R.A`, `S.A`, or renamed via $\rho$).
+
+      - id: th-joins
+        block_type: markdown
+        title: "Joins (⊗): θ-Join, Equijoin & Natural Join"
+        content: |
+          *(Course notation uses $\otimes$ for joins; other textbooks write $\bowtie$.)*
+
+          1. **$\theta$-Join:** $R \otimes_c S = \sigma_c(R \times S)$ where condition $c$ compares $R.A \;\theta\; S.B$ with $\theta \in \{=, \ne, <, \le, >, \ge\}$. Schema concatenates both relations.
+          2. **Equijoin:** A $\theta$-join where $\theta$ is equality ($=$), e.g., `WORKS_ON` $\otimes_{Pno=Pnumber}$ `PROJECT`.
+          3. **Natural Join** $R \otimes S$ (no subscript): An equijoin on **all attributes with the same name** in $R$ and $S$, keeping **only one copy** of each common attribute!
+             * **The Homonym Trap (and Disjoint Schemas):** Because $\otimes$ automatically equates *every* shared attribute name, two tables sharing a non-key descriptive column such as `Nom` (e.g., `LigneProduction(IdLigne, Nom)` and `Piece(IdPiece, Nom)`) will silently force `LigneProduction.Nom = Piece.Nom`! Conversely, if $R$ and $S$ share **zero** attribute names, $R \otimes S$ degenerates into $R \times S$. Always **project out / rename** non-join homonyms before $\otimes$, or use an **explicit equijoin** $\otimes_{R.k = S.k}$.
+
+      - id: th-division
+        block_type: markdown
+        title: "Division ($R / V$): Answering 'For All' Queries"
+        content: |
+          Given $R(Y, X)$ and $V(X)$ where $X \subseteq \text{attrs}(R)$ and $Y = \text{attrs}(R) - X$:
+          $$R / V = \{ t \in \pi_Y(R) \mid \forall v \in V : (t, v) \in R \}$$
+          It returns every $Y$-value in $R$ that is paired with **every** tuple in $V$ (e.g., *"employees who work on ALL projects controlled by department 5"*).
+
+          * **Concrete trace:** Let $R = \{(\text{Alice}, \text{Prog}), (\text{Alice}, \text{BDR}), (\text{Bob}, \text{Prog})\}$ and $V = \{(\text{Prog}), (\text{BDR})\}$.
+            * Possible pairs $\pi_Y(R) \times V = \{(\text{Alice},\text{Prog}), (\text{Alice},\text{BDR}), (\text{Bob},\text{Prog}), (\text{Bob},\text{BDR})\}$.
+            * Subtract $R$ $\to$ missing pair $(\text{Bob}, \text{BDR})$, so $\text{Bob}$ is disqualified; result = $\{(\text{Alice})\}$.
+          * **Critical Pre-Division Projection Rule:** You **must** project $R$ down to **only $(Y, X)$** before dividing! If $R$ still carries extra attributes $Z$ (such as `Date`, `Role`, or `NumeroSiege` in `Reservation(IdPassager, NumVol, DateReservation, NumeroSiege)`), then $R(Y, Z, X) \div V(X)$ partitions by **$(Y, Z)$** instead of $Y$—requiring a passenger to book every flight *on the same date and seat*!
+          * **Without `/` (using $\pi, \times, -$):**
+            $$R / V = \pi_Y(R) - \pi_Y\big((\pi_Y(R) \times V) - R\big)$$
+
+      - id: fc-ra-to-sql-table
+        block_type: flashcard
+        title: "Relational Algebra ↔ SQL Correspondence"
+        front: |
+          How do $\sigma$, $\pi$, $\rho$, $\otimes_c$, $\otimes$, $\cup$, $\cap$, $-$, and $/$ map to SQL?
+        back: |
+          * $\sigma_c(R) \to$ `WHERE` | $\pi_L(R) \to$ `SELECT DISTINCT` | $\rho \to$ `AS`
+          * $R \times S \to$ `FROM R, S` | $R \otimes_c S \to$ `JOIN ... ON` | $R \otimes S \to$ `NATURAL JOIN`
+          * $R \cup S \to$ `UNION` | $R \cap S \to$ `INTERSECT` | $R - S \to$ `EXCEPT`
+          * $R / V \to$ **No direct SQL operator** (expressed with `NOT EXISTS` / `GROUP BY ... HAVING`)
+        hint: "Pay attention to `DISTINCT` on projection and the lack of a direct SQL keyword for division."
+        tags: ["bdr", "relational-algebra", "sql"]
+
+  - id: sec-precedence-trees
+    title: "3. Operator Precedence, Query Trees & Optimization"
+    blocks:
+      - id: th-precedence-optimization
+        block_type: markdown
+        title: "Operator Precedence, Algebraic Equivalences & Query Trees"
+        content: |
+          From **highest** to **lowest** precedence (use parentheses whenever in doubt):
+          1. **Unary operators:** $\pi, \sigma, \rho$
+          2. **Cartesian Product:** $\times$
+          3. **Joins:** $\otimes$
+          4. **Difference:** $-$
+          5. **Union & Intersection:** $\cup, \cap$
+
+          **Algebraic Equivalence Laws (Rewriting Without Changing Results):**
+          1. **Selection merging / splitting:** $\sigma_{c_1}(R) \cup \sigma_{c_2}(R) \equiv \sigma_{c_1 \lor c_2}(R)$ and $\sigma_{c_1}(R) \cap \sigma_{c_2}(R) \equiv \sigma_{c_1 \land c_2}(R) \equiv \sigma_{c_1}(\sigma_{c_2}(R))$.
+          2. **Intersection as Natural Join:** When $R_1$ and $R_2$ have the **exact same schema**, $R_1 \cap R_2 \equiv R_1 \otimes R_2$ (joining on all attributes checks full-tuple equality).
+          3. **Product + Selection $\leftrightarrow$ $\theta$-Join:** $\sigma_c(R \times S) \equiv R \otimes_c S$ (prefer $\otimes_c$ in queries).
+          4. **Pushdown Heuristic:** In **query trees** (leaves = base relations, execution flows **bottom-up**), push $\sigma$ and $\pi$ **down** below $\times$ and $\otimes$ to shrink intermediate relations—**always retaining every attribute needed by upstream joins or selections**!
+
+      - id: th-ra-reasoning-patterns
+        block_type: markdown
+        title: "Core Query-Writing Patterns in Relational Algebra"
+        content: |
+          Because relational algebra evaluates predicates **one tuple at a time**, multi-tuple conditions require set-level thinking:
+          * **Universal Negation ("never X" / "none") $\to$ Set Difference ($-$):** Never write $\sigma_{\text{type} \ne \text{'incendie'}}$ to find firefighters who *never* handled a fire—a firefighter who handled both a fire and a rescue has a rescue tuple that passes $\sigma_{\ne}$! Compute `All_IDs - IDs_who_did_X`.
+          * **"Both A and B" across tuples $\to$ Intersection ($\cap$):** Writing $\sigma_{\text{Matiere}=\text{'Bois'} \land \text{Matiere}=\text{'Métal'}}(\text{Piece})$ always returns $\emptyset$ because one tuple cannot hold two values at once. Project the `IdLigne`s for `'Bois'` and **intersect** ($\cap$) with the `IdLigne`s for `'Métal'`.
+          * **Pairwise Comparison & Symmetry Breaking $\to$ Self-Join with `<`:** To find distinct pairs $(x_1, x_2)$ sharing a property without self-pairs $(x, x)$ or reversed duplicates $(b, a)$, rename with $\rho$, join on the shared property, and filter **`id1 < id2`** (strictly stronger than `id1 <> id2`).
+          * **Combining Homogeneous Columns $\to$ $\rho$ + Union ($\cup$):** To list all departure and arrival cities in a single column, project each separately and **rename** to a common attribute name (`ville`) before $\cup$ so the schemas are union-compatible.
+
+      - id: diag-query-tree
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Bottom-Up Query Tree for Stafford Projects & Department Managers"
+        caption: "Pushing σ(Plocation='Stafford') down to PROJECT shrinks intermediate relation sizes before joining with DEPARTMENT and EMPLOYEE."
+        source: |
+          flowchart BT
+            P["PROJECT (P)"] --> S1["(1) σ P.Plocation = 'Stafford'"]
+            S1 --> J1["(2) ⊗ P.Dnum = D.Dnumber"]
+            D["DEPARTMENT (D)"] --> J1
+            J1 --> J2["(3) ⊗ D.Mgr_ssn = E.Ssn"]
+            E["EMPLOYEE (E)"] --> J2
+            J2 --> Proj["π P.Pnumber, P.Dnum, E.Lname, E.Address, E.Bdate"]
+
+            classDef rel fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px;
+            classDef op fill:#ede9fe,stroke:#4f46e5,stroke-width:1.5px;
+            class P,D,E rel;
+            class S1,J1,J2,Proj op;
+
+      - id: ref-division-rubric
+        block_type: reflection_rubric
+        title: "Worked Practice: Employees Working on No Project vs. Highest Salary"
+        answer_mode: text
+        prompt: |
+          Using the `COMPANY` schema (`EMPLOYEE(Ssn, ..., Salary)` and `WORKS_ON(Essn, Pno, Hours)`), write the relational algebra expressions for:
+          1. The `Ssn` of employees who work on **no** project.
+          2. The `Ssn` of employees who have the **highest salary** (hint: find employees who do *not* have a strictly lower salary than someone else!).
+        self_check_criteria:
+          - "Used set difference `-` with compatible single-attribute schemas (`Ssn` vs. `Essn` renamed/projected)."
+          - "For highest salary, used a self-join or Cartesian product with renaming `ρ` to find non-maximum salaries, then subtracted from all `Ssn`."
+        model_answer: |
+          1. **No projects:**
+             $$\pi_{Ssn}(\text{EMPLOYEE}) - \rho_{(Ssn)}(\pi_{Essn}(\text{WORKS\_ON}))$$
+          2. **Highest salary** (all employees minus those who earn strictly less than some other employee):
+             $$\text{ALL\_SSN} \leftarrow \pi_{Ssn}(\text{EMPLOYEE})$$
+             $$\text{NOT\_MAX} \leftarrow \pi_{E_1.Ssn}\big(\rho_{E_1}(\text{EMPLOYEE}) \otimes_{E_1.Salary < E_2.Salary} \rho_{E_2}(\text{EMPLOYEE})\big)$$
+             $$\text{RESULT} \leftarrow \text{ALL\_SSN} - \text{NOT\_MAX}$$
+
+  - id: sec-ch5-quiz
+    title: "4. Knowledge Retrieval & Check"
+    blocks:
+      - id: qz-ch5-division-calc
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: th-division
+        title: "Computing Relational Division"
+        question: "Given `SUIT(Etudiant, Cours) = {(Alice, Prog), (Alice, BDR), (Alice, Math), (Bob, Prog), (Carol, BDR), (Carol, Prog), (Dan, Math)}` and `OBLIG(Cours) = {(Prog), (BDR)}`, what is `SUIT / OBLIG`?"
+        options:
+          - "`{Alice, Carol}`"
+          - "`{Alice}`"
+          - "`{Alice, Bob, Carol}`"
+          - "`{Alice, Bob, Carol, Dan}`"
+        correct_answer: "`{Alice, Carol}`"
+        explanation: |
+          `OBLIG` requires both `Prog` and `BDR`.
+          * `Alice` takes `Prog`, `BDR`, `Math` $\supseteq \{\text{Prog}, \text{BDR}\}$ $\checkmark$
+          * `Carol` takes `BDR`, `Prog` $\supseteq \{\text{Prog}, \text{BDR}\}$ $\checkmark$
+          * `Bob` only takes `Prog` (missing `BDR`); `Dan` only takes `Math`.
+          Therefore `SUIT / OBLIG = {Alice, Carol}`.
+        hints:
+          - "Check which students have *both* `Prog` and `BDR` in `SUIT`."
+          - "Does taking an extra course (`Math`) disqualify `Alice`?"
+
+      - id: qz-ch5-push-projection
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 4
+        related_block_id: th-precedence-optimization
+        title: "Invalid Projection Pushdown"
+        question: "Which expression is **NOT** equivalent to $\\pi_{Lname}(\\sigma_{Dname='Research'}(\\text{EMPLOYEE} \\otimes_{Dno=Dnumber} \\text{DEPARTMENT}))$?"
+        options:
+          - "$\\pi_{Lname}(\\pi_{Lname}(\\text{EMPLOYEE}) \\otimes_{Dno=Dnumber} \\sigma_{Dname='Research'}(\\text{DEPARTMENT}))$"
+          - "$\\pi_{Lname}(\\pi_{Lname, Dno}(\\text{EMPLOYEE}) \\otimes_{Dno=Dnumber} \\sigma_{Dname='Research'}(\\text{DEPARTMENT}))$"
+          - "$\\pi_{Lname}(\\text{EMPLOYEE} \\otimes_{Dno=Dnumber} \\sigma_{Dname='Research'}(\\text{DEPARTMENT}))$"
+          - "$\\pi_{Lname}(\\sigma_{Dname='Research' \\land Dno=Dnumber}(\\text{EMPLOYEE} \\times \\text{DEPARTMENT}))$"
+        correct_answer: "$\\pi_{Lname}(\\pi_{Lname}(\\text{EMPLOYEE}) \\otimes_{Dno=Dnumber} \\sigma_{Dname='Research'}(\\text{DEPARTMENT}))$"
+        explanation: |
+          Pushing $\pi_{Lname}$ below the join drops `Dno`, making the subsequent join condition `Dno = Dnumber` **impossible to evaluate**! When pushing projections down, you must always retain every attribute needed by upstream joins or selections (as in $\pi_{Lname, Dno}(\text{EMPLOYEE})$).
+        hints:
+          - "Look at the join condition `Dno = Dnumber`: which attributes must still exist when the join executes?"
+          - "Compare option 1 and option 2 carefully."
+
+      - id: qz-ch5-self-join-rename
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: th-unary-operators
+        title: "When Renaming (ρ) Is Mandatory"
+        question: "Why is the renaming operator $\\rho$ **mandatory** when computing $\\text{EMPLOYEE} \\times \\text{EMPLOYEE}$?"
+        options:
+          - "Prefixing attributes with the relation name (`EMPLOYEE.Salary`) cannot distinguish the two copies of the same relation."
+          - "Cartesian product only works on relations that have identical attribute names."
+          - "Without $\\rho$, Cartesian product automatically eliminates duplicate rows."
+          - "Relational algebra forbids a relation from appearing twice in any expression, even with $\\rho$."
+        correct_answer: "Prefixing attributes with the relation name (`EMPLOYEE.Salary`) cannot distinguish the two copies of the same relation."
+        explanation: |
+          When $R$ and $S$ are different relations with a shared attribute $A$, prefixing (`R.A` vs `S.A`) disambiguates them. When combining $R$ with itself ($R \times R$), both sides have the same relation name, so `R.A` and `R.A` still collide—$\rho_{R_2}(R)$ is **required** to distinguish them.
+        hints:
+          - "What happens if you try to write `EMPLOYEE.Salary > EMPLOYEE.Salary`?"
+          - "When does simple table-name prefixing fail?"
+
+      - id: qz-ch5-difference-props
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 2
+        related_block_id: th-set-operators
+        title: "Set Difference Properties"
+        question: "Which statement about the relational algebra difference operator ($R - S$) is **correct**?"
+        options:
+          - "It requires $R$ and $S$ to have the same schema, and is neither commutative nor associative."
+          - "It is commutative ($R - S = S - R$) but not associative."
+          - "It can be applied to any two relations even if they have different numbers of columns."
+          - "The result can have up to $|R| + |S|$ tuples."
+        correct_answer: "It requires $R$ and $S$ to have the same schema, and is neither commutative nor associative."
+        explanation: |
+          Like $\cup$ and $\cap$, $R - S$ requires **compatible (identical) schemas**, and its result size is at most $|R|$ (never $|R| + |S|$). Unlike $\cup$ and $\cap$, set difference is **neither commutative nor associative**.
+        hints:
+          - 'If $R = \{(a,b),(y,z)\}$ and $S = \{(u,v),(y,z)\}$, does $R - S$ equal $S - R$?'
+          - 'Check the precondition for $\cup$, $\cap$, and $-$.'
