@@ -66,7 +66,7 @@ sections:
           | :--- | :--- | :--- |
           | **Strong Entity** | Solid rectangle with entity name at top, separator `--`, and attributes below | `Employe`, `Departement` |
           | **Primary Key (PK)** | `_Underlined_` attribute name | `_NoSS_`, `_Numero_` |
-          | **Partial Key (Discriminator)** | `[partielle]` marker (or UML qualifier box on the identifying link) | `Prenom_dep [partielle]` |
+          | **Partial Key (Discriminator)** | Small **qualifier rectangle** attached to the **owner** entity on the identifying link (not inside the weak entity) | `Employe` `[Prenom_dep]` — `Dependant` |
           | **Derived Attribute** | `/Italic/` (omitted from final stored schema) | `/Age/` |
           | **Multivalued Attribute** | `[1..*]` (or `[0..*]`) multiplicity suffix | `Prenom [1..*]` |
           | **Optional Attribute (`NULL`)** | `[0..1]` multiplicity suffix | `Email [0..1]` |
@@ -74,7 +74,7 @@ sections:
           | **Binary Association & Cardinalities** | Solid line labeled with association name; **cross-reading `min..max`** placed near the opposite entity | `Employe` `4..*` — `1..1` `Departement` |
           | **Roles** | Role names placed near each end of the line (**mandatory** for recursive associations) | `superviseur` / `supervise` |
           | **Association Class** | Rectangle attached to the association line via a **dashed line** (`..`) | `Travaille_sur` $\cdots$ `Heures` |
-          | **Weak Entity & Identifying Link** | Filled diamond composition (`<<<<<-`) / `1..1` identifying link from owner entity | `Employe` $\blacklozenge$— `Dependant` |
+          | **Weak Entity & Identifying Link** | **Qualified association** (*association qualifiée*): solid line (`1..1` on owner/qualifier side, `*` on weak entity side); weak entity lists only its non-key attributes | `Employe` `[Prenom_dep]` `1..1` — `*` `Dependant` |
           | **N-ary Association ($n \ge 3$)** | Central **diamond** connected to all participating entities (or reified weak entity) | `Projection` diamond (`Salle`, `Seance`, `Film`) |
           | **EER Inheritance (`Is-A`)** | Hollow-triangle arrow (`<<-`) from subclass to superclass + `{Disjointe/Chevauchante, Totale/Partielle}` | `Employe` $\triangleleft$— `{Secretaire, Technicien, Ingenieur}` |
 
@@ -235,6 +235,12 @@ sections:
             </element>
             <element>
               <id>UMLClass</id>
+              <coordinates><x>470</x><y>110</y><w>90</w><h>26</h></coordinates>
+              <panel_attributes>dateDebut</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
               <coordinates><x>710</x><y>30</y><w>130</w><h>80</h></coordinates>
               <panel_attributes>Reservation
           --
@@ -244,29 +250,28 @@ sections:
             </element>
             <element>
               <id>UMLClass</id>
-              <coordinates><x>560</x><y>175</y><w>170</w><h>95</h></coordinates>
+              <coordinates><x>560</x><y>195</y><w>170</w><h>80</h></coordinates>
               <panel_attributes>Occupation
           --
-          dateDebut [partielle]
           dateFin
           nbPersonnes</panel_attributes>
               <additional_attributes/>
             </element>
             <element>
               <id>Relation</id>
-              <coordinates><x>495</x><y>110</y><w>95</w><h>85</h></coordinates>
-              <panel_attributes>lt=&lt;&lt;&lt;&lt;&lt;-
+              <coordinates><x>495</x><y>136</y><w>95</w><h>70</h></coordinates>
+              <panel_attributes>lt=-
           m1=1..1
           m2=*</panel_attributes>
-              <additional_attributes>20;0;65;65</additional_attributes>
+              <additional_attributes>20;0;65;59</additional_attributes>
             </element>
             <element>
               <id>Relation</id>
-              <coordinates><x>700</x><y>110</y><w>95</w><h>85</h></coordinates>
-              <panel_attributes>lt=&lt;&lt;&lt;&lt;&lt;-
+              <coordinates><x>700</x><y>110</y><w>95</w><h>96</h></coordinates>
+              <panel_attributes>lt=-
           m1=1..1
           m2=*</panel_attributes>
-              <additional_attributes>75;0;30;65</additional_attributes>
+              <additional_attributes>75;0;30;85</additional_attributes>
             </element>
             <element>
               <id>UMLClass</id>
@@ -320,10 +325,15 @@ sections:
             </element>
             <element>
               <id>UMLClass</id>
-              <coordinates><x>20</x><y>370</y><w>180</w><h>110</h></coordinates>
+              <coordinates><x>125</x><y>235</y><w>105</w><h>28</h></coordinates>
+              <panel_attributes>Prenom_dep</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>20</x><y>370</y><w>180</w><h>95</h></coordinates>
               <panel_attributes>Dependant
           --
-          Prenom_dep [partielle]
           LienFamilial
           DateNaissance</panel_attributes>
               <additional_attributes/>
@@ -381,12 +391,12 @@ sections:
             </element>
             <element>
               <id>Relation</id>
-              <coordinates><x>110</x><y>280</y><w>160</w><h>90</h></coordinates>
-              <panel_attributes>lt=&lt;&lt;&lt;&lt;&lt;-
+              <coordinates><x>60</x><y>263</y><w>145</w><h>107</h></coordinates>
+              <panel_attributes>lt=-
           m1=1..1
           m2=*
           A_la_charge_de</panel_attributes>
-              <additional_attributes>160;0;0;90</additional_attributes>
+              <additional_attributes>110;0;50;107</additional_attributes>
             </element>
             <element>
               <id>Relation</id>
@@ -409,9 +419,9 @@ sections:
         title: "Weak Entities & Identifying Associations"
         content: |
           A **weak entity** (*entité faible*, e.g., `Dépendant`) cannot exist or be uniquely identified without a **strong (owner / identifying) entity** (`Employé`).
-          * It participates in an **identifying association** (`A_la_charge_de`) with `1..1` (or `1`) multiplicity on the owner side.
-          * It is identified by combining its **partial key / discriminator** (`Prénom_dép`) with the owner's primary key (`NoSS`).
-          * A weak entity can even have **multiple owners**—for example, when converting a ternary association into a weak entity!
+          * In this course's UML-ER notation, weak entities use a **qualified association** (*association qualifiée*): the **partial key / discriminator** (`Prénom_dép`) is placed inside a small **qualifier box** attached to the **owner** entity (`Employé`), connected by a solid line (`1..1` on the owner/qualifier side, `*` on the weak entity side).
+          * The weak entity box lists only its non-key attributes (`LienFamilial`, `DateNaissance`), and its full identifier combines the owner's primary key (`NoSS`) with its discriminator (`Prénom_dép`).
+          * A weak entity can also have **multiple owners**—for example, when reifying an association class (`Occupation(Chambre, Réservation)`) or converting a ternary association (`Projection(Salle, Séance)`) into a weak entity!
 
       - id: th-nary-and-redundant
         block_type: markdown
@@ -533,7 +543,7 @@ sections:
             <element>
               <id>Relation</id>
               <coordinates><x>495</x><y>110</y><w>95</w><h>60</h></coordinates>
-              <panel_attributes>lt=&lt;&lt;&lt;&lt;&lt;-
+              <panel_attributes>lt=-
           m1=1..1
           m2=*</panel_attributes>
               <additional_attributes>20;0;70;45</additional_attributes>
@@ -541,7 +551,7 @@ sections:
             <element>
               <id>Relation</id>
               <coordinates><x>685</x><y>110</y><w>95</w><h>60</h></coordinates>
-              <panel_attributes>lt=&lt;&lt;&lt;&lt;&lt;-
+              <panel_attributes>lt=-
           m1=1..1
           m2=*</panel_attributes>
               <additional_attributes>75;0;20;45</additional_attributes>
