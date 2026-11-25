@@ -1,0 +1,330 @@
+id: bdr-2025-te1-exam
+title: "Mock Exam: BDR TE1 (Nov 2025)"
+description: "Full 90-minute BDR TE1 past exam (4 November 2025, 100 pts): Veterinary clinic ER modeling with weak entities, recursive constraint, specialization, and commission history (40 pts), ER-to-relational mapping with inheritance alternatives and ternary constraints (30 pts), Relational Algebra evaluation and θ-join rewriting (10 pts), and Factory RA queries including division (20 pts)."
+category: "Database Systems"
+track: "Relational Database Fundamentals (BDR)"
+track_order: 9
+estimated_minutes: 90
+tags: ["mock-exam", "exam", "bdr", "te1"]
+prerequisites:
+  - "bdr-ch1-dbms-concepts"
+  - "bdr-ch2-entity-relationship-modeling"
+  - "bdr-ch3-relational-model-constraints"
+  - "bdr-ch4-er-to-relational-mapping"
+  - "bdr-ch5-relational-algebra"
+sources:
+  - title: "BDR TE1 — Travail Écrit du 4 Novembre 2025 (Fatemi & Tischhauser)"
+    url_or_path: "sources/BDR-TE1/tests/BDR25_TE1.pdf"
+    notes: "Official 90-minute TE1 exam paper (100 points total)"
+
+sections:
+  - id: sec-exam-overview
+    title: "Exam Overview & Strategy"
+    blocks:
+      - id: md-exam-briefing
+        block_type: markdown
+        title: "TE1 Format & Time Budget (90 Minutes — 100 Points)"
+        content: |
+          | Question | Topic | Points | Suggested Time |
+          | :--- | :--- | :---: | :---: |
+          | **Q1 (a–d)** | Modèle Entité-Association (Cliniques vétérinaires) | 40 | 35 min |
+          | **Q2 (a–b)** | Passage EA $\to$ Modèle Relationnel + Alternatives d'héritage | 30 | 25 min |
+          | **Q3 (a–e)** | Évaluation d'expressions d'Algèbre Relationnelle + Réécriture | 10 | 10 min |
+          | **Q4 (a–d)** | Requêtes en Algèbre Relationnelle (Usines & Production) | 20 | 20 min |
+
+          > [!TIP]
+          > **Key Traps in This Paper:**
+          > * **Q1:** `Vétérinaire` is a **weak entity** of `Clinique` (`NoInterne` is unique only within a clinic). Also watch out for the **commission history** requirement (storing historical rates with update dates).
+          > * **Q2(a):** Watch out for the **recursive `1 : *` association** `CC` on `C`.
+          > * **Q4(b):** Both `LigneProduction` and `Piece` have an attribute named `Nom` — projecting `IdLigne` before intersecting avoids natural-join name collisions!
+
+  - id: sec-q1-er-modeling
+    title: "Question 1 — Modèle EA : Cliniques vétérinaires (40 points)"
+    blocks:
+      - id: ref-q1ab-vet-er
+        block_type: reflection_rubric
+        title: "Q1(a) & Q1(b) (29 pts) — Schéma EA complet (Cliniques, Animaux & Historique des commissions)"
+        answer_mode: paper
+        prompt: |
+          **Partie (a) (21 pts)** — Compléter le schéma EA (`Clinique`, `Vétérinaire`, `Propriétaire`, `Animal`) :
+          * **Propriétaire** : `NoClient` unique, `Nom`, `Prenom`, `Adresse` composée (`Ville`, `Rue`, `CodePostal`), et un ou plusieurs numéros de téléphone (`Tel`).
+          * **Clinique & Vétérinaire** : Chaque vétérinaire travaille dans une seule clinique, et chaque clinique emploie un ou plusieurs vétérinaires. Une clinique a un `IdClinique` unique et un `Nom`. Un vétérinaire a un `Nom` et un `NoInterne` unique *dans sa clinique* (deux vétérinaires de cliniques différentes peuvent avoir le même numéro).
+          * **Hiérarchie** : Un vétérinaire peut avoir un responsable hiérarchique qui est lui-même un vétérinaire de la **même clinique**.
+          * **Animal** : `IdAnimal` unique, `Nom`, `DateNaiss`. Un propriétaire possède au moins un animal, et chaque animal appartient à un seul propriétaire.
+          * **Consultation** : Concerne un seul animal, est effectuée par un seul vétérinaire, possède une `Date` et un `Prix`. Un animal peut avoir plusieurs consultations, un vétérinaire peut en effectuer plusieurs. On doit pouvoir accéder à toutes les consultations de chaque clinique, et chaque vétérinaire ne fait des consultations que dans la clinique où il travaille.
+
+          **Partie (b) (8 pts)** — Étendre le schéma :
+          * Les cliniques traitent des **chiens** (`Race`, `Poids`), des **chats** (`CouleurPelage`), et des **oiseaux** (`Espèce`, `TailleAiles`), *parmi d'autres types d'animaux*.
+          * Les vétérinaires reçoivent une **commission** par consultation selon le type d'animal (`5%` chien, `3%` chat, `2%` oiseau). On doit pouvoir mettre à jour ces taux et **conserver l'historique des dates de mise à jour** pour calculer le total des commissions sur un intervalle donné.
+        self_check_criteria:
+          - "`Propriétaire` avec `NoClient` (PK), attribut composé `Adresse(Ville, Rue, CodePostal)` et attribut multivalué `Tel [1..*]`."
+          - "`Vétérinaire` modélisé comme **entité faible** de `Clinique` (`NoInterne` = clé partielle / qualificateur), cardinalités `1` côté `Clinique` et `1..*` côté `Vétérinaire`."
+          - "Association récursive sur `Vétérinaire` (`0..1` côté responsable, `*` côté subordonné) + **contrainte sémantique** : le responsable appartient à la même clinique."
+          - "`Consultation` reliée à `Animal` (`1` côté `Animal`, `*` côté `Consultation`) et `Vétérinaire` (`1` côté `Vétérinaire`, `*` côté `Consultation`). L'accès par clinique et la contrainte de clinique découlent de la dépendance `Vétérinaire -> Clinique` (ou via contrainte explicite)."
+          - "Spécialisation `{partial, disjoint}` de `Animal` vers `Chien`, `Chat`, `Oiseau`."
+          - "Entité `TypeAnimal` + entité faible `HistoriqueCommission(DateMiseAJour [PK partielle], Taux)` (ou entité/association datée) permettant de retrouver le taux en vigueur à la date d'une consultation."
+        model_answer: |
+          ### Points clés du schéma Q1(a) + Q1(b)
+
+          1. **`Propriétaire`** : `NoClient` (PK), `Nom`, `Prenom`, attribut composé `Adresse {Ville, Rue, CodePostal}`, attribut multivalué `Tel [1..*]`.
+          2. **`Clinique`** (`IdClinique` [PK], `Nom`) $\xleftarrow{1 \quad \text{Emploie} \quad 1..*}$ **`Vétérinaire`** (entité faible, clé partielle `NoInterne`, `Nom`).
+          3. **Récursive `Supervise` sur `Vétérinaire`** : `0..1` côté responsable, `*` côté subordonné, avec **contrainte d'intégrité sémantique** : `vétérinaire.IdClinique = responsable.IdClinique`.
+          4. **`Animal`** (`IdAnimal` [PK], `Nom`, `DateNaiss`) $\xrightarrow{1 \quad \text{Possède} \quad 1..*}$ **`Propriétaire`**.
+          5. **`Consultation`** (`IdConsultation` [PK] ou entité faible `(IdAnimal, Date)`, `Prix`) reliée à `Animal` (`1` côté `Animal`, `*` côté `Consultation`) et `Vétérinaire` (`1` côté `Vétérinaire`, `*` côté `Consultation`). Comme `Vétérinaire` dépend de `Clinique`, toute consultation est automatiquement rattachée à la clinique du vétérinaire.
+          6. **Spécialisation d'`Animal`** : **`{partial, disjoint}`** ("parmi d'autres types d'animaux") vers `Chien(Race, Poids)`, `Chat(CouleurPelage)`, `Oiseau(Espèce, TailleAiles)`.
+          7. **Historique des commissions** : Entité `TypeAnimal(NomType [PK])` associée à une entité faible **`HistoriqueCommission(DateMiseAJour [PK partielle], Taux)`** (`1` côté `TypeAnimal`, `1..*` côté `HistoriqueCommission`). On relie `Animal` à `TypeAnimal` (`1` côté `TypeAnimal`, `*` côté `Animal`) — ou `Consultation` au `HistoriqueCommission` en vigueur à `Consultation.Date`.
+        model_answer_diagram:
+          diagram_type: mermaid
+          title: "Q1(a)+(b) — Veterinary Clinic ER Model"
+          source: |
+            flowchart TB
+              Prop["Propriétaire\nPK: NoClient\nNom, Prenom\nAdresse(Ville,Rue,CP)\nTel [1..*]"]
+              Clin["Clinique\nPK: IdClinique\nNom"]
+              Vet["«weak» Vétérinaire\nPK_partiel: NoInterne\nNom"]
+              Cons["Consultation\nPK: IdConsultation\nDate, Prix"]
+              Ani["Animal\nPK: IdAnimal\nNom, DateNaiss"]
+              Spec{"{partial, disjoint}"}
+              Chien["Chien\nRace, Poids"]
+              Chat["Chat\nCouleurPelage"]
+              Ois["Oiseau\nEspèce, TailleAiles"]
+              TA["TypeAnimal\nPK: NomType"]
+              HC["«weak» HistoriqueCommission\nPK_partiel: DateMaj\nTaux"]
+
+              Clin -- "1   [NoInterne]   1..*" --- Vet
+              Vet -- "0..1   Supervise (même clinique)   *" --- Vet
+              Prop -- "1   Possède   1..*" --- Ani
+              Ani -- "1   Concerne   *" --- Cons
+              Vet -- "1   Effectue   *" --- Cons
+              Ani --- Spec
+              Spec --- Chien
+              Spec --- Chat
+              Spec --- Ois
+              Ani -- "*   Est_de_type   1" --- TA
+              TA -- "1   [DateMaj]   1..*" --- HC
+
+      - id: ref-q1cd-keys-and-overlap
+        block_type: reflection_rubric
+        title: "Q1(c) & Q1(d) (11 pts) — Inventaire des identifiants & Vétérinaire-Propriétaire"
+        answer_mode: text
+        prompt: |
+          * **(c) (7 pts)** Spécifier les identifiants de **toutes les entités** de votre schéma final (après (a) et (b)), en précisant clairement quelles entités sont **fortes** ou **faibles** et leurs clés.
+          * **(d) (4 pts)** Supposons maintenant qu'un **vétérinaire puisse également être propriétaire d'animaux**, avec un **`Rabais` personnalisé** (variable selon le vétérinaire-propriétaire). Proposer une modification du modèle permettant ce scénario.
+        self_check_criteria:
+          - "(c) Listé toutes les entités en distinguant explicitement fortes (`Propriétaire`, `Clinique`, `Animal` + sous-classes, `TypeAnimal`, `Consultation`) et faibles (`Vétérinaire` avec `(IdClinique, NoInterne)`, `HistoriqueCommission` avec `(NomType, DateMaj)`)."
+          - "(d) Introduit une association `0..1 — 0..1` (avec attribut `Rabais`) entre `Vétérinaire` et `Propriétaire` OU une super-classe `Personne` avec spécialisation `{total, overlapping}`."
+        model_answer: |
+          ### (c) Entités fortes vs. faibles et leurs clés (7 pts)
+          | Entité | Type | Clé primaire (et clé partielle si faible) |
+          | :--- | :--- | :--- |
+          | `Clinique` | Forte | `IdClinique` |
+          | `Vétérinaire` | **Faible** (dépend de `Clinique`) | `(IdClinique, NoInterne)` (`NoInterne` = clé partielle) |
+          | `Propriétaire` | Forte | `NoClient` |
+          | `Animal` | Forte | `IdAnimal` |
+          | `Chien`, `Chat`, `Oiseau` | Sous-classes d'`Animal` | `IdAnimal` (héritée d'`Animal`) |
+          | `Consultation` | Forte *(ou faible de `Animal`)* | `IdConsultation` *(ou `(IdAnimal, Date)`)* |
+          | `TypeAnimal` | Forte | `NomType` |
+          | `HistoriqueCommission` | **Faible** (dépend de `TypeAnimal`) | `(NomType, DateMaj)` (`DateMaj` = clé partielle) |
+
+          ### (d) Vétérinaire pouvant être Propriétaire avec `Rabais` (4 pts)
+          * **Option 1 (Association `0..1 — 0..1`)** : Ajouter une association `Est_aussi` entre `Vétérinaire` (`0..1`) et `Propriétaire` (`0..1`) portant l'attribut **`Rabais`**.
+          * **Option 2 (Généralisation `{total, overlapping}`)** : Créer une super-classe `Personne(IdPersonne, Nom, Prenom)` spécialisée en `{total, overlapping}` vers `Vétérinaire` et `Propriétaire`, et placer `Rabais` (optionnel) ou une association sur le chevauchement.
+
+  - id: sec-q2-relational-mapping
+    title: "Question 2 — Modèle relationnel (30 points)"
+    blocks:
+      - id: diag-q2ab-er-sources
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Q2(a) & Q2(b) — Schémas EA à traduire"
+        source: |
+          flowchart LR
+            subgraph Q2a ["Q2(a) — Héritage & Récursive"]
+              A["A\nPK: a1"]
+              Spec{"{partial, disjoint}"}
+              B["B\nb1"]
+              C["C\nc1"]
+              A --- Spec
+              Spec --- B
+              Spec --- C
+              C -- "1   CC   *" --- C
+            end
+
+            subgraph Q2b ["Q2(b) — Faible, Classe d'assoc. & Ternaire"]
+              F["F\nPK: f1\nf2"]
+              H["H\nPK: h1\nh2"]
+              FH["FH\nfh1"]
+              G["G\ng2"]
+              I["I\nPK: i1\ni2"]
+              J["J\nPK: j1\nj2"]
+              HIJ(("HIJ"))
+
+              F -- "1..*       1" --- H
+              F -. "FH" .- FH
+              G -- "*   [g1]" --- I
+              H -- "*" --- HIJ
+              I -- "*" --- HIJ
+              HIJ -- "1" --- J
+            end
+        caption: "Reconstruction of Page 6 (Q2a) and Page 8 (Q2b) diagrams from BDR25_TE1.pdf."
+
+      - id: ref-q2a-mapping
+        block_type: reflection_rubric
+        title: "Q2(a) (12 pts) — Traduction de Q2(a) & alternatives d'héritage"
+        answer_mode: text
+        prompt: |
+          * **i. (10 pts)** Lister les relations obtenues pour le schéma **Q2(a)** (avec PK, FK, `UNIQUE`, `NOT NULL`).
+          * **ii. (2 pts)** Mentionner les alternatives possibles en fonction du type d'héritage (`partiel/total`, `disjoint/chevauchant`). Pas besoin de les développer.
+        self_check_criteria:
+          - "i. `A(a1)` (`PK: a1`), `B(a1, b1)` (`PK: a1`, `FK: a1 -> A(a1)`), `C(a1, c1, parent_a1)` (`PK: a1`, `FK: a1 -> A(a1)`, `FK: parent_a1 -> C(a1) NOT NULL`)."
+          - "ii. Mentionné les 3 stratégies (super-classe + sous-classes, descente vers sous-classes si `total`, table unique avec attributs nullables) et quand chacune s'applique."
+        model_answer: |
+          ### i. Relations pour Q2(a) (10 pts)
+          1. **`A(a1)`**
+             * **PK** : `a1`
+          2. **`B(a1, b1)`**
+             * **PK** : `a1`
+             * **FK** : `a1` référence `A(a1)`
+          3. **`C(a1, c1, c_parent)`** *(l'association récursive `1 : *` `CC` sur `C` place la FK du côté `*` vers le côté `1`)*
+             * **PK** : `a1`
+             * **FK** : `a1` référence `A(a1)`
+             * **FK** : `c_parent` référence `C(a1)`, **`NOT NULL`** *(chaque `C` est lié à exactement `1` `C`)*
+
+          ### ii. Alternatives selon le type d'héritage (2 pts)
+          * **Super-classe + sous-classes** : Valable pour les 4 combinaisons (`partiel/total`, `disjoint/chevauchant`).
+          * **Sous-classes uniquement (pas de table `A`)** : Uniquement possible si l'héritage est **`total`** (sans perte si `disjoint`, avec redondance si `chevauchant`).
+          * **Table unique (`A` regroupant tous les attributs)** : Possible pour les 4 combinaisons avec des attributs nullables (une colonne `type` si `disjoint`, des booléens `est_B, est_C` si `chevauchant`).
+
+      - id: ref-q2b-mapping
+        block_type: reflection_rubric
+        title: "Q2(b) (18 pts) — Traduction de Q2(b)"
+        answer_mode: text
+        prompt: |
+          Lister les relations obtenues lors du passage du modèle EA **Q2(b)** au modèle relationnel (`R(att1, ...)` avec PK, FK, `UNIQUE`, `NOT NULL`).
+        self_check_criteria:
+          - "`H(h1, h2)` (`PK: h1`), `I(i1, i2)` (`PK: i1`), `J(j1, j2)` (`PK: j1`)."
+          - "`F(f1, f2, h1, fh1)` : fusion de l'association `1..* : 1` et de la classe d'association `FH` dans `F`, avec `FK: h1 -> H(h1) NOT NULL` et `fh1 NOT NULL`."
+          - "`G(i1, g1, g2)` : entité faible qualifiée par `g1` sur `I`, `PK: (i1, g1)`, `FK: i1 -> I(i1)`."
+          - "`HIJ(h1, i1, j1)` : ternaire avec `PK: (h1, i1)` (grâce au `1` sur `J`), FKs vers `H, I, J`, et `j1 NOT NULL`."
+        model_answer: |
+          ### Relations pour Q2(b) (18 pts)
+          1. **`H(h1, h2)`** — **PK** : `h1`
+          2. **`I(i1, i2)`** — **PK** : `i1`
+          3. **`J(j1, j2)`** — **PK** : `j1`
+          4. **`F(f1, f2, h1, fh1)`** *(chaque `F` est lié à `1` `H`)*
+             * **PK** : `f1`
+             * **FK** : `h1` référence `H(h1)`, **`NOT NULL`**
+             * **`fh1 NOT NULL`**
+          5. **`G(i1, g1, g2)`** *(entité faible qualifiée par `g1` sur `I`)*
+             * **PK** : `(i1, g1)`
+             * **FK** : `i1` référence `I(i1)`
+          6. **`HIJ(h1, i1, j1)`** *(ternaire avec multiplicité `1` côté `J`)*
+             * **PK** : `(h1, i1)`
+             * **FK** : `h1` référence `H(h1)`
+             * **FK** : `i1` référence `I(i1)`
+             * **FK** : `j1` référence `J(j1)`, **`NOT NULL`**
+
+  - id: sec-q3-ra-evaluation
+    title: "Question 3 — Algèbre relationnelle : Évaluation (10 points)"
+    blocks:
+      - id: md-q3-tables
+        block_type: markdown
+        title: "Relations R, S et T"
+        content: |
+          | **R** (`A`, `B`, `C`, `D`) | **S** (`E`, `F`, `G`) | **T** (`C`, `D`) |
+          | :--- | :--- | :--- |
+          | `(4, 5, 4, c)` | `(2, 90, b)` | `(4, c)` |
+          | `(8, 4, 6, e)` | `(4, 85, c)` | `(8, d)` |
+          | `(8, 5, 8, d)` | `(4, 80, c)` | `(4, b)` |
+          | `(8, 7, 5, c)` | `(2, 75, d)` | |
+          | `(4, 5, 4, b)` | | |
+
+      - id: qz-q3c-division
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 3
+        related_block_id: md-q3-tables
+        question: "What is the result of **Q3(c)**: $\\pi_{B, C, D}(R) \\div T$?"
+        options:
+          - "Schema (B): {(5)}"
+          - "Schema (B): {(4), (5), (7)}"
+          - "Schema (A, B): {(4, 5)}"
+          - "Empty relation ∅"
+        correct_answer: "Schema (B): {(5)}"
+        explanation: "$T(C, D) = \\{(4,c), (8,d), (4,b)\\}$. In $\\pi_{B,C,D}(R)$, only `B = 5` is paired with all three tuples `(4,c)`, `(8,d)`, and `(4,b)`. `B = 4` only has `(6,e)` and `B = 7` only has `(5,c)`."
+        hints:
+          - "First project `R` onto `(B, C, D)` — note that `A` is removed, leaving only `B` as the quotient attribute."
+          - "Check which `B` values appear with ALL 3 pairs in `T`: `(4,c)`, `(8,d)`, and `(4,b)`."
+
+      - id: ref-q3-all-solutions
+        block_type: reflection_rubric
+        title: "Q3(a–e) (10 pts) — Évaluation & réécriture"
+        answer_mode: text
+        prompt: |
+          Évaluer les expressions suivantes (étapes intermédiaires conseillées) :
+          * **(a) (2 pts)** $\pi_{A, D}(R) - \rho_{A, D}(T)$
+          * **(b) (3 pts)** $\pi_{E, G}(\sigma_{F < 90}(S)) \times \pi_A(R)$
+          * **(c) (2 pts)** $\pi_{B, C, D}(R) \div T$
+          * **(d) (2 pts)** $S \otimes \rho_{E, G}(T)$
+          * **(e) (1 pt)** Exprimer $M \otimes_{X < Y} N$ sans faire usage de $\otimes$.
+        self_check_criteria:
+          - "(a) `(A, D): {(8, e), (8, c)}`."
+          - "(b) `(E, G, A): {(4, c, 4), (4, c, 8), (2, d, 4), (2, d, 8)}` (doublons éliminés par $\\pi$)."
+          - "(c) `(B): {(5)}`."
+          - "(d) `(E, F, G): {(4, 85, c), (4, 80, c)}`."
+          - "(e) $\\sigma_{X < Y}(M \\times N)$."
+        model_answer: |
+          * **(a) Résultat `(A, D)`** : `{(8, e), (8, c)}`
+            * $\pi_{A,D}(R) = \{(4,c), (8,e), (8,d), (8,c), (4,b)\}$ ; $\rho_{A,D}(T) = \{(4,c), (8,d), (4,b)\}$.
+          * **(b) Résultat `(E, G, A)`** : `{(4, c, 4), (4, c, 8), (2, d, 4), (2, d, 8)}`
+            * $\pi_{E,G}(\sigma_{F<90}(S)) = \{(4, c), (2, d)\}$ (doublon `(4, c)` éliminé par $\pi$) ; $\pi_A(R) = \{(4), (8)\}$.
+          * **(c) Résultat `(B)`** : `{(5)}`
+            * Seul `B = 5` est associé à tous les couples `(4, c)`, `(8, d)` et `(4, b)` de `T`.
+          * **(d) Résultat `(E, F, G)`** : `{(4, 85, c), (4, 80, c)}`
+            * Jointure naturelle sur `(E, G)` avec $\rho_{E,G}(T) = \{(4,c), (8,d), (4,b)\}$.
+          * **(e)** $\sigma_{X < Y}(M \times N)$
+
+  - id: sec-q4-ra-queries
+    title: "Question 4 — Requêtes en algèbre relationnelle (20 points)"
+    blocks:
+      - id: md-q4-schema
+        block_type: markdown
+        title: "Schéma relationnel — Usines & Production"
+        content: |
+          * `Usine(IdUsine, NomUsine, VilleUsine, Pays)`
+          * `Employe(IdEmploye, Nom, Prenom, Ville, IdUsine)` (`IdUsine` $\to$ `Usine.IdUsine`)
+          * `LigneProduction(IdLigne, IdUsine, Nom, NombreEtapes)` (`IdUsine` $\to$ `Usine.IdUsine`)
+          * `Timesheet(IdEmploye, IdLigne, NombreHeures)` (`IdEmploye` $\to$ `Employe`, `IdLigne` $\to$ `LigneProduction`)
+          * `Piece(IdPiece, Nom, Couleur, Matiere)`
+          * `Production(NumSerie, IdPiece, IdLigne, Date)` (`IdPiece` $\to$ `Piece`, `IdLigne` $\to$ `LigneProduction`)
+
+      - id: ref-q4-queries
+        block_type: reflection_rubric
+        title: "Q4(a–d) (20 pts) — Exprimer les 4 requêtes en algèbre relationnelle"
+        answer_mode: text
+        prompt: |
+          Exprimer les requêtes suivantes à l'aide de l'algèbre relationnelle :
+
+          * **(a) (3 pts)** Lister `IdEmploye` et `Prenom` des employés qui s'appellent `'Lantier'` et qui habitent dans la même ville que l'usine où ils travaillent.
+          * **(b) (6 pts)** Lister `IdLigne` et `Nom` des lignes de production qui produisent des pièces **en bois et en métal** (`Matiere` des pièces).
+          * **(c) (5 pts)** Lister `IdLigne` des lignes de production qui **n'ont aucune pièce de couleur `'Orange'`** dans leur production.
+          * **(d) (6 pts)** Lister `IdEmploye` et `Nom` des employés qui ont travaillé sur **toutes les lignes de production de l'usine `'LEGO-1'`**.
+        self_check_criteria:
+          - "(a) Jointure `Employe ⋈ Usine` (sur `IdUsine`) + sélection `Nom = 'Lantier' ∧ Ville = VilleUsine` + projection."
+          - "(b) Intersection `∩` de deux projections sur `IdLigne` (avant de joindre avec `LigneProduction` pour éviter la collision d'attribut `Nom` avec `Piece.Nom`)."
+          - "(c) Différence partant de `π_{IdLigne}(LigneProduction)` (et NON de `Production`) moins les lignes ayant produit du `'Orange'`."
+          - "(d) Division `π_{IdEmploye, IdLigne}(Timesheet) ÷ π_{IdLigne}(σ_{IdUsine='LEGO-1'}(LigneProduction))`, puis jointure avec `Employe` pour `Nom`."
+        model_answer: |
+          * **(a)** (3 pts)
+          $$\pi_{\text{IdEmploye}, \text{Prenom}}\Big(\sigma_{\text{Nom} = \text{'Lantier'} \land \text{Ville} = \text{VilleUsine}}(\text{Employe} \otimes \text{Usine})\Big)$$
+
+          * **(b)** (6 pts) — *Projeter sur `IdLigne` avant d'intersecter pour éviter la collision sur `Nom` (`Piece.Nom` vs `LigneProduction.Nom`) !*
+          $$\text{Bois} \leftarrow \pi_{\text{IdLigne}}\Big(\text{Production} \otimes \sigma_{\text{Matiere} = \text{'bois'}}(\text{Piece})\Big)$$
+          $$\text{Metal} \leftarrow \pi_{\text{IdLigne}}\Big(\text{Production} \otimes \sigma_{\text{Matiere} = \text{'métal'}}(\text{Piece})\Big)$$
+          $$\pi_{\text{IdLigne}, \text{Nom}}\Big((\text{Bois} \cap \text{Metal}) \otimes \text{LigneProduction}\Big)$$
+
+          * **(c)** (5 pts) — *Partir de `LigneProduction` pour inclure les lignes sans aucune production !*
+          $$\pi_{\text{IdLigne}}(\text{LigneProduction}) - \pi_{\text{IdLigne}}\Big(\text{Production} \otimes \sigma_{\text{Couleur} = \text{'Orange'}}(\text{Piece})\Big)$$
+
+          * **(d)** (6 pts) — *Division relationnelle*
+          $$\text{Ids} \leftarrow \pi_{\text{IdEmploye}, \text{IdLigne}}(\text{Timesheet}) \div \pi_{\text{IdLigne}}\Big(\sigma_{\text{IdUsine} = \text{'LEGO-1'}}(\text{LigneProduction})\Big)$$
+          $$\pi_{\text{IdEmploye}, \text{Nom}}(\text{Ids} \otimes \text{Employe})$$

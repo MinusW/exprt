@@ -1,0 +1,431 @@
+id: bdr-2023-24-te1-exam
+title: "BDR TE1 Mock Exam (Nov 2023)"
+description: "Full 90-minute BDR TE1 past exam (20 Nov 2023, 100 pts): debugging & correcting an Ibis hotel reservation ER model (35 pts), ER-to-relational mapping with weak entities, overlapping specialization & recursive 1:N (30 pts), relational algebra expression simplification (6 pts), and airline flight RA queries (29 pts)."
+category: "Database Systems"
+track: "Relational Database Fundamentals (BDR)"
+track_order: 7
+estimated_minutes: 90
+tags: ["mock-exam", "exam", "bdr", "te1"]
+prerequisites:
+  - bdr-ch1-dbms-concepts
+  - bdr-ch2-entity-relationship-modeling
+  - bdr-ch3-relational-model-constraints
+  - bdr-ch4-er-to-relational-mapping
+  - bdr-ch5-relational-algebra
+sources:
+  - title: "BDR TE1 Exam & Solutions (20 November 2023)"
+    url_or_path: "sources/BDR-TE1/tests/BDR_NFI_23-24_TE1_answers.pdf"
+    notes: "Official 90-minute exam (100 pts): Q1 ER Modeling (35 pts), Q2 Relational Mapping (30 pts), Q3 RA Simplification (6 pts), Q4 Airline RA Queries (29 pts)"
+
+sections:
+  - id: sec-exam-overview
+    title: "Exam Overview & Operator Reference"
+    blocks:
+      - id: ov-structure
+        block_type: markdown
+        title: "Exam Format & Point Breakdown (90 Minutes — 100 pts)"
+        content: |
+          This mock exam reproduces the official **BDR Travail Écrit 1 (20 November 2023)**. Time yourself for **90 minutes** before revealing any model answers.
+
+          | Question | Topic | Points |
+          | :--- | :--- | :---: |
+          | **Q1** | Entity-Relationship (ER) Modeling — Error Diagnosis & Correction | 35 |
+          | **Q2** | ER-to-Relational Mapping (PK, FK, `UNIQUE`, `NOT NULL`) | 30 |
+          | **Q3** | Relational Algebra — Expression Simplification | 6 |
+          | **Q4** | Relational Algebra — Writing Queries (`Vols d'avion` DB) | 29 |
+          | **Total** | | **100** |
+
+          ### Relational Algebra Operator Reference (from Exam Sheet)
+          | Operation | Notation |
+          | :--- | :--- |
+          | Selection | $\sigma_{\langle\text{condition}\rangle}(R)$ |
+          | Projection | $\pi_{\langle\text{attributes}\rangle}(R)$ |
+          | Renaming | $\rho_{S(B_1, B_2, \dots, B_n)}(R)$ |
+          | Assignment | $=$ or $\leftarrow$ |
+          | Set operations (Union, Intersection, Difference) | $\cup,\ \cap,\ -$ |
+          | Cartesian product | $\times$ |
+          | Natural join (shared attribute names) | $R_1 \otimes R_2$ |
+          | Theta join | $R_1 \otimes_{R_1.a = R_2.b} R_2$ |
+          | Division | $/$ or $\div$ |
+
+  - id: sec-q1-er-modeling
+    title: "Q1. ER Modeling & Error Analysis (35 pts)"
+    blocks:
+      - id: q1-prompt-spec
+        block_type: markdown
+        title: "Problem Statement & Cahier des charges"
+        content: |
+          La chaîne d'hôtel Ibis souhaite développer un système informatisé pour la gestion des réservations d'hôtels. Le système doit permettre aux administrateurs des hôtels d'enregistrer les réservations confirmées et de gérer la disponibilité des chambres.
+
+          Un ingénieur a proposé le modèle entité-association ci-dessous. Ce dernier comporte plusieurs erreurs ou lacunes.
+
+          **Tâche :** Lisez le cahier des charges ci-dessous, trouvez et listez les erreurs de l'ingénieur et proposez un schéma corrigé complet, avec les contraintes d'intégrité si nécessaire et sans informations redondantes.
+
+          > **Cahier des charges :**
+          > * **Gestion des hôtels :**
+          >   * On souhaite connaître les informations sur chaque hôtel, notamment son numéro d'identification, le nom, l'emplacement, le nombre total de chambres actuellement disponibles.
+          >   * On souhaite connaître les types de chambres (suite, chambre double et chambre simple), et les tarifs par nuit pour chaque type de chambres. Les tarifs sont les mêmes pour tous les hôtels.
+          >   * Les chambres sont identifiées par un numéro unique au sein de chaque hôtel. Pour chaque chambre on enregistre la surface en mètres carrés.
+          > * **Gestion des réservations :**
+          >   * Une réservation est effectuée par un seul client, le responsable principal.
+          >   * Pour effectuer une réservation, l'hôtel demande au client de fournir ses coordonnées, y compris son nom, prénom, adresse, numéro de téléphone, et adresse e-mail. Le client est identifié par son adresse e-mail. On souhaite connaître tous les clients ayant fait une réservation d'un hôtel donné ainsi que leurs réservations (passées, présentes, et futures).
+          >   * Le système doit permettre de trouver la disponibilité des chambres pour une période donnée. Une chambre est disponible pour une période donnée uniquement si elle n'a pas de réservation durant cette période. Seules les chambres disponibles peuvent être réservées.
+          >   * Le système enregistre les réservations effectuées, y compris la date de réservation et les chambres concernées. Pour chaque chambre réservée on veut connaître la date d'arrivée, la date de départ, et le nombre de personnes. Un numéro de réservation unique est automatiquement assigné.
+          > * **Gestion du service de chambre :**
+          >   * Durant le séjour, l'hôtel offre des services de chambre (ex : nettoyage supplémentaire, petit déjeuner en chambre, etc.). On souhaite enregistrer les détails de tous les services effectués : le type, le prix, la chambre, la date du service ainsi que la réservation concernée. Un numéro d'identification est automatiquement assigné à un service.
+
+      - id: q1-flawed-diagram
+        block_type: kroki
+        diagram_type: mermaid
+        title: "Engineer's Flawed ER Diagram"
+        source: |
+          classDiagram
+            class ChaineIbis["Chaine d'hotel Ibis"]
+            class Hotel {
+              num
+              nom
+              emplacement
+              nombreChambreDisponible
+            }
+            class Chambre {
+              numero [PK]
+              surface
+              type
+            }
+            class Simple {
+              tarif
+            }
+            class Double {
+              tarif
+            }
+            class Suite {
+              tarif
+            }
+            class Occupation {
+              dateArrivé
+              dateDépart
+              nombrePersonne
+            }
+            class ServiceDeChambre {
+              id [PK]
+              date
+              type
+              price
+            }
+            class Client {
+              email [PK]
+              nom
+              prenom
+              adresse
+              numTelephone
+            }
+            class Reservation {
+              numReservation [PK]
+              dateReservation
+              clientEmail
+              numChambre[1..*]
+            }
+
+            ChaineIbis *-- "*" Hotel
+            Hotel "1" -- "1..*" Chambre : a
+            Chambre <|-- Simple : "{total, disjoint}"
+            Chambre <|-- Double : "{total, disjoint}"
+            Chambre <|-- Suite : "{total, disjoint}"
+            Chambre "1..*" -- "1" Reservation : occupe
+            Occupation .. Chambre
+            Occupation "1" -- "*" ServiceDeChambre : a demandé
+            Hotel "*" -- "*" Client : est client de
+            Client "1" -- "*" Reservation : effectue
+        caption: "The engineer's proposed ER diagram containing multiple structural, redundancy, and constraint errors."
+
+      - id: q1-rubric
+        block_type: reflection_rubric
+        title: "Your Diagnosis & Corrected ER Schema (35 pts)"
+        answer_mode: text
+        prompt: |
+          1. List **all errors and omissions** in the engineer's diagram.
+          2. Describe the **corrected ER schema** (entities, weak entities, keys/partial keys, associations, multiplicities, and integrity constraints `CI`).
+        self_check_criteria:
+          - "Removed single-row entity `Chaine d'hotel Ibis`."
+          - "Added primary key underline on `Hotel.num` and removed calculated attribute `nombreChambreDisponible`."
+          - "Changed `Chambre.numero` to a partial key (qualifier on `Hotel`) because room numbers are only unique per hotel."
+          - "Replaced `{total, disjoint}` specializations (`Simple`, `Double`, `Suite`) and `Chambre.type` with a `TypeChambre(nom, tarif)` entity (`1` — `*` `Chambre`), since `tarif` depends on the type, not the room instance."
+          - "Changed `Chambre` — `Reservation` multiplicity from `1` on `Reservation` to `*` (a room can have multiple reservations over time)."
+          - "Converted `Occupation` from an association class into a weak entity of `Chambre` and `Reservation` so it can be associated with `ServiceDeChambre` (an association class cannot be associated with an entity)."
+          - "Added `CI`: a room cannot have multiple overlapping reservations at the same time."
+          - "Removed redundant `est client de` association between `Hotel` and `Client` (inferable via `Client → Reservation → Occupation → Chambre → Hotel`)."
+          - "Removed foreign key attributes `clientEmail` and `numChambre[1..*]` from `Reservation` (no FKs in an ER diagram)."
+        model_answer: |
+          ### Errors Found in the Engineer's Diagram
+          1. **Single-row entity:** `Chaine d'hotel Ibis` represents only one instance and must be removed.
+          2. **Missing PK on `Hotel`:** `Hotel.num` must be underlined as the primary key.
+          3. **Calculated attribute:** `nombreChambreDisponible` is derivable from reservations and must be removed.
+          4. **`Chambre.numero` is a partial key:** Room numbers are unique *within each hotel*, so `Chambre` is a weak entity of `Hotel` with qualifier `numero`.
+          5. **Bad specialization for room types:** `Simple`, `Double`, `Suite` have no distinct attributes/relations except `tarif` (which depends on the type, not the room instance). Replace them (and `Chambre.type`) with a `TypeChambre(nom, tarif)` entity linked `1` to `*` with `Chambre`.
+          6. **Wrong multiplicity on `Reservation`:** A room can have multiple reservations over time (`*`, not `1`).
+          7. **Association class linked to an entity:** `Occupation` (an association class) cannot be associated directly with `ServiceDeChambre`. Promote `Occupation` to a **weak entity** of `Chambre` and `Reservation`.
+          8. **Missing `CI`:** Add an integrity constraint stating that a room cannot have multiple reservations at the same time (no overlapping `[dateArrivé, dateDépart]`).
+          9. **Redundant association:** `est client de` between `Hotel` and `Client` is redundant and can be inferred via `Client` → `Reservation` → `Occupation` → `Chambre` → `Hotel`.
+          10. **Foreign keys in ER:** `clientEmail` and `numChambre[1..*]` inside `Reservation` are relational FKs and must not appear in an ER diagram.
+        model_answer_diagram:
+          diagram_type: mermaid
+          title: "Corrected ER Schema (Ibis Hotel Reservations)"
+          source: |
+            flowchart TD
+              Hotel["Hotel\n─────────\n[PK] num\nnom\nemplacement\n[Qualifier: numero]"]
+              TypeChambre["TypeChambre\n─────────\n[PK] nom\ntarif"]
+              Chambre["Chambre (Weak)\n─────────\nsurface"]
+              Occupation["Occupation (Weak of Chambre & Reservation)\n─────────\ndateArrivé\ndateDépart\nnombrePersonne"]
+              Service["ServiceDeChambre\n─────────\n[PK] id\ndate\ntype\nprix"]
+              Reservation["Reservation\n─────────\n[PK] numReservation\ndateReservation"]
+              Client["Client\n─────────\n[PK] email\nnom\nprenom\nadresse\nnumTelephone"]
+              CI["CI: une chambre ne peut pas\navoir plusieurs réservations\nen même temps"]
+
+              Hotel -- "1  ────  1..*" --> Chambre
+              TypeChambre -- "1  (a)  *" --- Chambre
+              Chambre -- "1  (dans)  *" --- Occupation
+              Service -- "*  (a demandé)  1" --- Occupation
+              Occupation -- "1..*  (a)  1" --- Reservation
+              Client -- "1  (effectue)  *" --- Reservation
+              CI -.- Occupation
+          caption: "Corrected ER schema: Occupation is a weak entity of Chambre and Reservation, TypeChambre holds tarif, and redundant links/FKs are removed."
+
+  - id: sec-q2-relational-mapping
+    title: "Q2. ER-to-Relational Mapping (30 pts)"
+    blocks:
+      - id: q2-diagram
+        block_type: kroki
+        diagram_type: mermaid
+        title: "ER Schema to Map to Relational Model"
+        source: |
+          flowchart TD
+            C["C\n─────\n[PK] c1\nc2"]
+            E["E\n─────\n[PK] e1\ne2"]
+            D["D\n─────\n[PK] d1\nd2"]
+            DE["DE\n─────\nr1\nr2"]
+            A["A\n─────\n[PK] a1\na2\n[Qualifier: i]"]
+            B["B (Weak)\n─────\nb1"]
+            BC["BC\n─────\ns1"]
+            Spec(("{overlapping, partial}"))
+            F["F\n─────\nf1\nf2"]
+            G["G\n─────\ng1"]
+            H["H\n─────\n[PK] h1\nh2"]
+
+            C -- "1..*  (CE)  0..1" --- E
+            E -- "1  ────  1..*" --- D
+            DE -.- D
+            A -- "1  (AB)  *" --> B
+            B -- "*  ────  1..*" --- C
+            BC -.- B
+            E --- Spec
+            Spec --> F
+            Spec --> G
+            G -- "0..1  (GH)  1" --- H
+            H -- "1  (HH)  *" --- H
+        caption: "ER diagram for Question 2: B is weak on A(i); E has {overlapping, partial} subclasses F and G; DE and BC are association classes; HH is recursive 1-to-* on H."
+
+      - id: q2-rubric
+        block_type: reflection_rubric
+        title: "Relational Schema for Q2 (30 pts)"
+        answer_mode: text
+        prompt: |
+          List all relations obtained when mapping the ER diagram above to the relational model.
+          Mention **primary keys** (underlined / `PK`), **foreign keys** (`FK`), **`UNIQUE`**, and **`NOT NULL`** constraints where necessary.
+        self_check_criteria:
+          - "`A(a1, a2)` with PK `a1`."
+          - "`B(b1, i, a1)` (weak entity) with PK `(b1, i, a1)` or `(i, a1)` and FK `a1` ref `A(a1)`."
+          - "`C(c1, c2, e1)` with PK `c1` and nullable FK `e1` ref `E(e1)`."
+          - "`BC(i, a1, c1, s1)` with PK `(i, a1, c1)`, FK `c1` ref `C(c1)`, and FK `(i, a1)` ref `B(i, a1)`."
+          - "`D(d1, d2, e1, r1, r2)` with PK `d1`, FK `e1` ref `E(e1)`, and `e1 NOT NULL`."
+          - "`E(e1, e2)` with PK `e1`."
+          - "`F(e1, f1, f2)` with PK `e1` and FK `e1` ref `E(e1)`."
+          - "`G(e1, g1, h1)` with PK `e1`, FK `e1` ref `E(e1)`, FK `h1` ref `H(h1)`, `h1 NOT NULL`, and `h1 UNIQUE`."
+          - "`H(h1, h2, hh)` with PK `h1`, FK `hh` ref `H(h1)`, and `hh NOT NULL`."
+        model_answer: |
+          ```text
+          A(a1, a2)                       -- PK: a1
+
+          B(b1, i, a1)                    -- PK: (i, a1) [Entité faible]
+            FK: a1 ref A(a1)
+
+          C(c1, c2, e1)                   -- PK: c1
+            FK: e1 ref E(e1)              -- nullable (0..1 on E side)
+
+          BC(i, a1, c1, s1)               -- PK: (i, a1, c1)
+            FK: c1 ref C(c1)
+            FK: (i, a1) ref B(i, a1)
+
+          D(d1, d2, e1, r1, r2)           -- PK: d1
+            FK: e1 ref E(e1)
+            e1 NOT NULL
+
+          E(e1, e2)                       -- PK: e1
+
+          F(e1, f1, f2)                   -- PK: e1
+            FK: e1 ref E(e1)
+
+          G(e1, g1, h1)                   -- PK: e1
+            FK: e1 ref E(e1)
+            FK: h1 ref H(h1)
+            h1 NOT NULL UNIQUE
+
+          H(h1, h2, hh)                   -- PK: h1
+            FK: hh ref H(h1)
+            hh NOT NULL
+          ```
+
+          **Key Notes:**
+          * **`G`–`H` (`0..1` to `1`):** `G` is the `0..1` side and every `G` maps to `1` `H`, so `G` absorbs `h1` with both `NOT NULL` and `UNIQUE`.
+          * **`HH` (`1` to `*`):** The `*` side absorbs `hh` referencing `H(h1)` with `NOT NULL` because every child participates in `1` parent.
+
+  - id: sec-q3-ra-simplification
+    title: "Q3. Relational Algebra Simplification (6 pts)"
+    blocks:
+      - id: q3-setup
+        block_type: markdown
+        title: "Relations R, S, and T"
+        content: |
+          Prenons les relations $R(C)$, $S(A, B, C)$, et $T(A, B, C, D)$. Les attributs $A$, $B$, $C$, et $D$ ont tous le même domaine de valeurs.
+
+      - id: q3a-quiz
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 2
+        related_block_id: q3-setup
+        title: "3(a) Eliminate Cartesian Product"
+        question: |
+          Which expression is equivalent to $\sigma_{A=C}(\pi_{A,D}(T) \times R)$ **without** using the Cartesian product ($\times$) and in simplest form?
+        options:
+          - "π_{A,D}(T) ⊗_{A=C} R"
+          - "π_{A,D}(T) ⊗ R"
+          - "π_{A,D}(T ⊗_{A=C} R)"
+          - "σ_{A=C}(T) ⊗ R"
+        correct_answer: "π_{A,D}(T) ⊗_{A=C} R"
+        explanation: "By definition, $\\sigma_c(X \\times Y) \\equiv X \\otimes_c Y$, so $\\sigma_{A=C}(\\pi_{A,D}(T) \\times R) = \\pi_{A,D}(T) \\otimes_{A=C} R$. Natural join $\\otimes$ alone would fail to join on $A = C$ because $T$'s projection has no $C$, and projecting $T$ down to $(A, D)$ *after* the join would drop $R.C$."
+        hints:
+          - "Recall the equivalence between selection over a Cartesian product and a theta join: $\\sigma_c(X \\times Y) \\equiv X \\otimes_c Y$."
+          - "Check whether $\\pi_{A,D}(T)$ and $R(C)$ share any attribute names for a natural join."
+
+      - id: q3b-quiz
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 2
+        related_block_id: q3-setup
+        title: "3(b) Eliminate Intersection"
+        question: |
+          Which expression is equivalent to $\pi_C(S) \cap R$ **without** using intersection ($\cap$) and in simplest form?
+        options:
+          - "π_C(S) ⊗ R"
+          - "π_C(S) × R"
+          - "π_C(S) − R"
+          - "π_C(S) ∪ R"
+        correct_answer: "π_C(S) ⊗ R"
+        explanation: "Both $\\pi_C(S)$ and $R(C)$ have the exact same single attribute $C$. When two relations share the exact same schema, their natural join $X \\otimes Y$ is identical to their intersection $X \\cap Y$."
+        hints:
+          - "What are the schemas of $\\pi_C(S)$ and $R(C)$?"
+          - "What does natural join $\\otimes$ produce when both relations have identical schemas?"
+
+      - id: q3c-quiz
+        block_type: quiz_question
+        question_type: multiple_choice
+        difficulty: 2
+        related_block_id: q3-setup
+        title: "3(c) Eliminate Union"
+        question: |
+          Which expression is equivalent to $\sigma_{C=2}(S) \cup \sigma_{B=2}(S)$ **without** using union ($\cup$) and in simplest form?
+        options:
+          - "σ_{C=2 OR B=2}(S)"
+          - "σ_{C=2 AND B=2}(S)"
+          - "σ_{C=2}(σ_{B=2}(S))"
+          - "σ_{C=2}(S) ⊗ σ_{B=2}(S)"
+        correct_answer: "σ_{C=2 OR B=2}(S)"
+        explanation: "Union of two selections on the same relation $S$ is equivalent to a single selection with a disjunction (`OR`): $\\sigma_{p_1}(S) \\cup \\sigma_{p_2}(S) \\equiv \\sigma_{p_1 \\lor p_2}(S)$. Using `AND` or cascading selections corresponds to intersection ($\\cap$), not union."
+        hints:
+          - "A tuple is in $A \\cup B$ if it satisfies condition $A$ **or** condition $B$."
+          - "Combine the two selection predicates into a single $\\sigma$."
+
+  - id: sec-q4-ra-queries
+    title: "Q4. Relational Algebra Queries — Vols d'avion (29 pts)"
+    blocks:
+      - id: q4-schema
+        block_type: markdown
+        title: "Airline Flights Database Schema"
+        content: |
+          Soit la base de données ci-dessous qui permet de stocker et de gérer des données relatives aux vols d'avion :
+          * `Aeroport(codeAeroport, nomAeroport, emplacement, pays)` — PK: `codeAeroport`
+          * `CompagnieAerienne(codeCompagnie, nomCompagnie, pays)` — PK: `codeCompagnie`
+          * `Vol(numVol, codeCompagnie, codeAeroportDepart, codeAeroportArrivee, heureDepart, heureArrivee, typeAvion)` — PK: `numVol`
+            * `codeCompagnie` référence `CompagnieAerienne.codeCompagnie`
+            * `codeAeroportDepart` référence `Aeroport.codeAeroport`
+            * `codeAeroportArrivee` référence `Aeroport.codeAeroport`
+          * `Passager(idPassager, prenom, nom, dateNaissance, nationalite)` — PK: `idPassager`
+          * `Reservation(idPassager, numVol, dateReservation, numeroSiege)` — PK: `(idPassager, numVol)`
+            * `idPassager` référence `Passager.idPassager`
+            * `numVol` référence `Vol.numVol`
+
+      - id: q4a-rubric
+        block_type: reflection_rubric
+        title: "4(a) Flights tied to a French airline or French airport"
+        answer_mode: text
+        prompt: |
+          Donner la liste des numéros de vols liés à une compagnie aérienne de la `"France"` **ou** impliquant un aéroport en `"France"`.
+        self_check_criteria:
+          - "Found French airports (`pays = 'France'`) and joined separately on `codeAeroportArrivee = codeAeroport` and `codeAeroportDepart = codeAeroport`."
+          - "Found French airlines (`pays = 'France'`) and joined with `Vol` on `codeCompagnie`."
+          - "Projected `numVol` for all three branches and combined them with union ($\\cup$)."
+        model_answer: |
+          $$R_1 \leftarrow \sigma_{\text{pays} = \text{'France'}}(\text{Aeroport})$$
+          $$R_2 \leftarrow \pi_{\text{numVol}}(R_1 \otimes_{\text{codeAeroportArrivee} = \text{codeAeroport}} \text{Vol})$$
+          $$R_3 \leftarrow \pi_{\text{numVol}}(R_1 \otimes_{\text{codeAeroportDepart} = \text{codeAeroport}} \text{Vol})$$
+          $$R_4 \leftarrow \pi_{\text{numVol}}(\sigma_{\text{pays} = \text{'France'}}(\text{CompagnieAerienne}) \otimes \text{Vol})$$
+          $$R \leftarrow R_2 \cup R_3 \cup R_4$$
+
+      - id: q4b-rubric
+        block_type: reflection_rubric
+        title: "4(b) Airlines with at least one flight and no flights to Switzerland"
+        answer_mode: text
+        prompt: |
+          Donner le code des compagnies aériennes qui ont opéré **au moins un vol** et qui n'ont **aucun vol** à destination de `"Suisse"`.
+        self_check_criteria:
+          - "Selected airports with `pays = 'Suisse'`."
+          - "Joined `Vol` with Swiss airports on `codeAeroport = codeAeroportArrivee` (destination only, not departure)."
+          - "Subtracted airlines flying to Switzerland from $\\pi_{\\text{codeCompagnie}}(\\text{Vol})$ (which guarantees at least one operated flight)."
+        model_answer: |
+          $$R_1 \leftarrow \sigma_{\text{pays} = \text{'Suisse'}}(\text{Aeroport})$$
+          $$R_2 \leftarrow \text{Vol} \otimes_{\text{codeAeroport} = \text{codeAeroportArrivee}} R_1$$
+          $$R \leftarrow \pi_{\text{codeCompagnie}}(\text{Vol}) - \pi_{\text{codeCompagnie}}(R_2)$$
+
+          **Why `Vol` instead of `CompagnieAerienne`?** The requirement asks for airlines that have operated *at least one flight*, which is directly $\pi_{\text{codeCompagnie}}(\text{Vol})$.
+
+      - id: q4c-rubric
+        block_type: reflection_rubric
+        title: "4(c) Distinct flight pairs sharing the same aircraft type"
+        answer_mode: text
+        prompt: |
+          Donner le couple de numéros de vols différents qui utilisent le même type d'avion. Si un couple de numéros de vols (par exemple `(760, 877)`) fait partie du résultat, on exclut le couple inverse `(877, 760)`. Retourner les deux numéros de vol ainsi que le type d'avion (ex: `(760, 877, 'Airbus-A340')`).
+        self_check_criteria:
+          - "Projected `Vol` to `(numVol, typeAvion)` and renamed a copy to `(numVol2, typeAvion)`."
+          - "Joined `R2 ⊗ R1` on `typeAvion` (preferring join over Cartesian product + selection)."
+          - "Filtered `numVol < numVol2` to exclude self-pairs and inverse duplicates."
+        model_answer: |
+          $$R_1 \leftarrow \pi_{\text{numVol}, \text{typeAvion}}(\text{Vol})$$
+          $$R_2 \leftarrow \rho_{(\text{numVol2}, \text{typeAvion})}(R_1)$$
+          $$R_3 \leftarrow R_2 \otimes R_1$$
+          $$R \leftarrow \sigma_{\text{numVol} < \text{numVol2}}(R_3)$$
+
+          **Note:** Prefer natural join ($R_2 \otimes R_1$) over Cartesian product + selection when joining on `typeAvion`.
+
+      - id: q4d-rubric
+        block_type: reflection_rubric
+        title: "4(d) Passengers who booked all Lufthansa (LH) flights"
+        answer_mode: text
+        prompt: |
+          Trouvez l'id et le nom des passagers qui ont réservé **tous les vols** offerts par la compagnie aérienne avec le code `"LH"` (Lufthansa).
+        self_check_criteria:
+          - "Found all `numVol` for `codeCompagnie = 'LH'`."
+          - "Projected `Reservation` to `(idPassager, numVol)` before dividing by `R1`."
+          - "Joined the resulting `idPassager` set with `Passager` and projected `(idPassager, nom)`."
+        model_answer: |
+          $$R_1 \leftarrow \pi_{\text{numVol}}(\sigma_{\text{codeCompagnie} = \text{'LH'}}(\text{Vol}))$$
+          $$R_2 \leftarrow \pi_{\text{idPassager}, \text{numVol}}(\text{Reservation}) \div R_1$$
+          $$R \leftarrow \pi_{\text{idPassager}, \text{nom}}(\text{Passager} \otimes R_2)$$
