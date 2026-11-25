@@ -56,6 +56,82 @@ sections:
           * **Natural key:** Belongs naturally to the domain (e.g., `NoSS`). Advantage: already exists. Drawback: tied to business rules—if business rules change, the key may break.
           * **Surrogate (artificial) key:** Non-intelligent generated ID independent of business logic. Advantage: stable. Drawback: harder for humans to read/use directly.
 
+      - id: th-er-visual-conventions
+        block_type: markdown
+        title: "Course ER / EER Visual Conventions (UML-Style Notation)"
+        content: |
+          Throughout this course, ER and EER schemas follow a **UML-style class diagram notation** (drawn with UMLet):
+
+          | Concept | Visual Convention | Example |
+          | :--- | :--- | :--- |
+          | **Strong Entity** | Solid rectangle with entity name at top, separator `--`, and attributes below | `Employe`, `Departement` |
+          | **Primary Key (PK)** | `_Underlined_` attribute name | `_NoSS_`, `_Numero_` |
+          | **Partial Key (Discriminator)** | `[partielle]` marker (or UML qualifier box on the identifying link) | `Prenom_dep [partielle]` |
+          | **Derived Attribute** | `/Italic/` (omitted from final stored schema) | `/Age/` |
+          | **Multivalued Attribute** | `[1..*]` (or `[0..*]`) multiplicity suffix | `Prenom [1..*]` |
+          | **Optional Attribute (`NULL`)** | `[0..1]` multiplicity suffix | `Email [0..1]` |
+          | **Composite Attribute** | Parent attribute with indented sub-attributes underneath | `Adresse` $\to$ `Numero`, `Rue`, `Ville`, `CodePostal` |
+          | **Binary Association & Cardinalities** | Solid line labeled with association name; **cross-reading `min..max`** placed near the opposite entity | `Employe` `4..*` — `1..1` `Departement` |
+          | **Roles** | Role names placed near each end of the line (**mandatory** for recursive associations) | `superviseur` / `supervise` |
+          | **Association Class** | Rectangle attached to the association line via a **dashed line** (`..`) | `Travaille_sur` $\cdots$ `Heures` |
+          | **Weak Entity & Identifying Link** | Filled diamond composition (`<<<<<-`) / `1..1` identifying link from owner entity | `Employe` $\blacklozenge$— `Dependant` |
+          | **N-ary Association ($n \ge 3$)** | Central **diamond** connected to all participating entities (or reified weak entity) | `Projection` diamond (`Salle`, `Seance`, `Film`) |
+          | **EER Inheritance (`Is-A`)** | Hollow-triangle arrow (`<<-`) from subclass to superclass + `{Disjointe/Chevauchante, Totale/Partielle}` | `Employe` $\triangleleft$— `{Secretaire, Technicien, Ingenieur}` |
+
+      - id: diag-er-conventions
+        block_type: kroki
+        diagram_type: umlet
+        title: "ER Entity, Attribute & Cross-Reading Conventions (UMLet)"
+        caption: "Primary key (_NoSS_), multivalued ([1..*]), optional ([0..1]), derived (/Age/), composite (Adresse), and cross-reading cardinalities on Travaille_pour."
+        source: |
+          <diagram program="umlet" version="15.1">
+            <zoom_level>10</zoom_level>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>30</x><y>30</y><w>200</w><h>220</h></coordinates>
+              <panel_attributes>Employe
+          --
+          _NoSS_
+          Prenom [1..*]
+          Nom
+          /Age/
+          Email [0..1]
+          Adresse
+            Numero
+            Rue
+            Ville
+            CodePostal</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>470</x><y>70</y><w>170</w><h>100</h></coordinates>
+              <panel_attributes>Departement
+          --
+          _Numero_
+          Nom</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>230</x><y>70</y><w>240</w><h>90</h></coordinates>
+              <panel_attributes>lt=-
+          m1=4..*
+          m2=1..1
+          r1=employé
+          r2=employeur
+          Travaille_pour</panel_attributes>
+              <additional_attributes>0;50;240;50</additional_attributes>
+            </element>
+            <element>
+              <id>UMLNote</id>
+              <coordinates><x>30</x><y>270</y><w>610</w><h>50</h></coordinates>
+              <panel_attributes>Cross-reading rule: 1 Employe works for 1..1 Departement;
+          1 Departement employs 4..* Employes.</panel_attributes>
+              <additional_attributes/>
+            </element>
+          </diagram>
+
   - id: sec-associations-cardinalities
     title: "2. Associations, Roles & Cardinalities"
     blocks:
@@ -91,38 +167,239 @@ sections:
           2. Attach an association class with **`(dateDébut, dateFin)`**, and
           3. Add a **semantic integrity constraint (CI)** stating that active intervals for the same entity cannot overlap.
 
+      - id: diag-assoc-class-vs-reified
+        block_type: kroki
+        diagram_type: umlet
+        title: "Association Class vs. Reified Weak Entity (Hotel Occupation)"
+        caption: "Left: Occupation as an association class (with temporal interval). Right: Reified Occupation weak entity so ServiceDeChambre can reference a specific stay."
+        source: |
+          <diagram program="umlet" version="15.1">
+            <zoom_level>10</zoom_level>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>20</x><y>30</y><w>130</w><h>80</h></coordinates>
+              <panel_attributes>Chambre
+          --
+          _NumChambre_
+          Etage</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>250</x><y>30</y><w>130</w><h>80</h></coordinates>
+              <panel_attributes>Reservation
+          --
+          _NoResa_
+          DateResa</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>150</x><y>30</y><w>100</w><h>70</h></coordinates>
+              <panel_attributes>lt=-
+          m1=*
+          m2=1..*</panel_attributes>
+              <additional_attributes>0;40;100;40</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>115</x><y>150</y><w>170</w><h>90</h></coordinates>
+              <panel_attributes>Occupation
+          --
+          dateDebut
+          dateFin
+          nbPersonnes</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>180</x><y>70</y><w>40</w><h>80</h></coordinates>
+              <panel_attributes>lt=.</panel_attributes>
+              <additional_attributes>20;0;20;80</additional_attributes>
+            </element>
+            <element>
+              <id>UMLNote</id>
+              <coordinates><x>20</x><y>270</y><w>360</w><h>55</h></coordinates>
+              <panel_attributes>CI: Two Occupation intervals for the same
+          Chambre cannot overlap in time.</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>450</x><y>30</y><w>130</w><h>80</h></coordinates>
+              <panel_attributes>Chambre
+          --
+          _NumChambre_
+          Etage</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>710</x><y>30</y><w>130</w><h>80</h></coordinates>
+              <panel_attributes>Reservation
+          --
+          _NoResa_
+          DateResa</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>560</x><y>160</y><w>170</w><h>95</h></coordinates>
+              <panel_attributes>Occupation
+          --
+          dateDebut [partielle]
+          dateFin
+          nbPersonnes</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>495</x><y>110</y><w>95</w><h>70</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;&lt;&lt;&lt;-
+          m1=1..1
+          m2=*</panel_attributes>
+              <additional_attributes>20;0;65;50</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>700</x><y>110</y><w>95</w><h>70</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;&lt;&lt;&lt;-
+          m1=1..1
+          m2=*</panel_attributes>
+              <additional_attributes>75;0;30;50</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>560</x><y>320</y><w>170</w><h>85</h></coordinates>
+              <panel_attributes>ServiceDeChambre
+          --
+          _IdService_
+          TypeService
+          DateHeure</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>580</x><y>255</y><w>130</w><h>65</h></coordinates>
+              <panel_attributes>lt=-
+          m1=1..1
+          m2=*
+          Effectue_pour</panel_attributes>
+              <additional_attributes>65;0;65;65</additional_attributes>
+            </element>
+          </diagram>
+
       - id: diag-company-er
         block_type: kroki
-        diagram_type: mermaid
-        title: "Core COMPANY ER Relationships (UML-Style Notation)"
-        caption: "Binary associations (1:1, N:1, M:N), recursive supervision with roles, and weak entity Dépendant."
+        diagram_type: umlet
+        title: "Full COMPANY ER Schema (UMLet)"
+        caption: "Binary associations (Travaille_pour, Dirige, Travaille_sur with Heures association class), recursive Supervise with mandatory roles, and weak entity Dependant."
         source: |
-          classDiagram
-            class Employe {
-              +NoSS [PK]
-              +Prenom
-              +Nom
-              +Salaire
-            }
-            class Departement {
-              +Numero [PK]
-              +Nom
-            }
-            class Projet {
-              +Numero [PK]
-              +Nom
-            }
-            class Dependant {
-              +Prenom_dep [partial]
-              +LienFamilial
-              +DateNaissance
-            }
-
-            Employe "4..*" --> "1..1" Departement : Travaille_pour
-            Employe "1..1" --> "0..1" Departement : Dirige
-            Employe "*" --> "*" Projet : Travaille_sur (Heures)
-            Employe "supervisé *" --> "superviseur 0..1" Employe : Supervise
-            Employe "1..1" *-- "*" Dependant : A_la_charge_de
+          <diagram program="umlet" version="15.1">
+            <zoom_level>10</zoom_level>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>230</x><y>140</y><w>170</w><h>140</h></coordinates>
+              <panel_attributes>Employe
+          --
+          _NoSS_
+          Prenom
+          Nom
+          DateNaissance
+          Salaire</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>580</x><y>140</y><w>170</w><h>100</h></coordinates>
+              <panel_attributes>Departement
+          --
+          _Numero_
+          Nom</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>20</x><y>370</y><w>180</w><h>110</h></coordinates>
+              <panel_attributes>Dependant
+          --
+          Prenom_dep [partielle]
+          LienFamilial
+          DateNaissance</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>580</x><y>370</y><w>170</w><h>100</h></coordinates>
+              <panel_attributes>Projet
+          --
+          _Numero_
+          Nom
+          Lieu</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>370</x><y>415</y><w>130</w><h>65</h></coordinates>
+              <panel_attributes>Travaille_sur
+          --
+          Heures</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>400</x><y>135</y><w>180</w><h>65</h></coordinates>
+              <panel_attributes>lt=-
+          m1=4..*
+          m2=1..1
+          Travaille_pour</panel_attributes>
+              <additional_attributes>0;35;180;35</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>400</x><y>195</y><w>180</w><h>65</h></coordinates>
+              <panel_attributes>lt=-
+          m1=0..1
+          m2=1..1
+          Dirige</panel_attributes>
+              <additional_attributes>0;35;180;35</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>380</x><y>280</y><w>200</w><h>130</h></coordinates>
+              <panel_attributes>lt=-
+          m1=*
+          m2=*
+          Travaille_sur</panel_attributes>
+              <additional_attributes>0;0;200;115</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>415</x><y>337</y><w>90</w><h>78</h></coordinates>
+              <panel_attributes>lt=.</panel_attributes>
+              <additional_attributes>65;0;20;78</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>110</x><y>280</y><w>160</w><h>90</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;&lt;&lt;&lt;-
+          m1=1..1
+          m2=*
+          A_la_charge_de</panel_attributes>
+              <additional_attributes>160;0;0;90</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>90</x><y>30</y><w>220</w><h>190</h></coordinates>
+              <panel_attributes>lt=-
+          m1=0..1
+          m2=*
+          r1=superviseur
+          r2=supervisé
+          Supervise</panel_attributes>
+              <additional_attributes>180;110;180;25;40;25;40;150;140;150</additional_attributes>
+            </element>
+          </diagram>
 
   - id: sec-advanced-er-eer
     title: "3. Weak Entities, N-ary Associations & Extended ER (EER)"
@@ -150,6 +427,136 @@ sections:
           2. **Path / cycle consistency:** All `Infirmier`s assigned to a `Patient` must assist the *same* `Médecin`; a `Vétérinaire`'s supervisor must work in the *same* `Clinique`; a `Vétérinaire` only performs `Consultation`s in their own `Clinique`.
           3. **Aggregate business rules:** Total weekly hours of an `Employé` across all `Projet`s $\le 40$.
 
+      - id: diag-ternary-projection
+        block_type: kroki
+        diagram_type: umlet
+        title: "Ternary Association Projection: Diamond vs. Reified Weak Entity"
+        caption: "Left: UML n-ary diamond connecting Salle, Seance, and Film. Right: Equivalent reification into weak entity Projection owned by (Salle, Seance)."
+        source: |
+          <diagram program="umlet" version="15.1">
+            <zoom_level>10</zoom_level>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>20</x><y>30</y><w>130</w><h>80</h></coordinates>
+              <panel_attributes>Salle
+          --
+          _Nom_
+          Capacite</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>250</x><y>30</y><w>130</w><h>80</h></coordinates>
+              <panel_attributes>Seance
+          --
+          _Date_
+          _HeureDebut_</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLSpecialState</id>
+              <coordinates><x>180</x><y>165</y><w>40</w><h>40</h></coordinates>
+              <panel_attributes>type=decision</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Text</id>
+              <coordinates><x>225</x><y>172</y><w>90</w><h>30</h></coordinates>
+              <panel_attributes>Projection</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>135</x><y>275</y><w>130</w><h>80</h></coordinates>
+              <panel_attributes>Film
+          --
+          _Titre_
+          Duree</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>75</x><y>110</y><w>125</w><h>70</h></coordinates>
+              <panel_attributes>lt=-
+          m1=*</panel_attributes>
+              <additional_attributes>10;0;110;55</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>210</x><y>110</y><w>125</w><h>70</h></coordinates>
+              <panel_attributes>lt=-
+          m1=*</panel_attributes>
+              <additional_attributes>115;0;10;55</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>160</x><y>205</y><w>80</w><h>70</h></coordinates>
+              <panel_attributes>lt=-
+          m2=1</panel_attributes>
+              <additional_attributes>40;0;40;70</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>450</x><y>30</y><w>130</w><h>80</h></coordinates>
+              <panel_attributes>Salle
+          --
+          _Nom_
+          Capacite</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>690</x><y>30</y><w>130</w><h>80</h></coordinates>
+              <panel_attributes>Seance
+          --
+          _Date_
+          _HeureDebut_</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>565</x><y>155</y><w>140</w><h>75</h></coordinates>
+              <panel_attributes>Projection
+          --
+          Tarif</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>570</x><y>285</y><w>130</w><h>80</h></coordinates>
+              <panel_attributes>Film
+          --
+          _Titre_
+          Duree</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>495</x><y>110</y><w>95</w><h>60</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;&lt;&lt;&lt;-
+          m1=1..1
+          m2=*</panel_attributes>
+              <additional_attributes>20;0;70;45</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>685</x><y>110</y><w>95</w><h>60</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;&lt;&lt;&lt;-
+          m1=1..1
+          m2=*</panel_attributes>
+              <additional_attributes>75;0;20;45</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>585</x><y>230</y><w>100</w><h>55</h></coordinates>
+              <panel_attributes>lt=-
+          m1=*
+          m2=1..1
+          Projete</panel_attributes>
+              <additional_attributes>50;0;50;55</additional_attributes>
+            </element>
+          </diagram>
+
       - id: th-eer-inheritance
         block_type: markdown
         title: "Extended ER (EER): Specialization, Type Entities & Lattices"
@@ -168,6 +575,158 @@ sections:
           * **Type-Level Entity vs. Subclass:** A subclass is only justified when subtypes have distinct *instance* attributes or distinct *associations*. If every instance of a category shares the exact same type-level value (e.g., `tarif` for `Simple`/`Double`/`Suite` rooms across all hotels, or commission rates per `TypeAnimal`), model a separate **Type entity** (`TypeChambre(nom, tarif)`) linked to `Chambre` instead of empty subclasses with duplicated values.
           * **Orthogonal Hierarchies (Selective Overlap):** If `Médecin` and `Infirmier` are mutually exclusive, yet either can also be a `Patient`, do **not** turn `{Médecin, Infirmier, Patient}` into `{Overlapping}`—that would allow someone to be both `Médecin` and `Infirmier`. Instead, use **two separate specializations** from `Personne` (e.g., `{Disjoint, Partial}` for `{Médecin, Infirmier}` and an independent `Patient` subclass, or `{Employé, Patient}` `{Overlapping, Total}` with `Employé` `{Disjoint, Total}` $\to$ `{Médecin, Infirmier}`).
           * **Shared Subclasses (Multiple Inheritance / Lattice):** When the *intersection* of two overlapping subclasses carries its own attributes or associations (e.g., a `Vétérinaire` who is also a `Propriétaire` receives a personalized `rabais`), introduce a **shared subclass** (`VétérinairePropriétaire`) inheriting from both superclasses, forming a **lattice (*treillis*)**.
+
+      - id: diag-eer-patterns
+        block_type: kroki
+        diagram_type: umlet
+        title: "EER Specialization, Type Entity & Shared Subclass Lattice (UMLet)"
+        caption: "Left: {Disjointe, Partielle} specialization of Employe. Center: Type entity pattern (TypeChambre). Right: Multiple-inheritance lattice (VeterinaireProprietaire)."
+        source: |
+          <diagram program="umlet" version="15.1">
+            <zoom_level>10</zoom_level>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>120</x><y>25</y><w>150</w><h>85</h></coordinates>
+              <panel_attributes>Employe
+          --
+          _NoSS_
+          Nom
+          Prenom</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLNote</id>
+              <coordinates><x>115</x><y>125</y><w>160</w><h>32</h></coordinates>
+              <panel_attributes>{Disjointe, Partielle}</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>20</x><y>195</y><w>110</w><h>70</h></coordinates>
+              <panel_attributes>Secretaire
+          --
+          VitesseFrappe</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>140</x><y>195</y><w>110</w><h>70</h></coordinates>
+              <panel_attributes>Technicien
+          --
+          Degre</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>260</x><y>195</y><w>115</w><h>70</h></coordinates>
+              <panel_attributes>Ingenieur
+          --
+          TypeIngenieur</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>60</x><y>110</y><w>90</w><h>85</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+              <additional_attributes>80;0;15;85</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>175</x><y>157</y><w>40</w><h>38</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+              <additional_attributes>20;0;20;38</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>250</x><y>110</y><w>90</w><h>85</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+              <additional_attributes>10;0;75;85</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>415</x><y>25</y><w>145</w><h>80</h></coordinates>
+              <panel_attributes>Chambre
+          --
+          _NumChambre_
+          Etage</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>415</x><y>195</y><w>145</w><h>75</h></coordinates>
+              <panel_attributes>TypeChambre
+          --
+          _NomType_
+          Tarif</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>435</x><y>105</y><w>110</w><h>90</h></coordinates>
+              <panel_attributes>lt=-
+          m1=*
+          m2=1..1
+          Est_de_type</panel_attributes>
+              <additional_attributes>55;0;55;90</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>675</x><y>25</y><w>130</w><h>70</h></coordinates>
+              <panel_attributes>Personne
+          --
+          _IdPers_
+          Nom</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>600</x><y>145</y><w>125</w><h>70</h></coordinates>
+              <panel_attributes>Veterinaire
+          --
+          NoLicence</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>755</x><y>145</y><w>125</w><h>70</h></coordinates>
+              <panel_attributes>Proprietaire
+          --
+          Telephone</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>655</x><y>260</y><w>170</w><h>70</h></coordinates>
+              <panel_attributes>VeterinaireProprietaire
+          --
+          Rabais</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>650</x><y>95</y><w>70</w><h>50</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+              <additional_attributes>55;0;15;50</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>755</x><y>95</y><w>70</w><h>50</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+              <additional_attributes>15;0;55;50</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>650</x><y>215</y><w>70</w><h>45</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+              <additional_attributes>15;0;55;45</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>755</x><y>215</y><w>70</w><h>45</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+              <additional_attributes>55;0;15;45</additional_attributes>
+            </element>
+          </diagram>
 
       - id: fc-er-pros-cons
         block_type: flashcard
