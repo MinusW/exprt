@@ -18,75 +18,213 @@ sections:
     blocks:
       - id: th-steps-1-2-entities
         block_type: markdown
-        title: "Steps 1 & 2: Strong and Weak Entities"
+        title: "Handwritten Exam Syntax & Steps 1–2 (Strong and Weak Entities)"
         content: |
-          **Step 1 — Strong (Normal) Entity Types:**
-          For each strong entity $E$:
-          * Create relation $R$ with all **simple** attributes of $E$.
-          * Flatten **composite** attributes into their simple sub-components (e.g., `Adresse` $\to$ `Numéro, Rue, Ville, CodePostal`).
-          * Omit **derived** attributes; defer **multivalued** attributes to Step 6.
-          * Choose one candidate key as `PRIMARY KEY` (underlined in relational notation).
+          ### Handwritten Relational Notation (What You Write on the Exam)
 
-          **Step 2 — Weak Entity Types:**
+          On paper, each relation is written with its **primary key attributes underlined**, followed underneath by every **foreign key (`référence`)**, **`NOT NULL`**, and **`UNIQUE`** constraint needed on non-PK attributes:
+
+          > **Relation**(<u>pk1</u>, <u>pk2</u>, attr1, fk1, fk2)
+          > fk1 référence AutreRelation.pk
+          > fk1 NOT NULL
+          > fk1 UNIQUE
+          > (fk_a, fk_b) référence EntitéFaible(pk_a, pk_b)
+
+          > [!NOTE]
+          > Primary key attributes are **implicitly `NOT NULL` and unique as a tuple**, so you do not need to repeat `NOT NULL` on PK columns. Always write `NOT NULL` on mandatory non-PK foreign keys, and `UNIQUE` on 1:1 foreign keys (or alternate candidate keys).
+
+          ---
+
+          ### Step 1 — Strong (Normal) Entity Types
+
+          For each strong entity $E$:
+          * Create a relation $R$ with all **simple** attributes of $E$.
+          * Flatten **composite** attributes into their simple sub-components (`Adresse` $\to$ Numéro, Rue, Ville, CodePostal).
+          * Omit **derived** attributes (`Age`); defer **multivalued** attributes (`Lieu [1..*]`) to Step 6.
+          * Underline one candidate key as the **primary key** (mark any other candidate key `UNIQUE NOT NULL`).
+
+          **Example (`Employé` with composite `Adresse` and alternate key `Email`):**
+
+          > **Employé**(<u>NoSS</u>, Prénom, Nom, Email, DateNaissance, Numéro, Rue, Ville, CodePostal, Salaire)
+          > Email UNIQUE
+          > Email NOT NULL
+
+          ---
+
+          ### Step 2 — Weak Entity Types
+
           For each weak entity $F$ owned by strong entity/entities $E_i$:
-          * Create relation $R$ with all simple attributes of $F$ (including its **partial key**).
-          * Add the `PRIMARY KEY` of each owner $E_i$ as a `FOREIGN KEY` in $R$ (typically with `ON DELETE CASCADE`).
-          * The `PRIMARY KEY` of $R$ is **`(owner PK(s), partial key)`**.
-          * Example: `Dépendant(<u>Prénom_dep</u>, <u>NoSS</u>, LienFamilial, Sex, DateNaissance)` where `NoSS` $\to$ `Employé.NoSS`.
-          * **Downstream Associations on Weak Entities:** Because a weak entity's identity *is* its composite PK `(owner PK(s), partial key)`, any downstream `1:N` or `M:N` association involving that weak entity must import the **entire composite key** as a **composite `FOREIGN KEY`** (never just the partial key alone). For example, if `B(<u>i</u>, <u>a1</u>, b1)` is weak of `A(<u>a1</u>)` and participates in `M:N` `BC` with `C(<u>c1</u>)`, then `BC(<u>i</u>, <u>a1</u>, <u>c1</u>, s1)` has `(i, a1)` referencing `B(i, a1)`.
+          * Create relation $R$ with all simple attributes of $F$ **plus its partial key (discriminator)** from the qualifier box.
+          * Import the **primary key** of each owner $E_i$ as a foreign key in $R$.
+          * Underline **`(owner PK(s), partial key)`** together as the composite primary key.
+
+          **Example (`Dépendant` weak of `Employé` with discriminator `Prénom_dep`):**
+
+          > **Dépendant**(<u>NoSS</u>, <u>Prénom_dep</u>, LienFamilial, Sex, DateNaissance)
+          > NoSS référence Employé.NoSS
+
+          **Downstream Associations on Weak Entities:** Because a weak entity's identity *is* its composite PK, any downstream `1:N` or `M:N` association involving that weak entity must import the **entire composite key** as a **composite foreign key** (never just the partial key alone).
+
+          **Example (`B` weak of `A` with discriminator `i`, participating in `M:N` `BC` with `C`):**
+
+          > **A**(<u>a1</u>)
+          >
+          > **B**(<u>a1</u>, <u>i</u>, b1)
+          > a1 référence A.a1
+          >
+          > **C**(<u>c1</u>)
+          >
+          > **BC**(<u>a1</u>, <u>i</u>, <u>c1</u>, s1)
+          > (a1, i) référence B(a1, i)
+          > c1 référence C.c1
 
       - id: th-steps-3-4-5-binary
         block_type: markdown
         title: "Steps 3, 4 & 5: Binary Associations (1:1, 1:N, M:N) & Recursive Renaming"
         content: |
-          **Step 3 — Binary 1:1 Associations** (3 sub-cases based on `min..max` participation):
+          ### Step 3 — Binary 1:1 Associations
 
           | Participation | Where to Place the FK | Constraints on FK |
           | :--- | :--- | :--- |
           | **Mandatory $\leftrightarrow$ Mandatory** (`1..1` — `1..1`) | Either side $R_1$ (plus association attributes) | `UNIQUE`, `NOT NULL` |
-          | **Optional $\leftrightarrow$ Mandatory** (`0..1` — `1..1`) | On the **mandatory-participation (`1..1` target) side** (e.g., `Département`), referencing the optional side (`Employé`). | `UNIQUE`, `NOT NULL` (avoids `NULL`s for non-manager employees; e.g., `DirecteurSS`, `DateDébut` in `Département`) |
-          | **Optional $\leftrightarrow$ Optional** (`0..1` — `0..1`) | Either side $R_1$ (nullable), OR create a separate link table $R_3(k_1, k_2, c)$ to avoid `NULL`s | `UNIQUE` (nullable if merged; `NOT NULL` if separate table) |
+          | **Optional $\leftrightarrow$ Mandatory** (`0..1` — `1..1`) | On the **mandatory-participation (`1..1` target) side**, referencing the optional side | `UNIQUE`, `NOT NULL` (avoids `NULL`s) |
+          | **Optional $\leftrightarrow$ Optional** (`0..1` — `0..1`) | Either side (nullable `UNIQUE`), **or** a separate link table to avoid `NULL`s | `UNIQUE` (nullable if merged) |
 
-          > [!TIP]
-          > **Why put `DirecteurSS` in `Département` for `Dirige`?** In UML notation, `1..1` is next to `Employé` (meaning each `Département` has *exactly 1* `Employé` manager), and `0..1` is next to `Département` (an `Employé` manages *at most 1* `Département`). Placing `DirecteurSS` in `Département` avoids `NULL`s for all non-manager employees and lets us enforce both `UNIQUE` and `NOT NULL`!
+          **Example 3b (`0..1` — `1..1`, `Employé` `1..1` — `Dirige(DateDébut)` — `0..1` `Département`):**
+          Every `Département` has *exactly 1* manager (`1..1` next to `Employé`), while an `Employé` manages *at most 1* `Département` (`0..1` next to `Département`). Place `DirecteurSS` and `DateDébut` inside `Département`:
 
-          **Step 4 — Binary 1:N / N:1 Associations:**
-          * Place the PK of the `1`-side relation as an **FK in the `N`-side relation** (`*` / `0..*` / `1..*`), along with any association attributes.
-          * If participation on the `N`-side is mandatory (`1..1` on the opposite end, e.g., every `Employé` works for `1..1` `Département`), mark the FK **`NOT NULL`**. (Do **not** mark it `UNIQUE`, or you'd turn 1:N into 1:1!)
+          > **Département**(<u>Numéro</u>, Nom, DirecteurSS, DateDébut)
+          > DirecteurSS référence Employé.NoSS
+          > DirecteurSS NOT NULL
+          > DirecteurSS UNIQUE
 
-          **Step 5 — Binary M:N Associations:**
-          * Always create a **new associative relation** $R_{\text{assoc}}$ containing the PKs of both participating entities as FKs + any association attributes.
-          * The PK of $R_{\text{assoc}}$ is the **composite `(PK_1, PK_2)`** (e.g., `Travaille_sur(<u>NoSS</u>, <u>NumProj</u>, Heures)`).
+          **Example 3c (`0..1` — `0..1`, `Employé` — `Utilise(DateAttribution)` — `Voiture`):**
+          Merged on `Voiture` (nullable FK):
 
-          **Recursive Associations & FK Name Collisions:**
-          A relation cannot have two columns with the same name. Whenever a `1:N` or `M:N` association is **recursive** (self-referencing) or links **sibling subclasses** that inherit the same superclass PK name, the imported FK attribute(s) must be **renamed**:
-          * **Recursive `1:N`** (e.g., `Supervise`: `Employé` `0..1` — `*` `Employé`): Place a renamed self-referencing FK `SuperviseurSS` in `Employé` referencing `Employé.NoSS`. Its nullability follows the `min` cardinality on the `1`-side: **`0..1` $\to$ nullable** (`NULL` for top-level managers), **`1..1` $\to$ `NOT NULL`**. If the entity is weak with composite PK `(e1, i)`, rename *both* columns (e.g., `(e12, i2)` referencing `(e1, i)`).
-          * **Recursive `M:N`:** Create a separate associative table with two renamed FKs forming the composite PK (e.g., `Prérequis(<u>CodeCours</u>, <u>CodePrérequis</u>)`).
-          * **Sibling subclasses:** If subclasses `F` and `G` both inherit PK `c1` from `C`, a `1:N` link `F * — 1..1 G` places a renamed FK `c1g` (`NOT NULL`, referencing `G.c1`) inside `F`.
+          > **Voiture**(<u>Immat</u>, Modèle, NoSS, DateAttribution)
+          > NoSS référence Employé.NoSS
+          > NoSS UNIQUE
+
+          ---
+
+          ### Step 4 — Binary 1:N / N:1 Associations
+
+          * Place the PK of the **`1`-side** relation as a **foreign key in the `N`-side (`*`) relation**, along with any association attributes.
+          * If participation on the `N`-side is mandatory (`1..1` on the opposite end), write **`NOT NULL`**. Never write `UNIQUE` (that would turn 1:N into 1:1).
+
+          **Example (`Employé` `4..*` — `Travaille_pour` — `1..1` `Département`):**
+
+          > **Employé**(<u>NoSS</u>, Prénom, Nom, Salaire, NumDép)
+          > NumDép référence Département.Numéro
+          > NumDép NOT NULL
+
+          ---
+
+          ### Step 5 — Binary M:N Associations
+
+          * Always create a **new associative relation** containing the PKs of both participating entities as foreign keys + any association attributes.
+          * Underline **both PKs together** as the composite primary key.
+
+          **Example (`Employé` `*` — `Travaille_sur(Heures)` — `*` `Projet`):**
+
+          > **Travaille_sur**(<u>NoSS</u>, <u>NumProj</u>, Heures)
+          > NoSS référence Employé.NoSS
+          > NumProj référence Projet.NumProj
+
+          ---
+
+          ### Recursive Associations & FK Name Collisions
+
+          A relation cannot have two columns with the same name. Whenever an association is **recursive** or links **sibling subclasses** that inherit the same superclass PK name, **rename** the imported FK column(s):
+
+          * **Recursive `1:N` (`0..1` — `*`, `Supervise` on `Employé`):** `0..1` on the supervisor side $\to$ nullable FK (top-level managers have `NULL`):
+
+            > **Employé**(<u>NoSS</u>, Prénom, Nom, SuperviseurSS)
+            > SuperviseurSS référence Employé.NoSS
+
+          * **Recursive `1:N` (`0..1` — `*`) on a weak entity `A(e1, i)`:** Rename *both* columns of the composite self-FK (and add `NOT NULL` if `1..1` instead of `0..1`):
+
+            > **A**(<u>e1</u>, <u>i</u>, a1, e12, i2)
+            > e1 référence E.e1
+            > (e12, i2) référence A(e1, i)
+
+          * **Recursive `M:N` (`Prérequis` on `Cours`):**
+
+            > **Prérequis**(<u>CodeCours</u>, <u>CodePrérequis</u>)
+            > CodeCours référence Cours.CodeCours
+            > CodePrérequis référence Cours.CodeCours
+
+          * **Sibling subclasses `F` and `G` both inheriting PK `c1` from `C`, linked `F * — 1..1 G` with attributes `r1, r2`:**
+
+            > **F**(<u>c1</u>, f1, f2, c1g, r1, r2)
+            > c1 référence C.c1
+            > c1g référence G.c1
+            > c1g NOT NULL
 
   - id: sec-steps-6-to-8
     title: "2. Multivalued, N-ary & Inheritance Mapping (Steps 6–8)"
     blocks:
       - id: th-steps-6-7
         block_type: markdown
-        title: "Steps 6 & 7: Multivalued Attributes & N-ary Associations"
+        title: "Steps 6 & 7: Multivalued Attributes, N-ary Associations & Full Trace"
         content: |
-          **Step 6 — Multivalued Attributes:**
-          * For each multivalued attribute $A$ of entity $E$ (e.g., `Lieu` of `Département`), create a **separate relation** $R_A(\underline{K_E}, \underline{A})$ where $K_E$ is a `FOREIGN KEY` referencing $E$. Both attributes together form the composite `PRIMARY KEY`.
+          ### Step 6 — Multivalued Attributes
 
-          **Step 7 — N-ary Associations ($n > 2$):**
-          * Reify the n-ary association into a **weak entity** connected to the $n$ entities, then map it to a relation $R_{\text{assoc}}$.
-          * **Key rule:** The `PRIMARY KEY` of $R_{\text{assoc}}$ is formed by the PKs of all entities on the **`*` side** (the owner entities). Any entity on a **`1` side** is **not** part of the primary key—it becomes a regular `FOREIGN KEY ... NOT NULL`.
-          * Example (`Projection`): `Salle` (`*`) and `Séance` (`*`) form the PK; `Film` (`1`) is a `NOT NULL` FK:
-            `Projection(<u>NomSalle</u>, <u>DateSéance</u>, <u>HeureSéance</u>, TitreFilm)`
+          For each multivalued attribute $A$ of entity $E$ (e.g., `Lieu [1..*]` of `Département`), create a **separate relation** containing the entity's PK + the attribute value, with **both underlined** as the composite primary key:
 
-          **Worked Step 1–7 Trace (`COMPANY`):**
-          1. **Strong entities (Step 1):** `Employé(<u>NoSS</u>, Prénom, Nom, Salaire)`, `Département(<u>Numéro</u>, Nom)`, `Projet(<u>NumProj</u>, Nom)`.
-          2. **Weak entity (Step 2):** `Dépendant(<u>Prénom_dep</u>, <u>NoSS</u>, LienFamilial)` with `NoSS` $\to$ `Employé.NoSS`.
-          3. **1:1 `Dirige` (Step 3):** Add `DirecteurSS` (`UNIQUE NOT NULL`, $\to$ `Employé.NoSS`) and `DateDébut` to `Département`.
-          4. **1:N `Travaille_pour` + recursive `Supervise` (Step 4):** Add `NumDép` (`NOT NULL`, $\to$ `Département.Numéro`) and `SuperviseurSS` (nullable, $\to$ `Employé.NoSS`) to `Employé`.
-          5. **M:N `Travaille_sur` (Step 5):** `Travaille_sur(<u>NoSS</u>, <u>NumProj</u>, Heures)`.
-          6. **Multivalued `Lieu` of `Département` (Step 6):** `Dép_Lieu(<u>NumDép</u>, <u>Lieu</u>)`.
+          > **Dép_Lieu**(<u>NumDép</u>, <u>Lieu</u>)
+          > NumDép référence Département.Numéro
+
+          ---
+
+          ### Step 7 — N-ary Associations ($n > 2$)
+
+          Reify the n-ary association into a relation $R_{\text{assoc}}$:
+          * **Key rule:** Underline the PKs of all entities on the **`*` side** (owner entities). Any entity on a **`1` side** is **not** underlined—it becomes a regular `NOT NULL` foreign key.
+
+          **Example (`Projection` with `Salle *`, `Séance *`, `Film 1`):**
+
+          > **Salle**(<u>Nom</u>, Capacité)
+          >
+          > **Séance**(<u>Date</u>, <u>HeureDébut</u>)
+          >
+          > **Film**(<u>Titre</u>, Durée)
+          >
+          > **Projection**(<u>NomSalle</u>, <u>DateSéance</u>, <u>HeureSéance</u>, TitreFilm)
+          > NomSalle référence Salle.Nom
+          > (DateSéance, HeureSéance) référence Séance(Date, HeureDébut)
+          > TitreFilm référence Film.Titre
+          > TitreFilm NOT NULL
+
+          ---
+
+          ### Complete Worked Schema (Steps 1–6 on `COMPANY`)
+
+          Putting all steps together in exact handwritten exam format:
+
+          > **Employé**(<u>NoSS</u>, Prénom, Nom, Salaire, NumDép, SuperviseurSS)
+          > NumDép référence Département.Numéro
+          > NumDép NOT NULL
+          > SuperviseurSS référence Employé.NoSS
+          >
+          > **Département**(<u>Numéro</u>, Nom, DirecteurSS, DateDébut)
+          > DirecteurSS référence Employé.NoSS
+          > DirecteurSS NOT NULL
+          > DirecteurSS UNIQUE
+          >
+          > **Dép_Lieu**(<u>NumDép</u>, <u>Lieu</u>)
+          > NumDép référence Département.Numéro
+          >
+          > **Projet**(<u>NumProj</u>, Nom, NumDép)
+          > NumDép référence Département.Numéro
+          > NumDép NOT NULL
+          >
+          > **Travaille_sur**(<u>NoSS</u>, <u>NumProj</u>, Heures)
+          > NoSS référence Employé.NoSS
+          > NumProj référence Projet.NumProj
+          >
+          > **Dépendant**(<u>NoSS</u>, <u>Prénom_dep</u>, LienFamilial, DateNaissance)
+          > NoSS référence Employé.NoSS
 
       - id: diag-inheritance-strategies
         block_type: kroki
@@ -120,35 +258,58 @@ sections:
           > [!NOTE]
           > **In practice, Strategy 8A** is the most general and widely applicable default because it works cleanly for **all** four combinations (partial/total, disjoint/overlapping) without duplicating inherited attributes.
 
-          **Concrete Table Layouts (`Employé(NoSS, Nom)` $\to$ `Secrétaire(VitesseFrappe)`, `Technicien(Grade)`):**
-          * **8A (3 tables):**
-            `Employé(<u>NoSS</u>, Nom)` | `Secrétaire(<u>NoSS</u>, VitesseFrappe)` (`NoSS` $\to$ `Employé.NoSS`) | `Technicien(<u>NoSS</u>, Grade)` (`NoSS` $\to$ `Employé.NoSS`)
-          * **8B (2 tables — only valid if `{Disjoint, Total}`):**
-            `Secrétaire(<u>NoSS</u>, Nom, VitesseFrappe)` | `Technicien(<u>NoSS</u>, Nom, Grade)`
-          * **8C (1 table):**
-            `Employé(<u>NoSS</u>, Nom, TypeEmp, VitesseFrappe, Grade)` (or boolean flags `estSecrétaire, estTechnicien` if overlapping).
+          ### Concrete Handwritten Schemas (`Employé` $\to$ `Secrétaire`, `Technicien`)
+
+          **Strategy 8A — Table per class (3 relations, works for all 4 EER combinations):**
+
+          > **Employé**(<u>NoSS</u>, Nom)
+          >
+          > **Secrétaire**(<u>NoSS</u>, VitesseFrappe)
+          > NoSS référence Employé.NoSS
+          >
+          > **Technicien**(<u>NoSS</u>, Grade)
+          > NoSS référence Employé.NoSS
+
+          **Strategy 8B — Subclass tables only (2 relations, valid only for `{Disjoint, Total}`):**
+
+          > **Secrétaire**(<u>NoSS</u>, Nom, VitesseFrappe)
+          >
+          > **Technicien**(<u>NoSS</u>, Nom, Grade)
+
+          **Strategy 8C — Single table (1 relation):**
+
+          > **Employé**(<u>NoSS</u>, Nom, TypeEmp, VitesseFrappe, Grade)
+          > *(If overlapping, replace `TypeEmp` with boolean flags `estSecrétaire`, `estTechnicien`.)*
 
       - id: ref-ch4-mapping-rubric
         block_type: reflection_rubric
         title: "Apply: Mapping Weak Entities, Recursive Links & EER"
         answer_mode: text
         prompt: |
-          Map the following ER/EER fragment to relational schemas (underline PKs, list FKs, `UNIQUE`, and `NOT NULL`):
+          Map the following ER/EER fragment to handwritten relational schemas (underline PKs, list `référence`, `UNIQUE`, and `NOT NULL`):
           * `Clinique(idC, nom)` — `1..1` — `Emploie` — `1..*` — `Vétérinaire` (weak entity with partial key `numInt`, attribute `nomV`).
           * `Vétérinaire` has a recursive `Supervise` association (`0..1` supervisor — `*` subordinate).
           * `Personne(idP, nom)` has `{Disjoint, Partial}` subclasses `Médecin(spécialité)` and `Infirmier(service)`.
         self_check_criteria:
-          - "Mapped `Vétérinaire(<u>idC</u>, <u>numInt</u>, nomV, idC_sup, numInt_sup)` with composite PK `(idC, numInt)` and renamed nullable composite FK `(idC_sup, numInt_sup)` referencing `Vétérinaire(idC, numInt)`."
+          - "Mapped Vétérinaire(idC, numInt, nomV, idC_sup, numInt_sup) with composite PK (idC, numInt) and renamed nullable composite FK (idC_sup, numInt_sup) referencing Vétérinaire(idC, numInt)."
           - "Chose Strategy 8A or 8C (and rejected 8B because the specialization is partial)."
         model_answer: |
-          * `Clinique(<u>idC</u>, nom)`
-          * `Vétérinaire(<u>idC</u>, <u>numInt</u>, nomV, idC_sup, numInt_sup)`:
-            * `idC` $\to$ `Clinique.idC` (`NOT NULL`, part of PK).
-            * `(idC_sup, numInt_sup)` $\to$ `Vétérinaire(idC, numInt)` (nullable because supervisor is `0..1`; renamed to avoid colliding with `(idC, numInt)`).
-          * **EER (`Personne`):** Because `{Disjoint, Partial}` cannot use 8B, use **Strategy 8A**:
-            * `Personne(<u>idP</u>, nom)`
-            * `Médecin(<u>idP</u>, spécialité)` (`idP` $\to$ `Personne.idP`)
-            * `Infirmier(<u>idP</u>, service)` (`idP` $\to$ `Personne.idP`)
+          > **Clinique**(<u>idC</u>, nom)
+          >
+          > **Vétérinaire**(<u>idC</u>, <u>numInt</u>, nomV, idC_sup, numInt_sup)
+          > idC référence Clinique.idC
+          > (idC_sup, numInt_sup) référence Vétérinaire(idC, numInt)
+          > *(nullable because supervisor is `0..1`; renamed to avoid colliding with `(idC, numInt)`)*
+
+          **EER (`Personne` — Strategy 8A, since `{Disjoint, Partial}` cannot use 8B):**
+
+          > **Personne**(<u>idP</u>, nom)
+          >
+          > **Médecin**(<u>idP</u>, spécialité)
+          > idP référence Personne.idP
+          >
+          > **Infirmier**(<u>idP</u>, service)
+          > idP référence Personne.idP
 
       - id: fc-mapping-cheatsheet
         block_type: flashcard
