@@ -20,6 +20,7 @@ export function renderLatexString(text: string): string {
   if (!text) return '';
 
   const codeBlocks: { lang: string; code: string }[] = [];
+  const inlineCodes: string[] = [];
   const mathBlocks: string[] = [];
   const mathInlines: string[] = [];
 
@@ -32,6 +33,14 @@ export function renderLatexString(text: string): string {
       code: code.replace(/\r?\n$/, ''),
     });
     return `%%%CODE_BLOCK_${idx}%%%`;
+  });
+
+  // 0.5. Isolate inline code `...` BEFORE math and bold/italic parsing
+  //      so `*`, `**`, and `$` inside backticks (e.g., `*` — `1..*`) are preserved verbatim.
+  preprocessed = preprocessed.replace(/`([^`\n]+)`/g, (_, code) => {
+    const idx = inlineCodes.length;
+    inlineCodes.push(code);
+    return `%%%INLINE_CODE_${idx}%%%`;
   });
 
   // 1. Isolate block math $$...$$
@@ -56,16 +65,16 @@ export function renderLatexString(text: string): string {
   html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-slate-900">$1</strong>');
   // Italic
   html = html.replace(/\*([^*]+?)\*/g, '<em class="italic">$1</em>');
-  // Inline code
-  html = html.replace(
-    /`([^`]+)`/g,
-    '<code class="px-1.5 py-0.5 bg-slate-100 text-indigo-700 rounded font-mono text-[11px] sm:text-xs border border-slate-200">$1</code>'
-  );
   // Convert newlines to <br/> (strip redundant <br/> immediately around block code placeholders)
   html = html.replace(/\n*(%%%CODE_BLOCK_\d+%%%)\n*/g, '$1');
   html = html.replace(/\n/g, '<br/>');
 
-  // 4. Substitute rendered KaTeX and fenced code blocks
+  // 4. Substitute rendered KaTeX, fenced code blocks, and inline code
+  html = html.replace(/%%%INLINE_CODE_(\d+)%%%/g, (_, idxStr) => {
+    const idx = parseInt(idxStr, 10);
+    const code = inlineCodes[idx] ?? '';
+    return `<code class="px-1.5 py-0.5 bg-slate-100 text-indigo-700 rounded font-mono text-[11px] sm:text-xs border border-slate-200">${escapeHtml(code)}</code>`;
+  });
   html = html.replace(/%%%CODE_BLOCK_(\d+)%%%/g, (_, idxStr) => {
     const idx = parseInt(idxStr, 10);
     const block = codeBlocks[idx];
