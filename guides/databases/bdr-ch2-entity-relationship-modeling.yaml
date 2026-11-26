@@ -516,7 +516,7 @@ sections:
             </element>
             <element>
               <id>UMLClass</id>
-              <coordinates><x>690</x><y>30</y><w>130</w><h>80</h></coordinates>
+              <coordinates><x>730</x><y>30</y><w>130</w><h>80</h></coordinates>
               <panel_attributes>Seance
           --
           _Date_
@@ -525,7 +525,7 @@ sections:
             </element>
             <element>
               <id>UMLClass</id>
-              <coordinates><x>565</x><y>155</y><w>140</w><h>75</h></coordinates>
+              <coordinates><x>585</x><y>165</y><w>140</w><h>75</h></coordinates>
               <panel_attributes>Projection
           --
           Tarif</panel_attributes>
@@ -533,7 +533,7 @@ sections:
             </element>
             <element>
               <id>UMLClass</id>
-              <coordinates><x>570</x><y>285</y><w>130</w><h>80</h></coordinates>
+              <coordinates><x>590</x><y>335</y><w>130</w><h>80</h></coordinates>
               <panel_attributes>Film
           --
           _Titre_
@@ -542,28 +542,28 @@ sections:
             </element>
             <element>
               <id>Relation</id>
-              <coordinates><x>495</x><y>110</y><w>95</w><h>60</h></coordinates>
+              <coordinates><x>515</x><y>110</y><w>70</w><h>110</h></coordinates>
               <panel_attributes>lt=-
           m1=1..1
           m2=*</panel_attributes>
-              <additional_attributes>20;0;70;45</additional_attributes>
+              <additional_attributes>0;0;0;90;70;90</additional_attributes>
             </element>
             <element>
               <id>Relation</id>
-              <coordinates><x>685</x><y>110</y><w>95</w><h>60</h></coordinates>
+              <coordinates><x>725</x><y>110</y><w>70</w><h>110</h></coordinates>
               <panel_attributes>lt=-
           m1=1..1
           m2=*</panel_attributes>
-              <additional_attributes>75;0;20;45</additional_attributes>
+              <additional_attributes>70;0;70;90;0;90</additional_attributes>
             </element>
             <element>
               <id>Relation</id>
-              <coordinates><x>585</x><y>230</y><w>100</w><h>55</h></coordinates>
+              <coordinates><x>605</x><y>240</y><w>100</w><h>95</h></coordinates>
               <panel_attributes>lt=-
           m1=*
           m2=1..1
           Projete</panel_attributes>
-              <additional_attributes>50;0;50;55</additional_attributes>
+              <additional_attributes>50;0;50;95</additional_attributes>
             </element>
           </diagram>
 
