@@ -76,66 +76,190 @@ sections:
 
       - id: q1-flawed-diagram
         block_type: kroki
-        diagram_type: mermaid
+        diagram_type: umlet
         title: "Engineer's Flawed ER Diagram"
         source: |
-          classDiagram
-            class ChaineIbis["Chaine d'hotel Ibis"]
-            class Hotel {
-              num
-              nom
-              emplacement
-              nombreChambreDisponible
-            }
-            class Chambre {
-              numero [PK]
-              surface
-              type
-            }
-            class Simple {
-              tarif
-            }
-            class Double {
-              tarif
-            }
-            class Suite {
-              tarif
-            }
-            class Occupation {
-              dateArrivé
-              dateDépart
-              nombrePersonne
-            }
-            class ServiceDeChambre {
-              id [PK]
-              date
-              type
-              price
-            }
-            class Client {
-              email [PK]
-              nom
-              prenom
-              adresse
-              numTelephone
-            }
-            class Reservation {
-              numReservation [PK]
-              dateReservation
-              clientEmail
-              numChambre[1..*]
-            }
-
-            ChaineIbis *-- "*" Hotel
-            Hotel "1" -- "1..*" Chambre : a
-            Chambre <|-- Simple : "{total, disjoint}"
-            Chambre <|-- Double : "{total, disjoint}"
-            Chambre <|-- Suite : "{total, disjoint}"
-            Chambre "1..*" -- "1" Reservation : occupe
-            Occupation .. Chambre
-            Occupation "1" -- "*" ServiceDeChambre : a demandé
-            Hotel "*" -- "*" Client : est client de
-            Client "1" -- "*" Reservation : effectue
+          <diagram program="umlet" version="15.1">
+            <zoom_level>10</zoom_level>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>55</x><y>20</y><w>190</w><h>55</h></coordinates>
+              <panel_attributes>Chaine d'hotel Ibis
+          --</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>35</x><y>155</y><w>230</w><h>110</h></coordinates>
+              <panel_attributes>Hotel
+          --
+          num
+          nom
+          emplacement
+          nombreChambreDisponible</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>130</x><y>75</y><w>40</w><h>80</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;&lt;&lt;-
+          m2=*</panel_attributes>
+              <additional_attributes>20;0;20;80</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>490</x><y>155</y><w>150</w><h>95</h></coordinates>
+              <panel_attributes>Chambre
+          --
+          _numero_
+          surface
+          type</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>265</x><y>175</y><w>225</w><h>60</h></coordinates>
+              <panel_attributes>lt=-
+          m1=1
+          m2=1..*
+          a</panel_attributes>
+              <additional_attributes>0;30;225;30</additional_attributes>
+            </element>
+            <element>
+              <id>Text</id>
+              <coordinates><x>615</x><y>260</y><w>130</w><h>28</h></coordinates>
+              <panel_attributes>{total, disjoint}</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>650</x><y>300</y><w>120</w><h>65</h></coordinates>
+              <panel_attributes>Simple
+          --
+          tarif</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>650</x><y>380</y><w>120</w><h>65</h></coordinates>
+              <panel_attributes>Double
+          --
+          tarif</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>650</x><y>460</y><w>120</w><h>65</h></coordinates>
+              <panel_attributes>Suite
+          --
+          tarif</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>590</x><y>250</y><w>60</w><h>250</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+              <additional_attributes>10;0;10;242;60;242</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>600</x><y>322</y><w>50</w><h>20</h></coordinates>
+              <panel_attributes>lt=-</panel_attributes>
+              <additional_attributes>0;10;50;10</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>600</x><y>402</y><w>50</w><h>20</h></coordinates>
+              <panel_attributes>lt=-</panel_attributes>
+              <additional_attributes>0;10;50;10</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>270</x><y>315</y><w>180</w><h>95</h></coordinates>
+              <panel_attributes>Occupation
+          --
+          dateArrivé
+          dateDépart
+          nombrePersonne</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>450</x><y>352</y><w>80</w><h>20</h></coordinates>
+              <panel_attributes>lt=.</panel_attributes>
+              <additional_attributes>0;10;80;10</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>270</x><y>490</y><w>180</w><h>105</h></coordinates>
+              <panel_attributes>ServiceDeChambre
+          --
+          _id_
+          date
+          type
+          price</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>310</x><y>410</y><w>120</w><h>80</h></coordinates>
+              <panel_attributes>lt=-
+          m1=1
+          m2=*
+          a demandé</panel_attributes>
+              <additional_attributes>50;0;50;80</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>65</x><y>610</y><w>170</w><h>125</h></coordinates>
+              <panel_attributes>Client
+          --
+          _email_
+          nom
+          prenom
+          adresse
+          numTelephone</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>460</x><y>620</y><w>185</w><h>110</h></coordinates>
+              <panel_attributes>Reservation
+          --
+          _numReservation_
+          dateReservation
+          clientEmail
+          numChambre[1..*]</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>95</x><y>265</y><w>140</w><h>345</h></coordinates>
+              <panel_attributes>lt=-
+          m1=*
+          m2=*
+          est client de</panel_attributes>
+              <additional_attributes>55;0;55;345</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>500</x><y>250</y><w>95</w><h>370</h></coordinates>
+              <panel_attributes>lt=-
+          m1=1..*
+          m2=1
+          occupe</panel_attributes>
+              <additional_attributes>30;0;30;370</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>235</x><y>645</y><w>225</w><h>60</h></coordinates>
+              <panel_attributes>lt=-
+          m1=1
+          m2=*
+          effectue</panel_attributes>
+              <additional_attributes>0;30;225;30</additional_attributes>
+            </element>
+          </diagram>
         caption: "The engineer's proposed ER diagram containing multiple structural, redundancy, and constraint errors."
 
       - id: q1-rubric
@@ -168,26 +292,163 @@ sections:
           9. **Redundant association:** `est client de` between `Hotel` and `Client` is redundant and can be inferred via `Client` → `Reservation` → `Occupation` → `Chambre` → `Hotel`.
           10. **Foreign keys in ER:** `clientEmail` and `numChambre[1..*]` inside `Reservation` are relational FKs and must not appear in an ER diagram.
         model_answer_diagram:
-          diagram_type: mermaid
+          diagram_type: umlet
           title: "Corrected ER Schema (Ibis Hotel Reservations)"
           source: |
-            flowchart TD
-              Hotel["Hotel\n─────────\n[PK] num\nnom\nemplacement\n[Qualifier: numero]"]
-              TypeChambre["TypeChambre\n─────────\n[PK] nom\ntarif"]
-              Chambre["Chambre (Weak)\n─────────\nsurface"]
-              Occupation["Occupation (Weak of Chambre & Reservation)\n─────────\ndateArrivé\ndateDépart\nnombrePersonne"]
-              Service["ServiceDeChambre\n─────────\n[PK] id\ndate\ntype\nprix"]
-              Reservation["Reservation\n─────────\n[PK] numReservation\ndateReservation"]
-              Client["Client\n─────────\n[PK] email\nnom\nprenom\nadresse\nnumTelephone"]
-              CI["CI: une chambre ne peut pas\navoir plusieurs réservations\nen même temps"]
-
-              Hotel -- "1  ────  1..*" --> Chambre
-              TypeChambre -- "1  (a)  *" --- Chambre
-              Chambre -- "1  (dans)  *" --- Occupation
-              Service -- "*  (a demandé)  1" --- Occupation
-              Occupation -- "1..*  (a)  1" --- Reservation
-              Client -- "1  (effectue)  *" --- Reservation
-              CI -.- Occupation
+            <diagram program="umlet" version="15.1">
+              <zoom_level>10</zoom_level>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>360</x><y>20</y><w>160</w><h>95</h></coordinates>
+                <panel_attributes>Hotel
+            --
+            _num_
+            nom
+            emplacement</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>400</x><y>115</y><w>80</w><h>26</h></coordinates>
+                <panel_attributes>numero</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>360</x><y>220</y><w>160</w><h>65</h></coordinates>
+                <panel_attributes>Chambre
+            --
+            surface</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>415</x><y>141</y><w>60</w><h>79</h></coordinates>
+                <panel_attributes>lt=-
+            m2=1..*</panel_attributes>
+                <additional_attributes>25;0;25;79</additional_attributes>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>40</x><y>210</y><w>170</w><h>80</h></coordinates>
+                <panel_attributes>TypeChambre
+            --
+            _nom_
+            tarif</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>210</x><y>220</y><w>150</w><h>60</h></coordinates>
+                <panel_attributes>lt=-
+            m1=1
+            m2=*
+            a</panel_attributes>
+                <additional_attributes>0;30;150;30</additional_attributes>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>355</x><y>385</y><w>170</w><h>95</h></coordinates>
+                <panel_attributes>Occupation
+            --
+            dateArrivé
+            dateDépart
+            nombrePersonne</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>400</x><y>285</y><w>90</w><h>100</h></coordinates>
+                <panel_attributes>lt=-
+            m1=1
+            m2=*
+            dans</panel_attributes>
+                <additional_attributes>40;0;40;100</additional_attributes>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>40</x><y>380</y><w>170</w><h>105</h></coordinates>
+                <panel_attributes>ServiceDeChambre
+            --
+            _id_
+            date
+            type
+            prix</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>210</x><y>402</y><w>145</w><h>60</h></coordinates>
+                <panel_attributes>lt=-
+            m1=*
+            m2=1
+            a demandé</panel_attributes>
+                <additional_attributes>0;30;145;30</additional_attributes>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>355</x><y>580</y><w>170</w><h>80</h></coordinates>
+                <panel_attributes>Reservation
+            --
+            _numReservation_
+            dateReservation</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>400</x><y>480</y><w>90</w><h>100</h></coordinates>
+                <panel_attributes>lt=-
+            m1=1..*
+            m2=1
+            a</panel_attributes>
+                <additional_attributes>40;0;40;100</additional_attributes>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>40</x><y>555</y><w>170</w><h>125</h></coordinates>
+                <panel_attributes>Client
+            --
+            _email_
+            nom
+            prenom
+            adresse
+            numTelephone</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>210</x><y>590</y><w>145</w><h>60</h></coordinates>
+                <panel_attributes>lt=-
+            m1=1
+            m2=*
+            effectue</panel_attributes>
+                <additional_attributes>0;30;145;30</additional_attributes>
+              </element>
+              <element>
+                <id>UMLNote</id>
+                <coordinates><x>575</x><y>260</y><w>180</w><h>105</h></coordinates>
+                <panel_attributes>CI: une chambre
+            peut pas avoir
+            plusieurs
+            reservations en
+            même temps</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>UMLNote</id>
+                <coordinates><x>575</x><y>500</y><w>180</w><h>70</h></coordinates>
+                <panel_attributes>Entité faible de
+            Chambre et
+            Reservation</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>500</x><y>480</y><w>75</w><h>55</h></coordinates>
+                <panel_attributes>lt=.</panel_attributes>
+                <additional_attributes>0;0;75;50</additional_attributes>
+              </element>
+            </diagram>
           caption: "Corrected ER schema: Occupation is a weak entity of Chambre and Reservation, TypeChambre holds tarif, and redundant links/FKs are removed."
 
   - id: sec-q2-relational-mapping
@@ -195,33 +456,187 @@ sections:
     blocks:
       - id: q2-diagram
         block_type: kroki
-        diagram_type: mermaid
+        diagram_type: umlet
         title: "ER Schema to Map to Relational Model"
         source: |
-          flowchart TD
-            C["C\n─────\n[PK] c1\nc2"]
-            E["E\n─────\n[PK] e1\ne2"]
-            D["D\n─────\n[PK] d1\nd2"]
-            DE["DE\n─────\nr1\nr2"]
-            A["A\n─────\n[PK] a1\na2\n[Qualifier: i]"]
-            B["B (Weak)\n─────\nb1"]
-            BC["BC\n─────\ns1"]
-            Spec(("{overlapping, partial}"))
-            F["F\n─────\nf1\nf2"]
-            G["G\n─────\ng1"]
-            H["H\n─────\n[PK] h1\nh2"]
-
-            C -- "1..*  (CE)  0..1" --- E
-            E -- "1  ────  1..*" --- D
-            DE -.- D
-            A -- "1  (AB)  *" --> B
-            B -- "*  ────  1..*" --- C
-            BC -.- B
-            E --- Spec
-            Spec --> F
-            Spec --> G
-            G -- "0..1  (GH)  1" --- H
-            H -- "1  (HH)  *" --- H
+          <diagram program="umlet" version="15.1">
+            <zoom_level>10</zoom_level>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>230</x><y>100</y><w>90</w><h>75</h></coordinates>
+              <panel_attributes>C
+          --
+          _c1_
+          c2</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>460</x><y>100</y><w>90</w><h>75</h></coordinates>
+              <panel_attributes>E
+          --
+          _e1_
+          e2</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>320</x><y>107</y><w>140</w><h>60</h></coordinates>
+              <panel_attributes>lt=-
+          m1=1..*
+          m2=0..1
+          CE</panel_attributes>
+              <additional_attributes>0;30;140;30</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>710</x><y>100</y><w>90</w><h>75</h></coordinates>
+              <panel_attributes>D
+          --
+          _d1_
+          d2</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>550</x><y>107</y><w>160</w><h>60</h></coordinates>
+              <panel_attributes>lt=-
+          m1=1
+          m2=1..*</panel_attributes>
+              <additional_attributes>0;30;160;30</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>595</x><y>15</y><w>70</w><h>75</h></coordinates>
+              <panel_attributes>DE
+          --
+          r1
+          r2</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>610</x><y>90</y><w>40</w><h>47</h></coordinates>
+              <panel_attributes>lt=.</panel_attributes>
+              <additional_attributes>20;0;20;47</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>20</x><y>260</y><w>80</w><h>75</h></coordinates>
+              <panel_attributes>A
+          --
+          _a1_
+          a2</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>100</x><y>284</y><w>26</w><h>26</h></coordinates>
+              <panel_attributes>i</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>235</x><y>265</y><w>80</w><h>60</h></coordinates>
+              <panel_attributes>B
+          --
+          b1</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>126</x><y>267</y><w>109</w><h>60</h></coordinates>
+              <panel_attributes>lt=-
+          m1=1
+          m2=*
+          AB</panel_attributes>
+              <additional_attributes>0;30;109;30</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>250</x><y>175</y><w>60</w><h>90</h></coordinates>
+              <panel_attributes>lt=-
+          m1=1..*
+          m2=*</panel_attributes>
+              <additional_attributes>25;0;25;90</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>135</x><y>195</y><w>65</w><h>55</h></coordinates>
+              <panel_attributes>BC
+          --
+          s1</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>200</x><y>212</y><w>75</w><h>20</h></coordinates>
+              <panel_attributes>lt=.</panel_attributes>
+              <additional_attributes>0;10;75;10</additional_attributes>
+            </element>
+            <element>
+              <id>Text</id>
+              <coordinates><x>515</x><y>200</y><w>190</w><h>26</h></coordinates>
+              <panel_attributes>{overlapping, partial}</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>395</x><y>255</y><w>80</w><h>75</h></coordinates>
+              <panel_attributes>F
+          --
+          f1
+          f2</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>535</x><y>255</y><w>80</w><h>60</h></coordinates>
+              <panel_attributes>G
+          --
+          g1</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>435</x><y>175</y><w>80</w><h>80</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+              <additional_attributes>70;0;70;55;0;55;0;80</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>505</x><y>230</y><w>70</w><h>25</h></coordinates>
+              <panel_attributes>lt=-</panel_attributes>
+              <additional_attributes>0;0;70;0;70;25</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>735</x><y>245</y><w>90</w><h>75</h></coordinates>
+              <panel_attributes>H
+          --
+          _h1_
+          h2</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>615</x><y>255</y><w>120</w><h>60</h></coordinates>
+              <panel_attributes>lt=-
+          m1=0..1
+          m2=1
+          GH</panel_attributes>
+              <additional_attributes>0;30;120;30</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>760</x><y>260</y><w>130</w><h>110</h></coordinates>
+              <panel_attributes>lt=-
+          m1=1
+          m2=*
+          HH</panel_attributes>
+              <additional_attributes>65;15;105;15;105;90;20;90;20;60</additional_attributes>
+            </element>
+          </diagram>
         caption: "ER diagram for Question 2: B is weak on A(i); E has {overlapping, partial} subclasses F and G; DE and BC are association classes; HH is recursive 1-to-* on H."
 
       - id: q2-rubric

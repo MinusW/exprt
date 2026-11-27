@@ -74,33 +74,219 @@ sections:
           6. **Spécialisation d'`Animal`** : **`{partial, disjoint}`** ("parmi d'autres types d'animaux") vers `Chien(Race, Poids)`, `Chat(CouleurPelage)`, `Oiseau(Espèce, TailleAiles)`.
           7. **Historique des commissions** : Entité `TypeAnimal(NomType [PK])` associée à une entité faible **`HistoriqueCommission(DateMiseAJour [PK partielle], Taux)`** (`1` côté `TypeAnimal`, `1..*` côté `HistoriqueCommission`). On relie `Animal` à `TypeAnimal` (`1` côté `TypeAnimal`, `*` côté `Animal`) — ou `Consultation` au `HistoriqueCommission` en vigueur à `Consultation.Date`.
         model_answer_diagram:
-          diagram_type: mermaid
-          title: "Q1(a)+(b) — Veterinary Clinic ER Model"
+          diagram_type: umlet
+          title: "Q1(a)+(b) — Veterinary Clinic ER Model (UMLet)"
           source: |
-            flowchart TB
-              Prop["Propriétaire\nPK: NoClient\nNom, Prenom\nAdresse(Ville,Rue,CP)\nTel [1..*]"]
-              Clin["Clinique\nPK: IdClinique\nNom"]
-              Vet["«weak» Vétérinaire\nPK_partiel: NoInterne\nNom"]
-              Cons["Consultation\nPK: IdConsultation\nDate, Prix"]
-              Ani["Animal\nPK: IdAnimal\nNom, DateNaiss"]
-              Spec{"{partial, disjoint}"}
-              Chien["Chien\nRace, Poids"]
-              Chat["Chat\nCouleurPelage"]
-              Ois["Oiseau\nEspèce, TailleAiles"]
-              TA["TypeAnimal\nPK: NomType"]
-              HC["«weak» HistoriqueCommission\nPK_partiel: DateMaj\nTaux"]
-
-              Clin -- "1   [NoInterne]   1..*" --- Vet
-              Vet -- "0..1   Supervise (même clinique)   *" --- Vet
-              Prop -- "1   Possède   1..*" --- Ani
-              Ani -- "1   Concerne   *" --- Cons
-              Vet -- "1   Effectue   *" --- Cons
-              Ani --- Spec
-              Spec --- Chien
-              Spec --- Chat
-              Spec --- Ois
-              Ani -- "*   Est_de_type   1" --- TA
-              TA -- "1   [DateMaj]   1..*" --- HC
+            <diagram program="umlet" version="15.1">
+              <zoom_level>10</zoom_level>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>160</x><y>30</y><w>170</w><h>80</h></coordinates>
+                <panel_attributes>Clinique
+            --
+            _IdClinique_
+            Nom</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>195</x><y>110</y><w>100</w><h>26</h></coordinates>
+                <panel_attributes>NoInterne</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>160</x><y>220</y><w>170</w><h>80</h></coordinates>
+                <panel_attributes>Vétérinaire
+            --
+            Nom</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>195</x><y>136</y><w>120</w><h>84</h></coordinates>
+                <panel_attributes>lt=-
+            m1=1
+            m2=1..*
+            Emploie</panel_attributes>
+                <additional_attributes>50;0;50;84</additional_attributes>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>20</x><y>220</y><w>250</w><h>160</h></coordinates>
+                <panel_attributes>lt=-
+            m1=0..1
+            m2=*
+            r1=responsable
+            r2=subordonné</panel_attributes>
+                <additional_attributes>140;20;10;20;10;135;225;135;225;80</additional_attributes>
+              </element>
+              <element>
+                <id>Text</id>
+                <coordinates><x>85</x><y>358</y><w>90</w><h>25</h></coordinates>
+                <panel_attributes>Supervise</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>UMLNote</id>
+                <coordinates><x>20</x><y>400</y><w>320</w><h>55</h></coordinates>
+                <panel_attributes>CI : Le responsable d'un Vétérinaire
+            travaille dans la même Clinique.</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>440</x><y>220</y><w>170</w><h>95</h></coordinates>
+                <panel_attributes>Consultation
+            --
+            _IdConsultation_
+            Date
+            Prix</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>330</x><y>230</y><w>110</w><h>60</h></coordinates>
+                <panel_attributes>lt=-
+            m1=1
+            m2=*
+            Effectue</panel_attributes>
+                <additional_attributes>0;30;110;30</additional_attributes>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>720</x><y>0</y><w>185</w><h>165</h></coordinates>
+                <panel_attributes>Propriétaire
+            --
+            _NoClient_
+            Nom
+            Prenom
+            Tel [1..*]
+            Adresse
+              Ville
+              Rue
+              CodePostal</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>730</x><y>250</y><w>165</w><h>95</h></coordinates>
+                <panel_attributes>Animal
+            --
+            _IdAnimal_
+            Nom
+            DateNaiss</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>762</x><y>165</y><w>110</w><h>85</h></coordinates>
+                <panel_attributes>lt=-
+            m1=1
+            m2=1..*
+            Possède</panel_attributes>
+                <additional_attributes>50;0;50;85</additional_attributes>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>610</x><y>255</y><w>120</w><h>60</h></coordinates>
+                <panel_attributes>lt=-
+            m1=*
+            m2=1
+            Concerne</panel_attributes>
+                <additional_attributes>0;30;120;30</additional_attributes>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>590</x><y>430</y><w>130</w><h>80</h></coordinates>
+                <panel_attributes>Chien
+            --
+            Race
+            Poids</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>745</x><y>430</y><w>135</w><h>65</h></coordinates>
+                <panel_attributes>Chat
+            --
+            CouleurPelage</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>905</x><y>430</y><w>130</w><h>80</h></coordinates>
+                <panel_attributes>Oiseau
+            --
+            Espèce
+            TailleAiles</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>792</x><y>345</y><w>40</w><h>85</h></coordinates>
+                <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+                <additional_attributes>20;0;20;85</additional_attributes>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>655</x><y>395</y><w>157</w><h>35</h></coordinates>
+                <panel_attributes>lt=-</panel_attributes>
+                <additional_attributes>157;0;0;0;0;35</additional_attributes>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>812</x><y>395</y><w>158</w><h>35</h></coordinates>
+                <panel_attributes>lt=-</panel_attributes>
+                <additional_attributes>0;0;158;0;158;35</additional_attributes>
+              </element>
+              <element>
+                <id>Text</id>
+                <coordinates><x>675</x><y>355</y><w>125</w><h>30</h></coordinates>
+                <panel_attributes>{partial, disjoint}</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>1075</x><y>260</y><w>160</w><h>70</h></coordinates>
+                <panel_attributes>TypeAnimal
+            --
+            _NomType_</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>895</x><y>265</y><w>180</w><h>60</h></coordinates>
+                <panel_attributes>lt=-
+            m1=*
+            m2=1
+            Est_de_type</panel_attributes>
+                <additional_attributes>0;30;180;30</additional_attributes>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>1110</x><y>330</y><w>90</w><h>26</h></coordinates>
+                <panel_attributes>DateMaj</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>UMLClass</id>
+                <coordinates><x>1060</x><y>440</y><w>190</w><h>70</h></coordinates>
+                <panel_attributes>HistoriqueCommission
+            --
+            Taux</panel_attributes>
+                <additional_attributes/>
+              </element>
+              <element>
+                <id>Relation</id>
+                <coordinates><x>1105</x><y>356</y><w>110</w><h>84</h></coordinates>
+                <panel_attributes>lt=-
+            m1=1
+            m2=1..*
+            A_taux</panel_attributes>
+                <additional_attributes>50;0;50;84</additional_attributes>
+              </element>
+            </diagram>
 
       - id: ref-q1cd-keys-and-overlap
         block_type: reflection_rubric
@@ -132,40 +318,66 @@ sections:
   - id: sec-q2-relational-mapping
     title: "Question 2 — Modèle relationnel (30 points)"
     blocks:
-      - id: diag-q2ab-er-sources
+      - id: diag-q2a-er-source
         block_type: kroki
-        diagram_type: mermaid
-        title: "Q2(a) & Q2(b) — Schémas EA à traduire"
+        diagram_type: umlet
+        title: "Q2(a) — Schéma EA à traduire (Héritage & Récursive)"
         source: |
-          flowchart LR
-            subgraph Q2a ["Q2(a) — Héritage & Récursive"]
-              A["A\nPK: a1"]
-              Spec{"{partial, disjoint}"}
-              B["B\nb1"]
-              C["C\nc1"]
-              A --- Spec
-              Spec --- B
-              Spec --- C
-              C -- "1   CC   *" --- C
-            end
-
-            subgraph Q2b ["Q2(b) — Faible, Classe d'assoc. & Ternaire"]
-              F["F\nPK: f1\nf2"]
-              H["H\nPK: h1\nh2"]
-              FH["FH\nfh1"]
-              G["G\ng2"]
-              I["I\nPK: i1\ni2"]
-              J["J\nPK: j1\nj2"]
-              HIJ(("HIJ"))
-
-              F -- "1..*       1" --- H
-              F -. "FH" .- FH
-              G -- "*   [g1]" --- I
-              H -- "*" --- HIJ
-              I -- "*" --- HIJ
-              HIJ -- "1" --- J
-            end
-        caption: "Reconstruction of Page 6 (Q2a) and Page 8 (Q2b) diagrams from BDR25_TE1.pdf."
+          <diagram program="umlet" version="15.1">
+            <zoom_level>10</zoom_level>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>150</x><y>20</y><w>110</w><h>75</h></coordinates>
+              <panel_attributes>A
+          --
+          _a1_</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>150</x><y>170</y><w>110</w><h>75</h></coordinates>
+              <panel_attributes>B
+          --
+          b1</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>310</x><y>170</y><w>110</w><h>75</h></coordinates>
+              <panel_attributes>C
+          --
+          c1</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>185</x><y>95</y><w>40</w><h>75</h></coordinates>
+              <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+              <additional_attributes>20;0;20;75</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>205</x><y>135</y><w>160</w><h>35</h></coordinates>
+              <panel_attributes>lt=-</panel_attributes>
+              <additional_attributes>0;0;160;0;160;35</additional_attributes>
+            </element>
+            <element>
+              <id>Text</id>
+              <coordinates><x>20</x><y>105</y><w>140</w><h>30</h></coordinates>
+              <panel_attributes>{partial,disjoint}</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>345</x><y>190</y><w>210</w><h>130</h></coordinates>
+              <panel_attributes>lt=-
+          m1=1
+          m2=*
+          CC</panel_attributes>
+              <additional_attributes>75;20;175;20;175;110;20;110;20;55</additional_attributes>
+            </element>
+          </diagram>
+        caption: "Exact UMLet replication of Q2(a) from Page 6 of BDR25_TE1.pdf."
 
       - id: ref-q2a-mapping
         block_type: reflection_rubric
@@ -193,6 +405,129 @@ sections:
           * **Super-classe + sous-classes** : Valable pour les 4 combinaisons (`partiel/total`, `disjoint/chevauchant`).
           * **Sous-classes uniquement (pas de table `A`)** : Uniquement possible si l'héritage est **`total`** (sans perte si `disjoint`, avec redondance si `chevauchant`).
           * **Table unique (`A` regroupant tous les attributs)** : Possible pour les 4 combinaisons avec des attributs nullables (une colonne `type` si `disjoint`, des booléens `est_B, est_C` si `chevauchant`).
+
+      - id: diag-q2b-er-source
+        block_type: kroki
+        diagram_type: umlet
+        title: "Q2(b) — Schéma EA à traduire (Entité faible, Classe d'association & Ternaire)"
+        source: |
+          <diagram program="umlet" version="15.1">
+            <zoom_level>10</zoom_level>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>40</x><y>20</y><w>110</w><h>80</h></coordinates>
+              <panel_attributes>F
+          --
+          _f1_
+          f2</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>40</x><y>220</y><w>110</w><h>80</h></coordinates>
+              <panel_attributes>H
+          --
+          _h1_
+          h2</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>75</x><y>100</y><w>60</w><h>120</h></coordinates>
+              <panel_attributes>lt=-
+          m1=1..*
+          m2=1</panel_attributes>
+              <additional_attributes>20;0;20;120</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>190</x><y>125</y><w>110</w><h>65</h></coordinates>
+              <panel_attributes>FH
+          --
+          fh1</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>95</x><y>140</y><w>95</w><h>40</h></coordinates>
+              <panel_attributes>lt=.</panel_attributes>
+              <additional_attributes>0;20;95;20</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>370</x><y>20</y><w>110</w><h>80</h></coordinates>
+              <panel_attributes>G
+          --
+          g2</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>400</x><y>192</y><w>50</w><h>28</h></coordinates>
+              <panel_attributes>g1</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>370</x><y>220</y><w>110</w><h>80</h></coordinates>
+              <panel_attributes>I
+          --
+          _i1_
+          i2</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>405</x><y>100</y><w>50</w><h>92</h></coordinates>
+              <panel_attributes>lt=-
+          m1=*
+          m2=1</panel_attributes>
+              <additional_attributes>20;0;20;92</additional_attributes>
+            </element>
+            <element>
+              <id>UMLSpecialState</id>
+              <coordinates><x>240</x><y>340</y><w>40</w><h>40</h></coordinates>
+              <panel_attributes>type=decision</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>75</x><y>300</y><w>165</w><h>80</h></coordinates>
+              <panel_attributes>lt=-
+          m1=*</panel_attributes>
+              <additional_attributes>20;0;20;60;165;60</additional_attributes>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>280</x><y>300</y><w>165</w><h>80</h></coordinates>
+              <panel_attributes>lt=-
+          m1=*</panel_attributes>
+              <additional_attributes>145;0;145;60;0;60</additional_attributes>
+            </element>
+            <element>
+              <id>UMLClass</id>
+              <coordinates><x>205</x><y>450</y><w>110</w><h>80</h></coordinates>
+              <panel_attributes>J
+          --
+          _j1_
+          j2</panel_attributes>
+              <additional_attributes/>
+            </element>
+            <element>
+              <id>Relation</id>
+              <coordinates><x>240</x><y>380</y><w>60</w><h>70</h></coordinates>
+              <panel_attributes>lt=-
+          m2=1</panel_attributes>
+              <additional_attributes>20;0;20;70</additional_attributes>
+            </element>
+            <element>
+              <id>Text</id>
+              <coordinates><x>280</x><y>385</y><w>50</w><h>30</h></coordinates>
+              <panel_attributes>HIJ</panel_attributes>
+              <additional_attributes/>
+            </element>
+          </diagram>
+        caption: "Exact UMLet replication of Q2(b) from Page 8 of BDR25_TE1.pdf."
 
       - id: ref-q2b-mapping
         block_type: reflection_rubric
